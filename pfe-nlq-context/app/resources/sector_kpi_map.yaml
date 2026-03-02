@@ -1,0 +1,42 @@
+version: "1.0"
+
+sectors:
+  retail:
+    kpis:
+      total_sales_amount: [...]
+      units_sold: [...]
+      average_basket_value: [...]
+      inventory_turnover: [...]
+      customer_retention_rate: [...]
+
+  finance:
+    kpis:
+      default_rate: [...]
+      credit_risk_score: [...]
+      net_interest_margin: [...]
+      fraud_rate: [...]
+      transaction_volume: [...]
+
+  transport:
+    kpis:
+      on_time_rate: [...]
+      delay_minutes: [...]
+      ridership: [...]
+      fuel_consumption: [...]
+      incident_rate: [...]
+
+  manufacturing:
+    kpis:
+      production_volume: [...]
+      defect_rate: [...]
+      overall_equipment_effectiveness: [...]
+      downtime_minutes: [...]
+      yield_rate: [...]
+
+  public:
+    kpis:
+      service_request_volume: [...]
+      average_processing_time_days: [...]
+      case_resolution_rate: [...]
+      citizen_satisfaction_score: [...]
+      budget_execution_rate: [...]
