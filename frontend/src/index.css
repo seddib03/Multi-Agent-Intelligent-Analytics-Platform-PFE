@@ -1,0 +1,129 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Space+Grotesk:wght@300..700&display=swap');
+
+@layer base {
+  :root {
+    /* DXC Color System - HSL */
+    --dxc-midnight: 228 53% 9%;
+    --dxc-white: 0 0% 100%;
+    --dxc-canvas: 30 25% 95%;
+    --dxc-peach: 33 100% 75%;
+    --dxc-sky: 197 100% 82%;
+    --dxc-gold: 34 100% 63%;
+    --dxc-blue: 216 100% 64%;
+    --dxc-melon: 15 100% 66%;
+    --dxc-royal: 214 100% 34%;
+    --dxc-red: 20 100% 41%;
+
+    /* Semantic mapping - Light mode */
+    --background: var(--dxc-canvas);
+    --foreground: var(--dxc-midnight);
+    --card: var(--dxc-white);
+    --card-foreground: var(--dxc-midnight);
+    --popover: var(--dxc-white);
+    --popover-foreground: var(--dxc-midnight);
+    --primary: var(--dxc-royal);
+    --primary-foreground: var(--dxc-white);
+    --secondary: var(--dxc-canvas);
+    --secondary-foreground: var(--dxc-midnight);
+    --muted: 30 15% 90%;
+    --muted-foreground: 228 20% 40%;
+    --accent: var(--dxc-peach);
+    --accent-foreground: var(--dxc-midnight);
+    --destructive: var(--dxc-red);
+    --destructive-foreground: var(--dxc-white);
+    --border: 30 15% 88%;
+    --input: 30 15% 88%;
+    --ring: var(--dxc-royal);
+    --radius: 0.625rem;
+
+    /* Custom tokens */
+    --header-bg: var(--dxc-midnight);
+    --sidebar-bg: var(--dxc-midnight);
+    --cta: var(--dxc-melon);
+    --cta-foreground: var(--dxc-white);
+    --badge-accent: var(--dxc-peach);
+    --badge-info: var(--dxc-sky);
+
+    --sidebar-background: var(--dxc-midnight);
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: var(--dxc-royal);
+    --sidebar-primary-foreground: var(--dxc-white);
+    --sidebar-accent: var(--dxc-royal);
+    --sidebar-accent-foreground: var(--dxc-white);
+    --sidebar-border: 228 30% 18%;
+    --sidebar-ring: var(--dxc-sky);
+  }
+
+  .dark {
+    --background: var(--dxc-midnight);
+    --foreground: 0 0% 95%;
+    --card: 228 40% 13%;
+    --card-foreground: 0 0% 95%;
+    --popover: 228 40% 13%;
+    --popover-foreground: 0 0% 95%;
+    --primary: var(--dxc-royal);
+    --primary-foreground: var(--dxc-white);
+    --secondary: 228 30% 16%;
+    --secondary-foreground: 0 0% 90%;
+    --muted: 228 30% 16%;
+    --muted-foreground: 228 15% 60%;
+    --accent: var(--dxc-peach);
+    --accent-foreground: var(--dxc-midnight);
+    --destructive: var(--dxc-red);
+    --destructive-foreground: var(--dxc-white);
+    --border: 228 30% 18%;
+    --input: 228 30% 18%;
+    --ring: var(--dxc-royal);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+  }
+}
+
+@layer utilities {
+  .bg-header { background-color: hsl(var(--header-bg)); }
+  .bg-cta { background-color: hsl(var(--cta)); }
+  .text-cta-foreground { color: hsl(var(--cta-foreground)); }
+
+  .gradient-hero {
+    background: linear-gradient(135deg, hsl(var(--dxc-midnight)), hsl(228 53% 14%));
+  }
+
+  .glass-card {
+    background: hsl(var(--dxc-royal) / 0.15);
+    border: 1px solid hsl(var(--dxc-royal) / 0.3);
+  }
+}
+
+/* Infinite scroll animation */
+@keyframes scroll-infinite {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.animate-scroll-infinite {
+  animation: scroll-infinite 20s linear infinite;
+}
+
+/* Pipeline step animation */
+@keyframes pulse-agent {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+.animate-pulse-agent {
+  animation: pulse-agent 1.5s ease-in-out infinite;
+}
