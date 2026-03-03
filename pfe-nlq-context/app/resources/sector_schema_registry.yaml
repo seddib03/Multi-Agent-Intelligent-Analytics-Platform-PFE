@@ -1,0 +1,70 @@
+version: "0.1"
+sectors:
+  retail:
+    database: "retail_db"
+    default_table: "transactions"
+    tables:
+      transactions:
+        columns_allowed:
+          - "transaction_date"
+          - "city"
+          - "region"
+          - "total_sales_amount"
+          - "units_sold"
+          - "customer_id"
+
+  finance:
+    database: "finance_db"
+    default_table: "loans"
+    tables:
+      loans:
+        columns_allowed:
+          - "issue_date"
+          - "branch"
+          - "default_flag"
+          - "credit_risk_score"
+          - "loan_amount"
+      transactions:
+        columns_allowed:
+          - "transaction_date"
+          - "channel"
+          - "amount"
+          - "fraud_flag"
+
+  transport:
+    database: "transport_db"
+    default_table: "operations"
+    tables:
+      operations:
+        columns_allowed:
+          - "service_date"
+          - "line"
+          - "delay_minutes"
+          - "on_time_rate"
+          - "ridership"
+
+  manufacturing:
+    database: "mfg_db"
+    default_table: "production"
+    tables:
+      production:
+        columns_allowed:
+          - "production_date"
+          - "plant"
+          - "production_volume"
+          - "defect_rate"
+          - "downtime_minutes"
+          - "overall_equipment_effectiveness"
+
+  public:
+    database: "public_db"
+    default_table: "requests"
+    tables:
+      requests:
+        columns_allowed:
+          - "request_date"
+          - "city"
+          - "service_type"
+          - "average_processing_time_days"
+          - "case_resolution_rate"
+          - "citizen_satisfaction_score"
