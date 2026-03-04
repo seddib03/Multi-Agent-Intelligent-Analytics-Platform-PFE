@@ -41,6 +41,6 @@ sectors:
     kpis:
       service_request_volume: ["requests", "demandes", "tickets", "service volume"]
       average_processing_time_days: ["processing time", "delay", "délai", "temps de traitement"]
-      case_resolution_rate: ["resolution rate", "resolved", "taux de résolution", "closure rate"]
+      case_resolution_rate: ["case resolution rate","resolution rate", "resolved", "taux de résolution", "closure rate"]
       citizen_satisfaction_score: ["satisfaction", "csat", "citizen satisfaction", "satisfaction citoyen"]
       budget_execution_rate: ["budget execution", "spending rate", "exécution budgétaire"]
