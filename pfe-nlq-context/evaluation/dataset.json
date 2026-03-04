@@ -1,0 +1,7 @@
+[
+  {"question":"Total sales in 2023 in Casablanca","expected_sector":"retail","expected_intent":"analyze"},
+  {"question":"Predict default rate next quarter","expected_sector":"finance","expected_intent":"predict"},
+  {"question":"Average delay minutes in 2023 in Rabat","expected_sector":"transport","expected_intent":"analyze"},
+  {"question":"Defect rate last month in plant A","expected_sector":"manufacturing","expected_intent":"analyze"},
+  {"question":"Average processing time for requests in 2024 in Rabat","expected_sector":"public","expected_intent":"analyze"}
+]
