@@ -1,151 +1,193 @@
-import logging
-import os
+"""
+agent/graph.py
+───────────────
+Définition du graph LangGraph V2 avec Human-in-the-Loop.
 
+FLUX DU GRAPH :
+    ingestion → profiling → dimension(LLM) → strategy(LLM)
+        ↓
+    [PAUSE — attendre validation user]
+        ↓
+    cleaning → evaluation(LLM) → delivery
+
+HUMAN-IN-THE-LOOP :
+    LangGraph supporte nativement l'interruption du pipeline.
+    On utilise interrupt_before=["cleaning_node"] :
+    → Le graph s'arrête AVANT cleaning_node
+    → L'état est sauvegardé dans le checkpointer (mémoire)
+    → L'API retourne le plan à l'user
+    → L'user valide via POST /prepare/{job_id}/validate
+    → On reprend le graph avec l'état mis à jour
+
+CHECKPOINTER :
+    MemorySaver sauvegarde l'état en RAM.
+    Pour la production, utiliser SqliteSaver ou RedisSaver
+    pour persister entre les redémarrages.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 
-from agent.nodes.aggregation_node import aggregation_node
 from agent.nodes.cleaning_node import cleaning_node
+from agent.nodes.delivery_node import delivery_node
+from agent.nodes.dimension_node import dimension_node
+from agent.nodes.evaluation_node import evaluation_node
 from agent.nodes.ingestion_node import ingestion_node
-from agent.nodes.quality_node import quality_node
-from agent.state import AgentState, STATUS_FAILED
-
+from agent.nodes.profiling_node import profiling_node
+from agent.nodes.strategy_node import strategy_node
+from agent.state import AgentState
 
 logger = logging.getLogger(__name__)
 
-
-# ─── Constante ───────────────────────────────────────────────────────────────
-
-# Lire le seuil depuis .env, valeur par défaut 80 si non défini
-QUALITY_THRESHOLD = float(os.getenv("QUALITY_SCORE_THRESHOLD", "80"))
-
-
-# ─── Nodes spéciaux ──────────────────────────────────────────────────────────
+# ── Checkpointer ──────────────────────────────────────────────────────────────
+# Sauvegarde l'état entre les 2 appels API :
+#   Appel 1 : POST /prepare → state sauvegardé avant cleaning
+#   Appel 2 : POST /validate → state repris et pipeline continué
+checkpointer = MemorySaver()
 
 
-def alert_node(state: AgentState) -> AgentState:
-    """Node d'alerte — quality_score insuffisant.
+def _decide_after_strategy(state: AgentState) -> str:
+    """
+    Décision après strategy_node.
+
+    Si le plan a été proposé → on attend la validation humaine
+    (le graph s'interrompt avant cleaning_node grâce à
+    interrupt_before dans compile()).
+
+    Si une erreur s'est produite → on arrête le pipeline.
 
     Args:
-        state: AgentState contenant quality_score.
+        state: État courant
 
     Returns:
-        AgentState avec status = FAILED.
+        "wait" si le plan est proposé
+        "error" si une erreur technique s'est produite
     """
-    score = state.get("quality_score", 0.0)
+    status = state.get("status", "")
 
-    # Correction : forcer float pour éviter TypeError avec None
-    score_display = float(score) if score is not None else 0.0
+    if status == "error":
+        logger.error(
+            "Erreur détectée après strategy_node — arrêt pipeline"
+        )
+        return "error"
 
-    logger.warning(
-        "Quality score insuffisant : %.1f < %.1f — pipeline arrêté",
-        score_display,
-        QUALITY_THRESHOLD,
-    )
-
-    state["status"] = STATUS_FAILED
-    return state
-
-# ─── Fonction de décision ────────────────────────────────────────────────────
+    # Plan proposé — on continue vers cleaning
+    # (LangGraph s'interrompra avant cleaning_node
+    # grâce à interrupt_before)
+    return "continue"
 
 
-def _decide_after_quality(state: AgentState) -> str:
-    """Décide la prochaine étape après la validation qualité.
+def _decide_after_evaluation(state: AgentState) -> str:
+    """
+    Décision après evaluation_node.
 
-    Gère le cas où quality_score est None —
-    peut arriver si quality_node échoue partiellement.
+    Compare le score global APRÈS cleaning avec le seuil.
+    Si score suffisant → delivery
+    Si score insuffisant → on livre quand même mais avec WARNING
+
+    NOTE : En V2, on livre toujours car l'user a validé le plan.
+    Le score sert d'information dans le rapport final.
 
     Args:
-        state: AgentState contenant quality_score.
+        state: État courant
 
     Returns:
-        "continue" si qualité suffisante, "alert" sinon.
+        "deliver" dans tous les cas (l'user a validé)
     """
-    # Protection contre None — si score absent on alerte
-    score = state.get("quality_score")
+    dimensions_after = state.get("dimensions_after")
 
-    if score is None:
-        logger.warning(
-            "quality_score absent du state → alerte Orchestrateur"
-        )
-        return "alert"
+    if dimensions_after:
+        score = dimensions_after.global_score
+        logger.info("Score global après cleaning : %.1f", score)
 
-    if score >= QUALITY_THRESHOLD:
-        logger.info(
-            "Quality score OK : %.1f >= %.1f → continuation",
-            score,
-            QUALITY_THRESHOLD,
-        )
-        return "continue"
-
-    logger.warning(
-        "Quality score insuffisant : %.1f < %.1f → alerte",
-        score,
-        QUALITY_THRESHOLD,
-    )
-    return "alert"
-
-# ─── Construction du graph ───────────────────────────────────────────────────
+    # En V2 : on livre toujours car l'user a pris la décision
+    return "deliver"
 
 
-def build_graph() -> StateGraph:
-    """Construit et compile le graph LangGraph du Data Preparation Agent.
+def build_graph():
+    """
+    Construit et compile le graph LangGraph V2.
 
-    Structure du graph :
-        ingestion → cleaning → quality → [décision]
-                                              ↙        ↘
-                                        aggregation   alert
-                                              ↓          ↓
-                                             END        END
+    STRUCTURE :
+        StateGraph(AgentState) → définit que chaque node
+        reçoit et retourne un AgentState.
+
+        add_node()  → enregistre une fonction comme node
+        add_edge()  → connexion inconditionnelle
+        add_conditional_edges() → connexion avec décision
 
     Returns:
-        Graph LangGraph compilé, prêt à être invoqué.
+        Graph compilé avec checkpointer et interrupt_before.
     """
-    # 1. Créer le workflow avec notre AgentState
     workflow = StateGraph(AgentState)
 
-    # 2. Enregistrer tous les nodes
-    # Syntaxe : add_node("nom_du_node", fonction_du_node)
-    # Le "nom_du_node" est utilisé dans add_edge pour les connexions
+    # ── Enregistrement des nodes ──────────────────────────────────────────────
     workflow.add_node("ingestion",   ingestion_node)
+    workflow.add_node("profiling",   profiling_node)
+    workflow.add_node("dimension",   dimension_node)
+    workflow.add_node("strategy",    strategy_node)
     workflow.add_node("cleaning",    cleaning_node)
-    workflow.add_node("quality",     quality_node)
-    workflow.add_node("aggregation", aggregation_node)
-    workflow.add_node("alert",       alert_node)
+    workflow.add_node("evaluation",  evaluation_node)
+    workflow.add_node("delivery",    delivery_node)
 
-    # 3. Définir le point d'entrée du graph
+    # ── Connexions séquentielles ──────────────────────────────────────────────
+    # Point d'entrée du graph
     workflow.set_entry_point("ingestion")
 
-    # 4. Connecter les nodes séquentiellement
-    # add_edge("source", "destination") = toujours aller vers destination
-    workflow.add_edge("ingestion", "cleaning")
-    workflow.add_edge("cleaning",  "quality")
+    # Séquence linéaire jusqu'à strategy
+    workflow.add_edge("ingestion", "profiling")
+    workflow.add_edge("profiling", "dimension")
+    workflow.add_edge("dimension", "strategy")
 
-    # 5. Conditional edge après quality
-    # Syntaxe :
-    #   add_conditional_edges(
-    #       "node_source",
-    #       fonction_qui_retourne_une_string,
-    #       {"string_retournée": "node_destination"}
-    #   )
+    # Décision après strategy
+    # (normalement toujours "continue" — l'erreur arrête le graph)
     workflow.add_conditional_edges(
-        "quality",
-        _decide_after_quality,
+        "strategy",
+        _decide_after_strategy,
         {
-            "continue": "aggregation",
-            "alert":    "alert",
+            "continue": "cleaning",
+            "error":    END,
         },
     )
 
-    # 6. Les deux chemins mènent à END
-    workflow.add_edge("aggregation", END)
-    workflow.add_edge("alert",       END)
+    # Après cleaning → évaluation
+    workflow.add_edge("cleaning", "evaluation")
 
-    # 7. Compiler — transforme le workflow en graph exécutable
-    return workflow.compile()
+    # Décision après évaluation
+    workflow.add_conditional_edges(
+        "evaluation",
+        _decide_after_evaluation,
+        {
+            "deliver": "delivery",
+        },
+    )
+
+    # Delivery → fin du pipeline
+    workflow.add_edge("delivery", END)
+
+    # ── Compilation avec Human-in-the-Loop ────────────────────────────────────
+    # interrupt_before=["cleaning"] :
+    #   Le graph s'arrête AVANT d'exécuter cleaning_node
+    #   L'état est sauvegardé dans le checkpointer
+    #   On peut reprendre avec graph.invoke() sur le même thread_id
+    compiled_graph = workflow.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["cleaning"],
+    )
+
+    logger.info(
+        "Graph V2 compilé — nodes: %s | interrupt_before: cleaning",
+        ["ingestion", "profiling", "dimension", "strategy",
+         "cleaning", "evaluation", "delivery"],
+    )
+
+    return compiled_graph
 
 
-# ─── Instance globale ────────────────────────────────────────────────────────
-
-# Créée une seule fois au démarrage de l'application
-# Toutes les requêtes FastAPI utilisent cette même instance
+# Instance unique du graph — partagée par tous les appels API
+# (thread-safe avec LangGraph)
 agent_graph = build_graph()

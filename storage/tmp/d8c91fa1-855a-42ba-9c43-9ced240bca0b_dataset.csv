@@ -1,4 +1,0 @@
-transaction_id,revenue,store_id,sale_date
-T001,150.0,STR-01,2024-01-15
-T002,200.5,STR-01,2024-01-15
-T003,99.9,STR-02,2024-01-16

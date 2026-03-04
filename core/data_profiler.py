@@ -1,456 +1,645 @@
-# core/data_profiler.py
-
-# Standard library
 from __future__ import annotations
 
 import logging
-from datetime import datetime
-from typing import Any
+import re
+from typing import Optional
 
-# Third-party
 import polars as pl
 
+from config.settings import get_settings
+from models.profiling_report import AnomalyDetail, ColumnProfile, ProfilingReport
 
 logger = logging.getLogger(__name__)
 
+# Seuil de % de valeurs similaires pour considérer
+# qu'un pattern regex est "dominant" dans une colonne
+PATTERN_DOMINANCE_THRESHOLD = 0.80
 
-# ─── Fonction publique principale ────────────────────────────────────────────
 
+def run_profiling(df: pl.DataFrame) -> ProfilingReport:
+    """
+    Point d'entrée principal du profiler.
 
-def compute_profile(
-    df: pl.DataFrame,
-    action_plan: dict,
-    label: str,
-) -> dict:
-    """Calcule le profil qualité complet d'un DataFrame.
-
-    Analyse chaque colonne selon son rôle défini dans
-    le action_plan et produit un snapshot de qualité.
-
-    Utilisé 2 fois dans le pipeline :
-        - Après ingestion  → profile_before (données brutes)
-        - Après cleaning   → profile_after  (données nettoyées)
+    Orchestre l'analyse complète du dataset en 4 étapes :
+        1. Stats globales
+        2. Profil de chaque colonne
+        3. Détection des anomalies
+        4. Construction du rapport
 
     Args:
-        df:          DataFrame à profiler.
-        action_plan: Plan d'action avec colonnes par rôle et règles.
-        label:       Étiquette du snapshot ("AVANT" ou "APRÈS").
+        df: DataFrame Polars brut (chargé par file_loader)
+            Toutes les colonnes sont en String car
+            file_loader charge avec infer_schema=False.
 
     Returns:
-        Dictionnaire complet du profil qualité avec :
-            - global_stats   : statistiques globales du DataFrame
-            - columns        : profil détaillé par colonne
-            - quality_index  : score synthétique 0-100
-            - label          : étiquette du snapshot
-            - timestamp      : horodatage du profil
+        ProfilingReport complet avec stats et anomalies.
     """
-    logger.info("Calcul profil qualité — %s cleaning", label)
-
-    total_rows = df.height
-    total_cols = df.width
-
-    # Profiler chaque colonne
-    columns_profiles = {}
-    for col_name in df.columns:
-        columns_profiles[col_name] = _profile_column(
-            df, col_name, action_plan
-        )
-
-    # Calculer le quality index global
-    quality_index = _compute_quality_index(
-        columns_profiles, total_rows
+    logger.info(
+        "Démarrage profiling — %d lignes x %d colonnes",
+        df.height,
+        df.width,
     )
 
-    profile = {
-        "label":     label,
-        "timestamp": datetime.now().isoformat(),
-
-        # ── Statistiques globales ──────────────────────────────────
-        "global_stats": {
-            "total_rows":    total_rows,
-            "total_columns": total_cols,
-            "total_nulls":   sum(
-                c["null_count"]
-                for c in columns_profiles.values()
-            ),
-            "total_duplicates": _count_duplicates(
-                df, action_plan
-            ),
-            "quality_index": quality_index,
-        },
-
-        # ── Profil par colonne ─────────────────────────────────────
-        "columns": columns_profiles,
+    # ── Étape 1 : profil par colonne ─────────────────────────────────────────
+    # On profile chaque colonne individuellement
+    column_profiles = {
+        col_name: _profile_single_column(df, col_name)
+        for col_name in df.columns
     }
+
+    # ── Étape 2 : détection des anomalies ────────────────────────────────────
+    anomalies = _detect_all_anomalies(df, column_profiles)
+
+    # ── Étape 3 : stats globales ──────────────────────────────────────────────
+    total_nulls = sum(p.null_count for p in column_profiles.values())
+    total_dupes = df.height - df.unique().height
+
+    report = ProfilingReport(
+        total_rows=df.height,
+        total_columns=df.width,
+        total_nulls=total_nulls,
+        null_pct=round(total_nulls / max(1, df.height * df.width) * 100, 2),
+        total_duplicates=total_dupes,
+        duplicate_pct=round(total_dupes / max(1, df.height) * 100, 2),
+        columns=column_profiles,
+        anomalies=anomalies,
+    )
 
     logger.info(
-        "Profil %s — %d lignes | %d nulls | "
-        "quality index : %.1f",
-        label,
-        total_rows,
-        profile["global_stats"]["total_nulls"],
-        quality_index,
+        "Profiling terminé — %d anomalies détectées "
+        "(%d nulls, %d doublons)",
+        report.total_anomalies,
+        total_nulls,
+        total_dupes,
     )
+
+    return report
+
+
+# ── Profil d'une colonne ─────────────────────────────────────────────────────
+
+
+def _profile_single_column(
+    df: pl.DataFrame,
+    col_name: str,
+) -> ColumnProfile:
+    """
+    Calcule le profil statistique d'une seule colonne.
+
+    Détecte d'abord le type réel de la colonne
+    (même si tout est chargé en String),
+    puis calcule les métriques adaptées à ce type.
+
+    Args:
+        df:       DataFrame complet
+        col_name: Nom de la colonne à profiler
+
+    Returns:
+        ColumnProfile avec toutes les métriques calculées.
+    """
+    col       = df[col_name]
+    non_null  = col.drop_nulls()
+    null_count = col.null_count()
+
+    # Détecter le type réel de la colonne
+    type_detecte = _detect_column_type(non_null)
+
+    # Profil de base (commun à tous les types)
+    profile = ColumnProfile(
+        nom=col_name,
+        type_detecte=type_detecte,
+        null_count=null_count,
+        null_pct=round(null_count / max(1, df.height) * 100, 2),
+        unique_count=col.n_unique(),
+        total_count=df.height,
+        sample_values=non_null.head(3).to_list(),
+        duplicate_count=len(col) - col.n_unique(),
+    )
+
+    # Métriques spécifiques aux colonnes numériques
+    if type_detecte in ("float", "int"):
+        _enrich_numeric_profile(profile, non_null)
+
+    # Métriques spécifiques aux colonnes texte
+    elif type_detecte == "string":
+        _enrich_string_profile(profile, non_null)
 
     return profile
 
 
-def build_comparison_report(
-    profile_before: dict,
-    profile_after: dict,
-) -> dict:
-    """Construit le rapport de comparaison AVANT vs APRÈS.
+def _detect_column_type(non_null_series: pl.Series) -> str:
+    """
+    Détecte le type réel d'une colonne chargée en String.
 
-    Compare les 2 snapshots et calcule les améliorations
-    apportées par le cleaning.
+    LOGIQUE :
+        Puisque file_loader charge tout en String,
+        on essaie de convertir les valeurs non-nulles
+        pour déterminer leur type réel.
+
+        Ordre de test :
+            1. Int  (les entiers sont un sous-ensemble des floats)
+            2. Float
+            3. Date (formats courants)
+            4. String par défaut
 
     Args:
-        profile_before: Profil calculé avant cleaning.
-        profile_after:  Profil calculé après cleaning.
+        non_null_series: Valeurs non-nulles de la colonne
 
     Returns:
-        Rapport de comparaison avec les deltas et améliorations.
+        Type détecté : "int", "float", "date_string", "string", "mixed"
     """
-    before_stats = profile_before["global_stats"]
-    after_stats  = profile_after["global_stats"]
+    if non_null_series.is_empty():
+        return "string"
 
-    # Calcul des améliorations
-    nulls_fixed = (
-        before_stats["total_nulls"] - after_stats["total_nulls"]
-    )
-    duplicates_fixed = (
-        before_stats["total_duplicates"]
-        - after_stats["total_duplicates"]
-    )
-    quality_improvement = (
-        after_stats["quality_index"]
-        - before_stats["quality_index"]
-    )
+    sample = non_null_series.head(20).to_list()
 
-    return {
-        "before": {
-            "rows":          before_stats["total_rows"],
-            "nulls":         before_stats["total_nulls"],
-            "duplicates":    before_stats["total_duplicates"],
-            "quality_index": before_stats["quality_index"],
-        },
-        "after": {
-            "rows":          after_stats["total_rows"],
-            "nulls":         after_stats["total_nulls"],
-            "duplicates":    after_stats["total_duplicates"],
-            "quality_index": after_stats["quality_index"],
-        },
-        "improvements": {
-            "nulls_fixed":          nulls_fixed,
-            "duplicates_removed":   duplicates_fixed,
-            "rows_dropped":         (
-                before_stats["total_rows"]
-                - after_stats["total_rows"]
-            ),
-            "quality_gain":         round(quality_improvement, 1),
-            "quality_improved":     quality_improvement > 0,
-        },
-    }
+    # Tester int
+    int_count = sum(1 for v in sample if _is_int(str(v)))
+    if int_count / len(sample) >= 0.90:
+        return "int"
+
+    # Tester float
+    float_count = sum(1 for v in sample if _is_float(str(v)))
+    if float_count / len(sample) >= 0.90:
+        return "float"
+
+    # Tester date (formats courants)
+    date_count = sum(1 for v in sample if _is_date_string(str(v)))
+    if date_count / len(sample) >= 0.80:
+        return "date_string"
+
+    # Type mixte si mélange (ex: "850.50" et "2025-01-01")
+    if float_count > 0 and date_count > 0:
+        return "mixed"
+
+    return "string"
 
 
-# ─── Fonctions privées ───────────────────────────────────────────────────────
+def _enrich_numeric_profile(
+    profile: ColumnProfile,
+    non_null: pl.Series,
+) -> None:
+    """
+    Ajoute les métriques numériques au profil.
+
+    Modifie le profil en place (les attributs sont optionnels
+    et initialisés à None dans ColumnProfile).
+
+    Args:
+        profile:  Profil à enrichir (modifié en place)
+        non_null: Valeurs non-nulles de la colonne
+    """
+    # Convertir en float pour les calculs
+    try:
+        numeric = non_null.cast(pl.Float64, strict=False).drop_nulls()
+
+        if numeric.is_empty():
+            return
+
+        profile.min    = round(float(numeric.min()), 4)
+        profile.max    = round(float(numeric.max()), 4)
+        profile.mean   = round(float(numeric.mean()), 4)
+        profile.median = round(float(numeric.median()), 4)
+        profile.std    = round(float(numeric.std()), 4)
+
+        profile.negative_count = int((numeric < 0).sum())
+        profile.outlier_count  = _count_outliers_iqr(numeric)
+
+    except Exception as e:
+        logger.warning(
+            "Impossible de calculer métriques numériques pour %s : %s",
+            profile.nom,
+            str(e),
+        )
 
 
-def _profile_column(
+def _enrich_string_profile(
+    profile: ColumnProfile,
+    non_null: pl.Series,
+) -> None:
+    """
+    Détecte un pattern regex dominant dans une colonne texte.
+
+    LOGIQUE :
+        Si 80%+ des valeurs suivent un pattern comme
+        "CTR-000001", "CTR-000002"...
+        → On détecte le pattern "CTR-[0-9]+"
+
+        C'est utile pour le LLM qui peut alors vérifier
+        si les valeurs respectent ce pattern.
+
+    Args:
+        profile:  Profil à enrichir (modifié en place)
+        non_null: Valeurs non-nulles de la colonne
+    """
+    sample = non_null.head(50).to_list()
+
+    if not sample:
+        return
+
+    # Patterns courants à tester
+    patterns_to_test = [
+        (r"^[A-Z]{2,4}-\d{4,6}$",  "CODE-XXXXXX (ex: CTR-000001)"),
+        (r"^\d{4}-\d{2}-\d{2}$",   "DATE YYYY-MM-DD"),
+        (r"^[A-Z]{2}-\d{3}$",      "XX-NNN (ex: ST-001)"),
+        (r"^\+?\d{8,15}$",         "Numéro de téléphone"),
+        (r"^\d+$",                 "Entier en string"),
+    ]
+
+    for pattern, description in patterns_to_test:
+        matches = sum(
+            1 for v in sample
+            if re.match(pattern, str(v))
+        )
+        if matches / len(sample) >= PATTERN_DOMINANCE_THRESHOLD:
+            profile.pattern_detecte = pattern
+            logger.debug(
+                "Pattern détecté pour %s : %s (%d/%d valeurs)",
+                profile.nom,
+                description,
+                matches,
+                len(sample),
+            )
+            break
+
+
+# ── Détection des anomalies ──────────────────────────────────────────────────
+
+
+def _detect_all_anomalies(
     df: pl.DataFrame,
-    col_name: str,
-    action_plan: dict,
-) -> dict:
-    """Calcule le profil d'une colonne selon son rôle.
+    column_profiles: dict[str, ColumnProfile],
+) -> list[AnomalyDetail]:
+    """
+    Orchestre la détection de toutes les anomalies.
+
+    Appelle chaque détecteur spécialisé et agrège les résultats.
 
     Args:
-        df:          DataFrame complet.
-        col_name:    Nom de la colonne à profiler.
-        action_plan: Plan d'action pour connaître le rôle.
+        df:              DataFrame complet
+        column_profiles: Profils calculés par _profile_single_column
 
     Returns:
-        Dictionnaire avec les métriques qualité de la colonne.
+        Liste de toutes les anomalies détectées, toutes catégories.
     """
-    col_series  = df[col_name]
-    total_rows  = df.height
-    null_count  = col_series.null_count()
-    null_pct    = round((null_count / total_rows * 100), 1) if total_rows > 0 else 0
+    anomalies = []
+    anomalies += _detect_nulls(df)
+    anomalies += _detect_duplicates(df)
+    anomalies += _detect_type_errors(df, column_profiles)
 
-    # Déterminer le rôle de la colonne
-    role = _get_column_role(col_name, action_plan)
+    # 1. Nulls (ligne par ligne)
+    #anomalies.extend(_detect_nulls(df))
 
-    profile: dict[str, Any] = {
-        "role":       role,
-        "null_count": null_count,
-        "null_pct":   null_pct,
-        "is_healthy": null_count == 0,
-    }
+    # 2. Doublons (lignes identiques)
+    #anomalies.extend(_detect_duplicates(df))
 
-    # Métriques spécifiques par rôle
-    if role == "metric":
-        profile.update(
-            _profile_metric_column(col_series, col_name, action_plan)
-        )
+    # 3. Outliers (colonnes numériques)
+    #anomalies.extend(_detect_outliers(df, column_profiles))
 
-    elif role == "identifier":
-        profile.update(
-            _profile_identifier_column(col_series, total_rows)
-        )
+    # 4. Erreurs de type (ex: texte dans colonne numérique)
+    #anomalies.extend(_detect_type_errors(df, column_profiles))
 
-    elif role == "dimension":
-        profile.update(
-            _profile_dimension_column(
-                col_series, col_name, action_plan
+    # 5. Incohérences entre colonnes (ex: dates inversées)
+    #anomalies.extend(_detect_inconsistencies(df))
+
+    return anomalies
+
+
+def _detect_nulls(df: pl.DataFrame) -> list[AnomalyDetail]:
+    anomalies = []
+    for col_name in df.columns:
+        col = df[col_name]
+        null_mask = col.is_null().to_list()
+        for idx, is_null in enumerate(null_mask):
+            if is_null:
+                anomalies.append(
+                    AnomalyDetail(
+                        ligne=idx + 1,
+                        colonne=col_name,
+                        valeur=None,
+                        type_anomalie="null",
+                        description=f"Valeur nulle dans la colonne '{col_name}'",
+                    )
+                )
+    return anomalies
+
+def _detect_duplicates(df: pl.DataFrame) -> list[AnomalyDetail]:
+    anomalies = []
+    if df.is_empty():
+        return anomalies
+
+    # Polars n'a pas .duplicated() — on ajoute un index de ligne,
+    # on regroupe par toutes les colonnes et on garde les non-premières occurrences.
+    df_indexed = df.with_row_index("__row_idx__")
+
+    # Pour chaque groupe de lignes identiques, récupérer tous les index
+    # et marquer comme doublons toutes les occurrences sauf la première.
+    duplicate_indices = set()
+    df_all_cols = df.columns
+
+    grouped = (
+        df_indexed
+        .group_by(df_all_cols)
+        .agg(pl.col("__row_idx__").alias("__indices__"))
+        .filter(pl.col("__indices__").list.len() > 1)
+    )
+
+    for row in grouped.iter_rows(named=True):
+        # On ignore le premier index (première occurrence), les autres sont doublons
+        indices = sorted(row["__indices__"])
+        for idx in indices[1:]:
+            duplicate_indices.add(idx)
+
+    for idx in sorted(duplicate_indices):
+        anomalies.append(
+            AnomalyDetail(
+                ligne=idx + 1,
+                colonne=None,
+                valeur=None,
+                type_anomalie="duplicate",
+                description="Ligne dupliquée",
             )
         )
-
-    elif role == "temporal_key":
-        profile.update(_profile_temporal_column(col_series))
-
-    return profile
+    return anomalies
 
 
-def _profile_metric_column(
-    col_series: pl.Series,
-    col_name: str,
-    action_plan: dict,
-) -> dict:
-    """Profil spécifique pour une colonne METRIC.
 
-    Args:
-        col_series:  Série Polars de la colonne.
-        col_name:    Nom de la colonne.
-        action_plan: Pour récupérer le range configuré.
-
-    Returns:
-        Métriques numériques + violations de range.
-    """
-    non_null = col_series.drop_nulls()
-    result: dict[str, Any] = {}
-
-    if not non_null.is_empty():
-        try:
-            result = {
-                "min":    round(float(non_null.min()), 4),
-                "max":    round(float(non_null.max()), 4),
-                "mean":   round(float(non_null.mean()), 4),
-                "median": round(float(non_null.median()), 4),
-                "std":    round(float(non_null.std()), 4),
-            }
-        except Exception:
-            result = {}
-
-    # Vérifier les violations de range si configuré
-    ranges = action_plan.get("columns_with_range", {})
-    if col_name in ranges:
-        min_val    = ranges[col_name]["min"]
-        max_val    = ranges[col_name]["max"]
-        violations = col_series.drop_nulls().filter(
-            (col_series.drop_nulls() < min_val)
-            | (col_series.drop_nulls() > max_val)
-        ).len()
-
-        result["range_config"]     = ranges[col_name]
-        result["range_violations"] = int(violations)
-        result["range_ok"]         = violations == 0
-
-    return result
-
-
-def _profile_identifier_column(
-    col_series: pl.Series,
-    total_rows: int,
-) -> dict:
-    """Profil spécifique pour une colonne IDENTIFIER.
-
-    Args:
-        col_series: Série Polars de la colonne.
-        total_rows: Nombre total de lignes du DataFrame.
-
-    Returns:
-        Métriques d'unicité et doublons.
-    """
-    non_null     = col_series.drop_nulls()
-    unique_count = non_null.n_unique()
-    duplicates   = len(non_null) - unique_count
-
-    return {
-        "unique_count":  unique_count,
-        "duplicate_count": duplicates,
-        "is_unique":     duplicates == 0,
-    }
-
-
-def _profile_dimension_column(
-    col_series: pl.Series,
-    col_name: str,
-    action_plan: dict,
-) -> dict:
-    """Profil spécifique pour une colonne DIMENSION.
-
-    Args:
-        col_series:  Série Polars de la colonne.
-        col_name:    Nom de la colonne.
-        action_plan: Pour récupérer le pattern configuré.
-
-    Returns:
-        Métriques catégorielles + violations de pattern.
-    """
-    non_null     = col_series.drop_nulls()
-    unique_count = non_null.n_unique()
-
-    result: dict[str, Any] = {
-        "unique_values": unique_count,
-        "top_values":    (
-            non_null.value_counts()
-            .sort("count", descending=True)
-            .head(3)[col_series.name]
-            .to_list()
-            if not non_null.is_empty()
-            else []
-        ),
-    }
-
-    # Vérifier les violations de pattern si configuré
-    patterns = action_plan.get("columns_with_pattern", {})
-    if col_name in patterns:
-        pattern = patterns[col_name]
-        try:
-            matches_mask     = non_null.str.contains(pattern)
-            invalid_count    = (matches_mask == False).sum()  # noqa: E712
-            result["pattern"]            = pattern
-            result["pattern_violations"] = int(invalid_count)
-            result["pattern_ok"]         = invalid_count == 0
-        except Exception:
-            pass
-
-    return result
-
-
-def _profile_temporal_column(col_series: pl.Series) -> dict:
-    """Profil spécifique pour une colonne TEMPORAL.
-
-    Args:
-        col_series: Série Polars de la colonne.
-
-    Returns:
-        Métriques temporelles min/max date.
-    """
-    non_null = col_series.drop_nulls()
-
-    if non_null.is_empty():
-        return {}
-
-    try:
-        return {
-            "min_date": str(non_null.min()),
-            "max_date": str(non_null.max()),
-        }
-    except Exception:
-        return {}
-
-
-def _count_duplicates(
+def _detect_outliers(
     df: pl.DataFrame,
-    action_plan: dict,
-) -> int:
-    """Compte les doublons complets dans le DataFrame.
+    column_profiles: dict[str, ColumnProfile],
+) -> list[AnomalyDetail]:
+    """
+    Détecte les outliers dans les colonnes numériques.
+
+    Méthode IQR de Tukey (standard académique) :
+        Q1 = 25ème percentile
+        Q3 = 75ème percentile
+        IQR = Q3 - Q1
+        Outlier si valeur < Q1 - 1.5*IQR ou > Q3 + 1.5*IQR
 
     Args:
-        df:          DataFrame à analyser.
-        action_plan: Pour récupérer les colonnes identifier.
+        df:              DataFrame à analyser
+        column_profiles: Pour identifier les colonnes numériques
 
     Returns:
-        Nombre de lignes dupliquées.
+        Liste d'AnomalyDetail, une par outlier trouvé.
     """
-    total_rows  = df.height
-    unique_rows = df.unique().height
-    return total_rows - unique_rows
+    anomalies = []
+    settings  = get_settings()
+
+    for col_name, profile in column_profiles.items():
+        # Uniquement les colonnes numériques
+        if profile.type_detecte not in ("float", "int"):
+            continue
+
+        try:
+            numeric = (
+                df[col_name]
+                .cast(pl.Float64, strict=False)
+                .drop_nulls()
+            )
+
+            if numeric.len() < 4:
+                # IQR non fiable avec moins de 4 valeurs
+                continue
+
+            q1  = float(numeric.quantile(0.25))
+            q3  = float(numeric.quantile(0.75))
+            iqr = q3 - q1
+
+            if iqr == 0:
+                # Toutes les valeurs sont identiques → pas d'outlier
+                continue
+
+            lower_bound = q1 - settings.iqr_multiplier * iqr
+            upper_bound = q3 + settings.iqr_multiplier * iqr
+
+            # Chercher les outliers ligne par ligne
+            for idx in range(df.height):
+                raw_val = df[col_name][idx]
+                if raw_val is None:
+                    continue
+
+                try:
+                    val = float(str(raw_val))
+                    if val < lower_bound or val > upper_bound:
+                        anomalies.append(
+                            AnomalyDetail(
+                                ligne=idx + 1,
+                                colonne=col_name,
+                                valeur=val,
+                                type_anomalie="outlier",
+                                description=(
+                                    f"Outlier IQR : {val} "
+                                    f"hors [{round(lower_bound, 2)}, "
+                                    f"{round(upper_bound, 2)}]"
+                                ),
+                            )
+                        )
+                except (ValueError, TypeError):
+                    continue
+
+        except Exception as e:
+            logger.warning(
+                "Impossible de détecter outliers pour %s : %s",
+                col_name,
+                str(e),
+            )
+
+    return anomalies
 
 
-def _get_column_role(col_name: str, action_plan: dict) -> str:
-    """Retourne le rôle d'une colonne depuis le action_plan.
+def _detect_type_errors(
+    df: pl.DataFrame,
+    column_profiles: dict[str, ColumnProfile],
+) -> list[AnomalyDetail]:
+    """
+    Détecte les valeurs dont le type est incohérent avec la colonne.
+
+    EXEMPLE TYPIQUE :
+        colonne "prime_annuelle" est majoritairement numérique
+        mais contient "2025-01-01" à la ligne 10
+        → Erreur de type
+
+    LOGIQUE :
+        Si une colonne est détectée comme "float" ou "int"
+        mais certaines valeurs ne peuvent pas être castées
+        → Ce sont des erreurs de type.
 
     Args:
-        col_name:    Nom de la colonne.
-        action_plan: Plan d'action avec colonnes par rôle.
+        df:              DataFrame à analyser
+        column_profiles: Pour connaître le type dominant par colonne
 
     Returns:
-        Rôle de la colonne ou "unknown" si non trouvé.
+        Liste d'AnomalyDetail, une par erreur de type.
     """
-    role_map = {
-        "metric":     action_plan.get("metric_columns", []),
-        "dimension":  action_plan.get("dimension_columns", []),
-        "identifier": action_plan.get("identifier_columns", []),
-        "temporal_key": action_plan.get("temporal_columns", []),
-    }
+    anomalies = []
 
-    for role, columns in role_map.items():
-        if col_name in columns:
-            return role
+    for col_name, profile in column_profiles.items():
+        # Uniquement vérifier les colonnes dont on a détecté
+        # un type numérique (les strings acceptent tout)
+        if profile.type_detecte not in ("float", "int"):
+            continue
 
-    return "unknown"
+        for idx in range(df.height):
+            val = df[col_name][idx]
+            if val is None:
+                continue
+
+            # Tenter de convertir en float
+            if not _is_float(str(val)):
+                anomalies.append(
+                    AnomalyDetail(
+                        ligne=idx + 1,
+                        colonne=col_name,
+                        valeur=val,
+                        type_anomalie="type_error",
+                        description=(
+                            f"Valeur '{val}' non numérique "
+                            f"dans colonne de type {profile.type_detecte}"
+                        ),
+                    )
+                )
+
+    return anomalies
 
 
-def _compute_quality_index(
-    columns_profiles: dict,
-    total_rows: int,
-) -> float:
-    """Calcule un score synthétique de qualité globale 0-100.
+def _detect_inconsistencies(df: pl.DataFrame) -> list[AnomalyDetail]:
+    """
+    Détecte les incohérences entre paires de colonnes.
 
-    Formule :
-        Pénalités sur :
-            - % de nulls dans tout le DataFrame
-            - présence de doublons
-            - violations de range sur metrics
-            - violations de pattern sur dimensions
+    EXEMPLE :
+        Si le dataset a "date_debut" et "date_fin",
+        on vérifie que date_debut < date_fin.
+
+    LOGIQUE :
+        Rechercher des paires de colonnes qui suivent des
+        conventions de nommage cohérentes :
+            *_start / *_end
+            *_debut / *_fin
+            *_from  / *_to
+            date_effet / date_echeance
+        Puis vérifier la cohérence sur chaque ligne.
 
     Args:
-        columns_profiles: Profil de chaque colonne.
-        total_rows:       Nombre total de lignes.
+        df: DataFrame à analyser
 
     Returns:
-        Score entre 0.0 et 100.0.
+        Liste d'AnomalyDetail pour les incohérences détectées.
     """
-    if total_rows == 0:
-        return 0.0
+    anomalies = []
+    columns   = df.columns
 
-    score = 100.0
+    # Paires de conventions de nommage à vérifier
+    date_pair_patterns = [
+        ("date_debut", "date_fin"),
+        ("date_effet", "date_echeance"),
+        ("date_start", "date_end"),
+        ("start_date", "end_date"),
+        ("date_from",  "date_to"),
+        ("valid_from", "valid_to"),
+    ]
 
-    total_cells = total_rows * len(columns_profiles)
+    for col_start, col_end in date_pair_patterns:
+        # Vérifier si les 2 colonnes existent dans le dataset
+        if col_start not in columns or col_end not in columns:
+            continue
 
-    # Pénalité nulls — max 30 points
-    total_nulls = sum(
-        c.get("null_count", 0)
-        for c in columns_profiles.values()
-    )
-    null_pct = (total_nulls / total_cells * 100) if total_cells > 0 else 0
-    score   -= min(30.0, null_pct * 3)
+        logger.debug(
+            "Vérification cohérence temporelle : %s < %s",
+            col_start,
+            col_end,
+        )
 
-    # Pénalité doublons — max 20 points
-    has_duplicates = any(
-        c.get("duplicate_count", 0) > 0
-        for c in columns_profiles.values()
-    )
-    if has_duplicates:
-        score -= 20.0
+        for idx in range(df.height):
+            val_start = df[col_start][idx]
+            val_end   = df[col_end][idx]
 
-    # Pénalité violations range — max 25 points
-    range_violations = sum(
-        c.get("range_violations", 0)
-        for c in columns_profiles.values()
-    )
-    if range_violations > 0:
-        violation_pct = range_violations / total_rows * 100
-        score        -= min(25.0, violation_pct * 2.5)
+            if val_start is None or val_end is None:
+                continue
 
-    # Pénalité violations pattern — max 25 points
-    pattern_violations = sum(
-        c.get("pattern_violations", 0)
-        for c in columns_profiles.values()
-    )
-    if pattern_violations > 0:
-        violation_pct = pattern_violations / total_rows * 100
-        score        -= min(25.0, violation_pct * 2.5)
+            # Comparer comme strings (format YYYY-MM-DD est comparable)
+            if str(val_start) >= str(val_end):
+                anomalies.append(
+                    AnomalyDetail(
+                        ligne=idx + 1,
+                        colonne=f"{col_start} / {col_end}",
+                        valeur=f"{val_start} >= {val_end}",
+                        type_anomalie="inconsistency",
+                        description=(
+                            f"Incohérence temporelle : "
+                            f"{col_start}={val_start} "
+                            f">= {col_end}={val_end}"
+                        ),
+                    )
+                )
 
-    return round(max(0.0, score), 1)
+    return anomalies
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _is_int(value: str) -> bool:
+    """Vérifie si une string représente un entier valide."""
+    try:
+        int(value)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def _is_float(value: str) -> bool:
+    """Vérifie si une string représente un float valide."""
+    try:
+        float(value)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def _is_date_string(value: str) -> bool:
+    """
+    Vérifie si une string ressemble à une date.
+
+    Teste les formats les plus courants.
+    N'utilise pas strptime pour rester léger.
+    """
+    date_patterns = [
+        r"^\d{4}-\d{2}-\d{2}$",           # 2024-01-15
+        r"^\d{2}/\d{2}/\d{4}$",           # 15/01/2024
+        r"^\d{2}-\d{2}-\d{4}$",           # 15-01-2024
+        r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", # 2024-01-15T10:30
+    ]
+    return any(re.match(p, value) for p in date_patterns)
+
+
+def _count_outliers_iqr(numeric: pl.Series) -> int:
+    """
+    Compte les outliers IQR dans une série numérique.
+
+    Utilisé par _enrich_numeric_profile pour remplir
+    le champ outlier_count du ColumnProfile.
+
+    Args:
+        numeric: Série Polars de type numérique, sans nulls
+
+    Returns:
+        Nombre d'outliers détectés.
+    """
+    settings = get_settings()
+
+    if numeric.len() < 4:
+        return 0
+
+    q1  = float(numeric.quantile(0.25))
+    q3  = float(numeric.quantile(0.75))
+    iqr = q3 - q1
+
+    if iqr == 0:
+        return 0
+
+    lower = q1 - settings.iqr_multiplier * iqr
+    upper = q3 + settings.iqr_multiplier * iqr
+
+    return int(((numeric < lower) | (numeric > upper)).sum())

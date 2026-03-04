@@ -1,146 +1,157 @@
-# Standard library
 from __future__ import annotations
 
+import json
 import logging
 import shutil
-import os
 from datetime import datetime
+from pathlib import Path
 
-# Local
-from agent.state import AgentState, STATUS_FAILED
+import polars as pl
+
+from agent.state import AgentState
+from config.settings import get_settings
+from core.df_serializer import df_to_dict
 from core.file_loader import load_dataset
-from core.metadata_parser import parse_metadata, validate_schema_matching
-from core.data_profiler import compute_profile
-
 
 logger = logging.getLogger(__name__)
 
-BRONZE_PATH = os.getenv("BRONZE_PATH", "storage/bronze")
 
+def ingestion_node(state: AgentState) -> dict:
+    """
+    Charge le dataset et le metadata, sauvegarde en Bronze.
 
-# ─── Node ────────────────────────────────────────────────────────────────────
-
-
-def ingestion_node(state: AgentState) -> AgentState:
-    """Node 1 — Raw Data Ingestion.
-
-    Orchestre les 3 opérations d'ingestion :
-        1. Parsing et validation du metadata
-        2. Chargement du dataset
-        3. Validation de la cohérence colonnes
+    Retourne uniquement les champs modifiés — LangGraph
+    merge automatiquement avec l'état existant.
 
     Args:
-        state: AgentState contenant dataset_path et metadata_path.
+        state: État courant du pipeline
 
     Returns:
-        AgentState mis à jour avec raw_df, metadata, action_plan,
-        bronze_path. Status = FAILED si une erreur bloquante survient.
+        Dict avec les champs mis à jour par ce node.
     """
-    logger.info(">>> NODE 1 : Raw Data Ingestion — démarrage")
+    logger.info(">>> NODE 1 : Ingestion — démarrage")
+    settings = get_settings()
 
-    try:
-        # ── Étape 1 : Parser le metadata ──────────────────────────────
-        metadata, action_plan = parse_metadata(state["metadata_path"])
+    # ── 1. Charger le metadata ────────────────────────────────────────────────
+    metadata_path = Path(state["metadata_path"])
 
-        # ── Étape 2 : Charger le dataset ──────────────────────────────
-        raw_df, ingestion_info = load_dataset(state["dataset_path"])
+    if not metadata_path.exists():
+        error_msg = f"Metadata introuvable : {metadata_path}"
+        logger.error(error_msg)
+        return {"status": "error", "errors": [error_msg]}
 
-        # ── Étape 3 : Schema matching ─────────────────────────────────
-        schema_result = validate_schema_matching(
-            raw_df.columns,
-            metadata,
-        )
+    with open(metadata_path, encoding="utf-8") as f:
+        raw_metadata = json.load(f)
 
-        # ── Étape 4 : Profiler les données brutes → AVANT cleaning ────
-        logger.info("Calcul profil qualité AVANT cleaning")
-        profile_before = compute_profile(
-            raw_df,
-            action_plan,
-            label="AVANT",
-        )
-        state["profile_before"] = profile_before
-
-        logger.info(
-            "Quality index AVANT cleaning : %.1f/100",
-            profile_before["global_stats"]["quality_index"],
-        )
-
-        # Colonnes manquantes = erreur bloquante
-        if not schema_result["is_valid"]:
-            error_msg = (
-                f"Schema matching échoué — colonnes manquantes : "
-                f"{schema_result['missing_columns']}"
-            )
-            logger.error(error_msg)
-            state["status"] = STATUS_FAILED
-            state["errors"].append(error_msg)
-            return state
-
-        # ── Étape 4 : Sauvegarder le fichier brut → Bronze ────────────
-        bronze_path = _save_to_bronze(
-            state["dataset_path"],
-            metadata.sector,
-        )
-
-        # ── Étape 5 : Mettre à jour le state ──────────────────────────
-        state["metadata"]     = metadata.model_dump()
-        state["action_plan"]  = action_plan
-        state["raw_df"]       = raw_df
-        state["bronze_path"]  = bronze_path
-
-        # Ajouter les infos d'ingestion au cleaning_log
-        state["cleaning_log"].append({
-            "node":       "ingestion",
-            "timestamp":  datetime.now().isoformat(),
-            "operation":  "file_loaded",
-            "details":    ingestion_info,
-            "schema_check": schema_result,
-        })
-
-        logger.info(
-            "NODE 1 terminé — %d lignes | %d colonnes | bronze : %s",
-            ingestion_info["nb_rows"],
-            ingestion_info["nb_columns"],
-            bronze_path,
-        )
-
-    except (FileNotFoundError, ValueError) as error:
-        logger.error("NODE 1 échoué : %s", error)
-        state["status"] = STATUS_FAILED
-        state["errors"].append(str(error))
-
-    return state
-
-
-# ─── Fonction privée ─────────────────────────────────────────────────────────
-
-
-def _save_to_bronze(dataset_path: str, sector: str) -> str:
-    """Sauvegarde le fichier original dans le Bronze layer.
-
-    Le fichier est copié tel quel, sans aucune modification.
-    Cela permet de toujours pouvoir rejouer le pipeline
-    depuis les données originales.
-
-    Args:
-        dataset_path: Chemin du fichier source.
-        sector:       Secteur du dataset (pour l'organisation).
-
-    Returns:
-        Chemin où le fichier a été sauvegardé dans le Bronze layer.
-    """
-    timestamp   = datetime.now().strftime("%Y%m%d_%H%M%S")
-    sector_dir  = os.path.join(BRONZE_PATH, sector)
-    os.makedirs(sector_dir, exist_ok=True)
-
-    # Conserver l'extension originale du fichier
-    extension   = os.path.splitext(dataset_path)[1]
-    destination = os.path.join(
-        sector_dir,
-        f"{timestamp}_raw{extension}",
+    logger.info(
+        "Metadata chargé — %d clés de premier niveau",
+        len(raw_metadata),
     )
 
-    shutil.copy2(dataset_path, destination)
-    logger.info("Fichier brut sauvegardé dans Bronze : %s", destination)
+    # ── 2. Charger le dataset ─────────────────────────────────────────────────
+    dataset_path = Path(state["dataset_path"])
 
-    return destination
+    if not dataset_path.exists():
+        error_msg = f"Dataset introuvable : {dataset_path}"
+        logger.error(error_msg)
+        return {"status": "error", "errors": [error_msg]}
+
+    raw_df, ingestion_info = load_dataset(str(dataset_path))
+
+    logger.info(
+        "Dataset chargé — %d lignes x %d colonnes | format: %s | encoding: %s",
+        raw_df.height,
+        raw_df.width,
+        ingestion_info["file_format"],
+        ingestion_info.get("encoding", "N/A"),
+    )
+
+    # ── 3. Sauvegarder en Bronze ──────────────────────────────────────────────
+    # Détecter le secteur depuis le metadata (clé flexible)
+    sector = _extract_sector(raw_metadata)
+    bronze_path = _save_to_bronze(dataset_path, sector, settings)
+
+    logger.info("NODE 1 terminé — Bronze : %s", bronze_path)
+
+    return {
+        "raw_df":        df_to_dict(raw_df),
+        "raw_metadata":  raw_metadata,
+        "ingestion_info": ingestion_info,
+        "bronze_path":   str(bronze_path),
+        "sector":        sector,
+    }
+
+def _df_to_dict(df: pl.DataFrame) -> dict:
+    """
+    Convertit un DataFrame Polars en dict JSON-sérialisable.
+    
+    Format choisi : orienté "colonnes" pour faciliter
+    la reconstruction avec pl.DataFrame(data).
+    
+        {
+          "columns": ["contrat_id", "prime_annuelle", ...],
+          "data": [
+              ["CTR-000001", "1200.00", ...],  ← ligne 1
+              ["CTR-000002", "850.50",  ...],  ← ligne 2
+          ]
+        }
+    """
+    return {
+        "columns": df.columns,
+        "data":    df.rows(),     
+        "schema":  {col: str(dtype) 
+                    for col, dtype in zip(df.columns, df.dtypes)}
+    }
+
+def _extract_sector(raw_metadata: dict) -> str:
+    """
+    Extrait le secteur depuis le metadata avec plusieurs clés possibles.
+
+    Le metadata de l'user peut utiliser différentes clés :
+    "sector", "secteur", "domain", "domaine", etc.
+    On teste toutes les variantes connues.
+
+    Args:
+        raw_metadata: Metadata brut de l'user
+
+    Returns:
+        Nom du secteur ou "unknown" si non trouvé.
+    """
+    possible_keys = ["sector", "secteur", "domain", "domaine", "industry"]
+
+    for key in possible_keys:
+        if key in raw_metadata:
+            return str(raw_metadata[key]).lower().strip()
+
+    logger.warning("Secteur non trouvé dans le metadata — utilisation 'unknown'")
+    return "unknown"
+
+
+
+def _save_to_bronze(
+    source_path: Path,
+    sector: str,
+    settings,
+) -> Path:
+    """
+    Copie le fichier original dans le dossier Bronze.
+
+    Le Bronze est IMMUABLE : on copie, on ne déplace pas.
+    Le fichier original reste en tmp pour le reste du pipeline.
+
+    Args:
+        source_path: Chemin du fichier uploadé
+        sector:      Nom du secteur (sous-dossier Bronze)
+        settings:    Configuration centralisée
+
+    Returns:
+        Chemin du fichier copié en Bronze.
+    """
+    timestamp   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    bronze_dir  = settings.bronze_dir / sector
+    bronze_dir.mkdir(parents=True, exist_ok=True)
+
+    bronze_path = bronze_dir / f"{timestamp}_raw{source_path.suffix}"
+    shutil.copy2(source_path, bronze_path)
+
+    return bronze_path
