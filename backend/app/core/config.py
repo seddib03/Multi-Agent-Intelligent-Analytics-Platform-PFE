@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
 from typing import Literal
 
+
 class Settings(BaseSettings):
 
     # ── App ──────────────────────────────────────────────
@@ -19,11 +20,19 @@ class Settings(BaseSettings):
     MINIO_BUCKET:        str  = "dxc-datasets"
     MINIO_SECURE:        bool = False
 
+    # Sous-dossiers logiques dans le bucket unique
+    MINIO_PREFIX_RAW:       str = "raw"
+    MINIO_PREFIX_PROCESSED: str = "processed"
+    MINIO_PREFIX_EXPORTS:   str = "exports"
+
     # ── JWT ───────────────────────────────────────────────
-    SECRET_KEY:          str = "changeme-in-production-32chars-min"
-    JWT_ALGORITHM:       str = "HS256"
-    JWT_EXPIRE_MINUTES:  int = 60
-    JWT_REFRESH_DAYS:    int = 30
+    SECRET_KEY:         str = "changeme-in-production-32chars-min"
+    JWT_ALGORITHM:      str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 60
+    JWT_REFRESH_DAYS:   int = 30
+
+    # ── Upload ────────────────────────────────────────────
+    MAX_UPLOAD_SIZE_MB: int = 50
 
     # ── CORS ──────────────────────────────────────────────
     FRONTEND_URL: str = "http://localhost:5173"
@@ -32,5 +41,6 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+
 
 settings = Settings()
