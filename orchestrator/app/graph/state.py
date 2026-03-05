@@ -34,6 +34,14 @@ class RouteEnum(str, Enum):
     INSIGHT_AGENT = "Insight_Agent"
     CLARIFICATION = "Clarification_Needed"
 
+# context Agent execution type
+
+class ExecutionTypeEnum(str, Enum):
+    SQL        = "sql"
+    PREDICTION = "prediction"
+    INSIGHT    = "insight"
+    UNKNOWN    = "unknown"
+
 #Orchestrator state
 
 class OrchestratorState(BaseModel):
@@ -53,6 +61,14 @@ class OrchestratorState(BaseModel):
     intent_confidence: float = 0.0
     entities: dict = Field(default_factory=dict)           
     query_structured: dict = Field(default_factory=dict)
+
+    # From context Agent
+    canonical_metrics: str = ""
+    execution_type: ExecutionTypeEnum = ExecutionTypeEnum.UNKNOWN
+    data_source: dict = Field(default_factory=dict)
+    metric_raw: str = ""
+    timeframe: str = ""
+    location: str = ""
 
     # Routing Decision
     route: Optional[RouteEnum] = None
