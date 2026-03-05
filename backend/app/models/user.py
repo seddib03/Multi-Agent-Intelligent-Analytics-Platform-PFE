@@ -1,5 +1,5 @@
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 import uuid
@@ -81,7 +81,7 @@ class UserPreferences(Base):
     primary_color    = Column(String, default="#004AAC")
     secondary_color  = Column(String, default="#FF7E51")
     dashboard_layout = Column(String, default="grid")
-    visible_kpis     = Column(String, default="[]")  # JSON string
+    visible_kpis = Column(JSON, default=list)
     updated_at       = Column(DateTime(timezone=True),
                               onupdate="now()")
 
