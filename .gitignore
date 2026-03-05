@@ -1,0 +1,16 @@
+# ignore virtual envs and Python build artifacts
+pfe-nlq-context/venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+build/
+dist/
+
+# node/node_modules (frontend)
+frontend/node_modules/
+
+# maybe more as needed
