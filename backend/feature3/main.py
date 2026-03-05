@@ -1,8 +1,7 @@
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from psutil import users
 from app.core.config import settings
 from app.routers import projects, datasets
 from backend.app.schemas import auth
@@ -47,8 +46,7 @@ app.add_middleware(
 app.include_router(projects.router)
 app.include_router(datasets.router)
 app.include_router(auth.router,  prefix="/api/auth",  tags=["Auth"])
-
-
+app.include_router(users.router, prefix="/api/users", tags=["Users"])
 # ─── Health check ─────────────────────────────────────────
 @app.get("/health", tags=["system"])
 async def health():
