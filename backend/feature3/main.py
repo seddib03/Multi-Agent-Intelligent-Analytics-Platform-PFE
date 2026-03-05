@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.routers import projects, datasets
+from backend.app.schemas import auth
 
 
 # ─── Lifespan ─────────────────────────────────────────────
@@ -45,6 +46,7 @@ app.add_middleware(
 # ─── Routers ──────────────────────────────────────────────
 app.include_router(projects.router)
 app.include_router(datasets.router)
+app.include_router(auth.router,  prefix="/api/auth",  tags=["Auth"])
 
 
 # ─── Health check ─────────────────────────────────────────
