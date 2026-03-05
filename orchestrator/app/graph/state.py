@@ -69,6 +69,7 @@ class OrchestratorState(BaseModel):
     metric_raw: str = ""
     timeframe: str = ""
     location: str = ""
+    routing_target: str = ""
 
     # Routing Decision
     route: Optional[RouteEnum] = None

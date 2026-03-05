@@ -1,35 +1,99 @@
 import httpx
-from app.graph.state import OrchestratorState, SectorEnum, IntentEnum, RouteEnum, ExecutionTypeEnum 
+import os
+from dotenv import load_dotenv
+from app.graph.state import (
+    OrchestratorState, SectorEnum, RouteEnum
+)
 
-NLQ_API_URL = "http://127.0.0.1:8000"  # Update with actual URL
+load_dotenv()
+NLQ_API_URL = os.getenv("NLQ_API_URL", "http://127.0.0.1:8000")
 
-async def call_nlq_and_context(state: OrchestratorState) -> OrchestratorState:
+# Mapping routing_target → RouteEnum
+ROUTING_TARGET_MAP = {
+    "transport_agent":     RouteEnum.TRANSPORT_AGENT,
+    "finance_agent":       RouteEnum.FINANCE_AGENT,
+    "retail_agent":        RouteEnum.RETAIL_AGENT,
+    "manufacturing_agent": RouteEnum.MANUFACTURING_AGENT,
+    "public_agent":        RouteEnum.PUBLIC_AGENT,
+}
+
+
+# ✅ Fonction 1 — au niveau racine (pas d'indentation)
+async def call_detect_sector(state: OrchestratorState):
     """
-    Calls the NLQ Agent with the current state and updates the state with the response.
+    Appelle POST /detect-sector
+    Retourne (state, suggested_route)
     """
     async with httpx.AsyncClient(timeout=10.0) as client:
-        # Step 1: Call NLQ Agent
-        nlq_response = await client.post(f"{NLQ_API_URL}/nlq", json={"query": state.query_raw})
-        nlq_data = nlq_response.json()
+        response = await client.post(
+            f"{NLQ_API_URL}/detect-sector",
+            json={"user_query": state.query_raw}
+        )
+        sector_context = response.json()
 
-        #Step 2: Call Context Agent with NLQ results
-        ctx_response = await client.post(f"{NLQ_API_URL}/context", json=nlq_data)
-        ctx_data = ctx_response.json()
-        # Update state with Context Agent results
-        state.intent= IntentEnum(nlq_data.get("intent", "unknown"))
-        state.intent_confidence = nlq_data.get("intent_confidence", 0.0)
-        state.metric_raw = nlq_data.get("metric_raw", "")
-        state.timeframe = nlq_data.get("timeframe", "")
-        state.location = nlq_data.get("location", "")
+    # Remplir le state
+    try:
+        state.sector = SectorEnum(
+            sector_context.get("sector", "unknown").capitalize()
+        )
+    except ValueError:
+        state.sector = SectorEnum.UNKNOWN
 
-        state.sector = SectorEnum(ctx_data.get("sector", "unknown").capitalize())
-        state.sector_confidence = ctx_data.get("sector_confidence", 0.0)
-        state.canonical_metrics = ctx_data.get("canonical_metrics", "")
-        state.execution_type = ExecutionTypeEnum(ctx_data.get("execution_type", "unknown"))
-        state.data_source = ctx_data.get("data_source", {})
+    state.sector_confidence = sector_context.get("confidence", 0.0)
+    state.kpi_mapping       = sector_context.get("kpis", [])
 
-        state.processing_steps.append(
-            f"nlq_client -> intent: {state.intent.value}, sector: {state.sector.value}, execution_type: {state.execution_type.value}"
-            )
-        return state    
-    
+    routing_target  = sector_context.get("routing_target", "")
+    suggested_route = ROUTING_TARGET_MAP.get(routing_target)
+
+    # Stocker le SectorContext complet pour le NLQ
+    state.query_structured = sector_context
+
+    state.processing_steps.append(
+        f"detect_sector → sector={state.sector.value} "
+        f"({state.sector_confidence:.0%}) | "
+        f"routing_target={routing_target}"
+    )
+
+    return state, suggested_route
+
+
+# ✅ Fonction 2 — au niveau racine (pas d'indentation)
+async def call_nlq_chat(
+    state: OrchestratorState,
+    question: str,
+    data_profile: dict = None
+) -> OrchestratorState:
+    """
+    Appelle POST /chat
+    Activé après le dashboard pour les questions spécifiques.
+    """
+    payload = {
+        "user_id":        state.user_id,
+        "question":       question,
+        "sector_context": state.query_structured,
+    }
+
+    if data_profile:
+        payload["data_profile"] = data_profile
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.post(
+            f"{NLQ_API_URL}/chat",
+            json=payload
+        )
+        chat_result = response.json()
+
+    # Remplir le state
+    state.agent_response   = chat_result
+    state.final_response   = chat_result.get("answer", "")
+    state.canonical_metric = chat_result.get("kpi_referenced", "")
+
+    suggested_chart = chat_result.get("suggested_chart", "")
+    state.response_format = "chart" if suggested_chart else "text"
+
+    state.processing_steps.append(
+        f"nlq_chat → kpi={state.canonical_metric} | "
+        f"chart={suggested_chart}"
+    )
+
+    return state
