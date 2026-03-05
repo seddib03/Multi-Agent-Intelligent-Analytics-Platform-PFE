@@ -1,160 +1,108 @@
 """
 agent/nodes/strategy_node.py
+NODE 5 — Strategy (LLM)
 ─────────────────────────────
-NODE 4 — LLM propose le plan de nettoyage ligne par ligne.
+Appelle le LLM (GPT-4o-mini via OpenRouter) pour :
 
-RÔLE :
-    C'est le cœur intelligent de la V2.
-    Le LLM reçoit le rapport de profiling complet
-    + le mapping des dimensions
-    + les règles métier.
+    1. Produire un résumé global en français compréhensible
+       par un non-technicien
 
-    Il propose un plan d'actions précis :
-        - Quelle action sur quelle colonne
-        - Sur quelles lignes exactement
-        - Pourquoi cette action est proposée
-        - Quel niveau de sévérité
+    2. Reformuler chaque anomalie détectée de façon claire
+       et actionnable
 
-    Après ce node, le graph s'interrompt pour
-    attendre la validation de l'utilisateur.
+Le LLM NE DÉCIDE PAS des actions — celles-ci sont déjà
+proposées par anomaly_engine (3 choix par anomalie).
+Le LLM sert uniquement à rendre le plan lisible pour l'user.
+
+Après ce node, le graph s'interrompt (interrupt_before=["cleaning"])
+et attend la validation humaine via POST /jobs/{id}/validate.
 """
-
 from __future__ import annotations
 
+import json
 import logging
-import uuid
 
 from agent.state import AgentState
 from core.llm_client import LLMClient
-from models.cleaning_plan import ActionItem, CleaningAction, CleaningPlan
-from prompts.strategy_prompt import (
-    STRATEGY_SYSTEM_PROMPT,
-    build_strategy_user_prompt,
-)
 
 logger = logging.getLogger(__name__)
 
+STRATEGY_SYSTEM_PROMPT = """Tu es un expert Data Quality Engineer.
+Tu reçois un rapport d'anomalies détectées dans un dataset.
+
+Tu dois :
+1. Écrire un résumé global clair en français (2-4 phrases maximum)
+   destiné à un utilisateur non-technicien.
+   Explique ce qui ne va pas et pourquoi c'est important.
+
+2. Pour chaque anomalie, écrire une reformulation courte et compréhensible
+   en 1-2 phrases. Évite le jargon technique.
+
+Réponds UNIQUEMENT en JSON valide, sans texte avant ou après :
+{
+  "resume_global": "...",
+  "reformulations": {
+    "<anomaly_id>": "Explication claire de l'anomalie en 1-2 phrases"
+  }
+}"""
+
 
 def strategy_node(state: AgentState) -> dict:
-    """
-    Génère le plan de nettoyage via le LLM.
+    logger.info(">>> NODE 5 : Strategy LLM — démarrage")
 
-    Le plan est stocké dans le state avec status="proposed".
-    Le graph s'interrompt ensuite (interrupt_before=["cleaning_node"])
-    et attend que l'user valide via l'API.
+    cleaning_plan = state["cleaning_plan"]
 
-    Args:
-        state: Doit contenir profiling_report, dimension_mapping,
-               dimension_rules, raw_metadata
+    # Construire le résumé des anomalies pour le LLM
+    anomalies_summary = [
+        {
+            "id":       a.anomaly_id,
+            "colonne":  a.column_name,
+            "type":     a.anomaly_type.value,
+            "probleme": a.problem_description,
+            "lignes":   a.affected_count,
+            "pct":      round(a.affected_pct, 1),
+        }
+        for a in cleaning_plan.anomalies
+    ]
 
-    Returns:
-        Dict avec cleaning_plan et llm_analysis.
-    """
-    logger.info(">>> NODE 4 : Strategy (LLM) — démarrage")
-
-    profiling_report  = state.get("profiling_report")
-    dimension_mapping = state.get("dimension_mapping", {})
-    dimension_rules   = state.get("dimension_rules", {})
-    raw_metadata      = state.get("raw_metadata", {})
-
-    if profiling_report is None:
-        error_msg = "profiling_report absent du state"
-        logger.error(error_msg)
-        return {"status": "error", "errors": [error_msg]}
-
-    # Construire le prompt complet
-    user_prompt = build_strategy_user_prompt(
-        profiling_summary=profiling_report.build_llm_summary(),
-        dimension_mapping=dimension_mapping,
-        dimension_rules=dimension_rules,
-        raw_metadata=raw_metadata,
+    user_prompt = (
+        f"Secteur : {cleaning_plan.sector}\n"
+        f"Nombre d'anomalies : {len(cleaning_plan.anomalies)}\n\n"
+        f"Anomalies détectées :\n"
+        f"{json.dumps(anomalies_summary, ensure_ascii=False, indent=2)}"
     )
 
     # Appel LLM
     client = LLMClient()
-    result = client.call_structured(
-        system_prompt=STRATEGY_SYSTEM_PROMPT,
-        user_prompt=user_prompt,
-    )
-
-    # Construire le CleaningPlan depuis la réponse LLM
-    cleaning_plan = _build_cleaning_plan(
-        llm_result=result,
-        sector=state.get("sector", "unknown"),
-        job_id=state.get("job_id", ""),
-    )
-
-    logger.info(
-        "NODE 4 terminé — %d actions proposées | "
-        "status: waiting_validation",
-        len(cleaning_plan.actions),
-    )
-
-    return {
-        "cleaning_plan":   cleaning_plan,
-        "llm_analysis":    result.get("llm_analysis", ""),
-        "status":          "waiting_validation",
-    }
-
-
-def _build_cleaning_plan(
-    llm_result: dict,
-    sector: str,
-    job_id: str,
-) -> CleaningPlan:
-    """
-    Convertit la réponse JSON du LLM en objet CleaningPlan typé.
-
-    POURQUOI CETTE CONVERSION :
-        Le LLM retourne un dict non typé.
-        On veut un objet avec des types précis pour que
-        cleaning_node puisse l'utiliser sans risque.
-
-    Args:
-        llm_result: Dict parsé depuis la réponse LLM
-        sector:     Secteur du dataset
-        job_id:     ID du job courant
-
-    Returns:
-        CleaningPlan avec les ActionItems typés.
-    """
-    actions = []
-
-    for raw_action in llm_result.get("actions", []):
-        # Valider que l'action proposée par le LLM
-        # est dans notre liste d'actions reconnues
-        action_name = raw_action.get("action", "")
-        try:
-            action_enum = CleaningAction(action_name)
-        except ValueError:
-            # Action inconnue → on la loggue et on l'ignore
-            logger.warning(
-                "Action LLM non reconnue : '%s' — ignorée",
-                action_name,
-            )
-            continue
-
-        actions.append(
-            ActionItem(
-                action_id=raw_action.get(
-                    "action_id", f"action_{uuid.uuid4().hex[:6]}"
-                ),
-                colonne=raw_action.get("colonne", ""),
-                lignes_concernees=raw_action.get("lignes_concernees", []),
-                dimension=raw_action.get("dimension", ""),
-                probleme=raw_action.get("probleme", ""),
-                action=action_enum,
-                justification=raw_action.get("justification", ""),
-                severite=raw_action.get("severite", "MINOR"),
-                parametre=raw_action.get("parametre", {}),
-            )
+    try:
+        result             = client.call_structured(STRATEGY_SYSTEM_PROMPT, user_prompt)
+        llm_summary        = result.get("resume_global", "")
+        llm_reformulations = result.get("reformulations", {})
+        logger.info(
+            "LLM réponse reçue — résumé: %d chars | %d reformulations",
+            len(llm_summary),
+            len(llm_reformulations),
         )
+    except Exception as e:
+        # Fallback : utiliser les descriptions techniques par défaut
+        logger.warning("LLM échoué, fallback sur descriptions par défaut : %s", e)
+        llm_summary        = (
+            f"Le dataset contient {len(cleaning_plan.anomalies)} anomalie(s) "
+            f"à corriger avant utilisation."
+        )
+        llm_reformulations = {
+            a.anomaly_id: a.problem_description
+            for a in cleaning_plan.anomalies
+        }
 
-    return CleaningPlan(
-        plan_id=f"plan_{job_id[:8]}",
-        sector=sector,
-        actions=actions,
-        llm_analysis=llm_result.get("llm_analysis", ""),
-        risques=llm_result.get("risques", []),
-        status="proposed",
-    )
+    # Injecter les reformulations dans le plan
+    cleaning_plan.llm_summary        = llm_summary
+    cleaning_plan.llm_reformulations = llm_reformulations
+
+    logger.info("NODE 5 terminé — plan prêt pour validation humaine")
+    return {
+        "cleaning_plan":     cleaning_plan,
+        "llm_summary":        llm_summary,
+        "llm_reformulations": llm_reformulations,
+        "status":             "waiting_validation",
+    }

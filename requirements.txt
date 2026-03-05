@@ -12,7 +12,6 @@ langchain-openai
 openai
 
 # Data Processing
-polars
 pandas
 pyarrow
 openpyxl
@@ -23,7 +22,7 @@ pydantic
 pydantic-settings
 
 # Storage
-duckdb
+minio
 
 # Data Quality
 dbt-core

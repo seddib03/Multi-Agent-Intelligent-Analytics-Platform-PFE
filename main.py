@@ -1,394 +1,291 @@
 """
-main.py
-────────
-API FastAPI V2 avec interface web pour la validation humaine.
-
+main.py — FastAPI V3
+━━━━━━━━━━━━━━━━━━━━
 ENDPOINTS :
-    POST /prepare              → Lancer le pipeline (upload dataset + metadata)
-    GET  /jobs/{job_id}/plan   → Récupérer le plan proposé par le LLM
-    POST /jobs/{job_id}/validate → Valider / modifier / rejeter le plan
-    GET  /jobs/{job_id}/status → Statut du job et résultats
-    GET  /history/{sector}     → Historique des runs
-    GET  /health               → Santé de l'API
-
-HUMAN-IN-THE-LOOP AVEC LANGGRAPH :
-    1. POST /prepare lance le graph jusqu'à strategy_node
-       → Le graph s'interrompt avant cleaning_node
-       → Retourne job_id + plan proposé
-
-    2. GET /jobs/{job_id}/plan affiche le plan à l'user
-
-    3. POST /jobs/{job_id}/validate reçoit les décisions de l'user
-       → Met à jour le cleaning_plan dans le state
-       → Reprend le graph depuis cleaning_node
-
-    4. GET /jobs/{job_id}/status retourne les résultats finaux
-
-THREAD_ID LANGGRAPH :
-    LangGraph utilise un thread_id pour retrouver
-    l'état sauvegardé entre les 2 appels.
-    On utilise le job_id comme thread_id.
+    POST /prepare                    → lancer le pipeline
+    GET  /jobs/{job_id}/plan         → récupérer le plan proposé
+    POST /jobs/{job_id}/validate     → valider le plan et exécuter
+    GET  /jobs/{job_id}/status       → statut + résultats
+    GET  /jobs/{job_id}/quality      → scores qualité AVANT/APRÈS
+    GET  /health                     → santé API
 """
-
 from __future__ import annotations
-
-import logging
-import shutil
-import uuid
+import logging, shutil, uuid
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from agent.graph import agent_graph
 from agent.state import build_initial_state
 from config.settings import get_settings
-from core.storage_manager import StorageManager
-from models.cleaning_plan import UserDecision
+from core.minio_client import MinioClient
+from models.anomaly_report import CleaningAction, UserDecision
 
-# ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# ── FastAPI ───────────────────────────────────────────────────────────────────
-app = FastAPI(
-    title="Data Preparation Agent V2",
-    description=(
-        "Agent intelligent de préparation de données "
-        "avec LLM + Human-in-the-Loop"
-    ),
-    version="2.0.0",
-)
-
+app      = FastAPI(title="Data Preparation Agent V3", version="3.0.0")
 settings = get_settings()
 
 
-# ── Modèles Pydantic pour les requêtes ────────────────────────────────────────
+# ── Modèles Pydantic ──────────────────────────────────────────────────────────
 
-class ActionDecision(BaseModel):
-    """
-    Décision de l'user pour une action du plan.
-
-    Exemple JSON envoyé par l'user :
-        {
-          "action_id": "action_1",
-          "decision": "approved"
-        }
-    """
-    action_id:     str
-    decision:      str  # "approved", "modified", "rejected"
-    modifications: Optional[dict] = None
-
+class AnomalyDecision(BaseModel):
+    anomaly_id:    str
+    decision:      str          # approved | modified | rejected
+    chosen_action: Optional[str] = None   # action choisie parmi action_1/2/3
+    params:        Optional[dict] = None  # paramètres modifiés
 
 class ValidationRequest(BaseModel):
-    """
-    Corps de la requête POST /jobs/{job_id}/validate.
-
-    L'user envoie ses décisions pour toutes les actions du plan.
-    """
-    decisions: list[ActionDecision]
+    decisions: list[AnomalyDecision]
 
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 
 @app.on_event("startup")
-async def on_startup() -> None:
-    """
-    Initialisation au démarrage :
-        - Créer les dossiers de stockage
-        - Initialiser le Gold Layer DuckDB
-    """
-    logger.info("Démarrage Data Preparation Agent V2")
-
-    # Créer les dossiers nécessaires
-    for directory in [
-        settings.bronze_dir,
-        settings.silver_dir,
-        settings.gold_db_path.parent,
-        settings.tmp_dir,
-    ]:
-        directory.mkdir(parents=True, exist_ok=True)
-
-    # Initialiser le Gold Layer
-    storage = StorageManager()
-    storage.initialize_gold_layer()
-
-    logger.info("Initialisation terminée — API prête sur port %d", settings.api_port)
+async def on_startup():
+    settings.tmp_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        MinioClient().initialize_buckets()
+        logger.info("MinIO prêt — buckets bronze/silver/gold initialisés")
+    except Exception as e:
+        logger.error("MinIO non disponible : %s", e)
 
 
-# ── ENDPOINT 1 : Lancer le pipeline ──────────────────────────────────────────
+# ── POST /prepare ─────────────────────────────────────────────────────────────
 
 @app.post("/prepare")
 async def prepare(
-    dataset:  UploadFile = File(..., description="Fichier de données"),
-    metadata: UploadFile = File(..., description="Fichier metadata JSON"),
+    dataset:  UploadFile = File(...),
+    metadata: UploadFile = File(...),
 ) -> JSONResponse:
     """
-    Lance le pipeline de préparation de données.
-
-    Le pipeline s'exécute jusqu'à strategy_node puis s'interrompt
-    pour attendre la validation humaine du plan de nettoyage.
-
-    Returns:
-        job_id, status="waiting_validation", plan proposé par le LLM
+    Lance le pipeline jusqu'à strategy_node.
+    Retourne le plan de nettoyage proposé (règles + LLM).
     """
-    job_id = str(uuid.uuid4())
-    logger.info("Nouveau job démarré : %s", job_id)
-
-    # ── Sauvegarder les fichiers uploadés en tmp ──────────────────────────────
+    job_id  = str(uuid.uuid4())
     tmp_dir = settings.tmp_dir / job_id
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
     dataset_path  = tmp_dir / dataset.filename
     metadata_path = tmp_dir / metadata.filename
 
-    with open(dataset_path, "wb") as f:
-        shutil.copyfileobj(dataset.file, f)
+    with open(dataset_path,  "wb") as f: shutil.copyfileobj(dataset.file,  f)
+    with open(metadata_path, "wb") as f: shutil.copyfileobj(metadata.file, f)
 
-    with open(metadata_path, "wb") as f:
-        shutil.copyfileobj(metadata.file, f)
-
-    # ── Construire l'état initial ─────────────────────────────────────────────
     initial_state = build_initial_state(
         job_id=job_id,
         dataset_path=str(dataset_path),
         metadata_path=str(metadata_path),
     )
 
-    # ── Lancer le graph ───────────────────────────────────────────────────────
-    # config = {"configurable": {"thread_id": job_id}}
-    # → LangGraph utilise thread_id pour sauvegarder/retrouver l'état
     config = {"configurable": {"thread_id": job_id}}
-
     try:
-        # Le graph s'exécute jusqu'à l'interruption (avant cleaning_node)
-        final_state = agent_graph.invoke(initial_state, config=config)
-
+        state = agent_graph.invoke(initial_state, config=config)
     except Exception as e:
-        logger.error("Erreur pipeline job %s : %s", job_id, str(e))
+        logger.error("Erreur pipeline %s : %s", job_id, e)
         raise HTTPException(status_code=500, detail=str(e))
 
-    # ── Construire la réponse ─────────────────────────────────────────────────
-    cleaning_plan = final_state.get("cleaning_plan")
+    cleaning_plan  = state.get("cleaning_plan")
+    quality_before = state.get("quality_before")
 
     return JSONResponse({
-        "job_id":          job_id,
-        "status":          "waiting_validation",
-        "sector":          final_state.get("sector", "unknown"),
-        "profiling_summary": (
-            final_state["profiling_report"].build_llm_summary()
-            if final_state.get("profiling_report") else ""
-        ),
-        "llm_analysis":    final_state.get("llm_analysis", ""),
-        "plan":            cleaning_plan.to_dict() if cleaning_plan else {},
-        "message": (
-            "Plan de nettoyage proposé. "
-            f"Validez via POST /jobs/{job_id}/validate "
-            f"ou consultez l'interface web à GET /"
-        ),
+        "job_id":  job_id,
+        "status":  "waiting_validation",
+        "sector":  state.get("sector", "unknown"),
+
+        # Scores qualité AVANT
+        "quality_before": quality_before if quality_before else {},
+
+        # Résumé LLM
+        "llm_summary": state.get("llm_summary", ""),
+
+        # Plan complet avec anomalies + actions proposées
+        "plan": cleaning_plan.to_dict() if cleaning_plan else {},
+
+        "message": f"Plan prêt. Validez via POST /jobs/{job_id}/validate",
     })
 
 
-# ── ENDPOINT 2 : Récupérer le plan ───────────────────────────────────────────
+# ── GET /jobs/{job_id}/plan ───────────────────────────────────────────────────
 
 @app.get("/jobs/{job_id}/plan")
 async def get_plan(job_id: str) -> JSONResponse:
-    """
-    Retourne le plan de nettoyage proposé pour un job.
-    """
-    config = {"configurable": {"thread_id": job_id}}
+    config   = {"configurable": {"thread_id": job_id}}
+    snapshot = _get_snapshot(job_id, config)
+    state    = snapshot.values
 
-    try:
-        # Récupérer l'état sauvegardé par le checkpointer
-        current_state = agent_graph.get_state(config)
-    except Exception:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Job {job_id} introuvable",
-        )
-
-    if not current_state.values:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Aucun état trouvé pour le job {job_id}",
-        )
-
-    state         = current_state.values
     cleaning_plan = state.get("cleaning_plan")
-
     if not cleaning_plan:
-        raise HTTPException(
-            status_code=404,
-            detail="Aucun plan de nettoyage trouvé pour ce job",
-        )
+        raise HTTPException(status_code=404, detail="Aucun plan trouvé")
 
     return JSONResponse({
-        "job_id":         job_id,
-        "status":         state.get("status", "unknown"),
-        "llm_analysis":   state.get("llm_analysis", ""),
-        "plan":           cleaning_plan.to_dict(),
+        "job_id":       job_id,
+        "status":       state.get("status"),
+        "llm_summary":  state.get("llm_summary",""),
+        "plan":         cleaning_plan.to_dict(),
+        "quality_before": state.get("quality_before") or {},
     })
 
 
-# ── ENDPOINT 3 : Valider le plan ─────────────────────────────────────────────
+# ── POST /jobs/{job_id}/validate ──────────────────────────────────────────────
 
 @app.post("/jobs/{job_id}/validate")
-async def validate_plan(
-    job_id:  str,
-    payload: ValidationRequest,
-) -> JSONResponse:
+async def validate_plan(job_id: str, payload: ValidationRequest) -> JSONResponse:
     """
-    Reçoit les décisions de l'user et reprend le pipeline.
-
-    L'user envoie une décision pour chaque action du plan.
-    Le graph reprend depuis cleaning_node et s'exécute
-    jusqu'à la fin (evaluation → delivery).
-
-    Args:
-        job_id:  ID du job à reprendre
-        payload: Décisions de l'user pour chaque action
-
-    Returns:
-        Résultats complets du pipeline (score, rapport, logs)
+    Reçoit les décisions de l'user sur chaque anomalie.
+    Reprend le graph depuis cleaning_node.
+    Retourne les scores AVANT / APRÈS.
     """
-    config = {"configurable": {"thread_id": job_id}}
+    config   = {"configurable": {"thread_id": job_id}}
+    snapshot = _get_snapshot(job_id, config)
+    state    = snapshot.values
 
-    # ── Récupérer l'état sauvegardé ───────────────────────────────────────────
-    try:
-        current_state_snapshot = agent_graph.get_state(config)
-    except Exception:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Job {job_id} introuvable",
-        )
-
-    state         = dict(current_state_snapshot.values)
     cleaning_plan = state.get("cleaning_plan")
-
     if not cleaning_plan:
-        raise HTTPException(
-            status_code=400,
-            detail="Aucun plan à valider pour ce job",
-        )
+        raise HTTPException(status_code=400, detail="Aucun plan à valider")
 
-    # ── Appliquer les décisions de l'user ────────────────────────────────────
-    decisions_map = {d.action_id: d for d in payload.decisions}
+    # ── Appliquer les décisions ───────────────────────────────────────────
+    decisions_map = {d.anomaly_id: d for d in payload.decisions}
 
-    for action in cleaning_plan.actions:
-        if action.action_id in decisions_map:
-            decision_obj = decisions_map[action.action_id]
+    for anomaly in cleaning_plan.anomalies:
+        if anomaly.anomaly_id not in decisions_map:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Décision manquante pour {anomaly.anomaly_id}",
+            )
+        dec = decisions_map[anomaly.anomaly_id]
 
-            # Convertir la string en enum UserDecision
+        try:
+            anomaly.user_decision = UserDecision(dec.decision)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Décision invalide '{dec.decision}'. Valeurs: approved|modified|rejected",
+            )
+
+        # Action choisie par l'user (action_1, action_2 ou action_3)
+        if dec.chosen_action:
             try:
-                action.user_decision    = UserDecision(decision_obj.decision)
-                action.user_modifications = decision_obj.modifications
+                anomaly.chosen_action = CleaningAction(dec.chosen_action)
             except ValueError:
                 raise HTTPException(
                     status_code=400,
-                    detail=(
-                        f"Décision invalide '{decision_obj.decision}'. "
-                        f"Valeurs acceptées : approved, modified, rejected"
-                    ),
+                    detail=f"Action inconnue : {dec.chosen_action}",
                 )
+        else:
+            # Par défaut : action_1 (conservative)
+            anomaly.chosen_action = anomaly.action_1
 
-    if not cleaning_plan.is_fully_validated:
-        missing = [
-            a.action_id for a in cleaning_plan.actions
-            if a.user_decision is None
-        ]
-        raise HTTPException(
-            status_code=400,
-            detail=f"Actions sans décision : {missing}",
-        )
+        if dec.params:
+            anomaly.user_params = dec.params
 
     cleaning_plan.status = "validated"
 
-    # ── Mettre à jour le state et reprendre le graph ──────────────────────────
-    # update_state() modifie l'état sauvegardé dans le checkpointer
-    agent_graph.update_state(
-        config,
-        {"cleaning_plan": cleaning_plan},
-        as_node="strategy",  # Indiquer depuis quel node on met à jour
-    )
+    # ── Mettre à jour le state et reprendre ──────────────────────────────
+    agent_graph.update_state(config, {"cleaning_plan": cleaning_plan}, as_node="strategy")
 
-    # Reprendre l'exécution depuis cleaning_node
     try:
         final_state = agent_graph.invoke(None, config=config)
     except Exception as e:
-        logger.error("Erreur reprise pipeline %s : %s", job_id, str(e))
+        logger.error("Erreur reprise %s : %s", job_id, e)
         raise HTTPException(status_code=500, detail=str(e))
 
-    # ── Construire la réponse finale ──────────────────────────────────────────
-    dimensions_after = final_state.get("dimensions_after")
+    qb = final_state.get("quality_before") or {}
+    qa = final_state.get("quality_after") or {}
+
+    qb_scores = qb.get("global_scores", {})
+    qa_scores = qa.get("global_scores", {})
 
     return JSONResponse({
-        "job_id":   job_id,
-        "status":   final_state.get("status", "unknown"),
-        "sector":   final_state.get("sector", "unknown"),
+        "job_id":  job_id,
+        "status":  final_state.get("status"),
+        "sector":  final_state.get("sector"),
 
-        "quality_dimensions": (
-            dimensions_after.to_dict()
-            if dimensions_after else {}
-        ),
+        # Comparaison AVANT / APRÈS
+        "quality_comparison": {
+            "before": {
+                "global":        qb_scores.get("global"),
+                "completeness":  qb_scores.get("completeness"),
+                "validity":      qb_scores.get("validity"),
+                "uniqueness":    qb_scores.get("uniqueness"),
+            },
+            "after": {
+                "global":        qa_scores.get("global"),
+                "completeness":  qa_scores.get("completeness"),
+                "validity":      qa_scores.get("validity"),
+                "uniqueness":    qa_scores.get("uniqueness"),
+            },
+            "gain": round(
+                (qa_scores.get("global", 0) or 0) - (qb_scores.get("global", 0) or 0), 1
+            ),
+        },
 
-        "llm_evaluation": final_state.get("llm_evaluation", ""),
-
-        "before_after": {
-            "before": final_state.get("profile_before", {}),
-            "after":  final_state.get("profile_after", {}),
+        "quality_by_column": {
+            "before": qb.get("columns", []),
+            "after":  qa.get("columns", []),
         },
 
         "cleaning_log": final_state.get("cleaning_log", []),
-
         "paths": {
-            "bronze": final_state.get("bronze_path", ""),
-            "silver": final_state.get("silver_path", ""),
+            "silver": final_state.get("silver_path"),
+            "gold":   final_state.get("gold_path"),
         },
-
-        "started_at":   final_state.get("started_at", ""),
-        "completed_at": final_state.get("completed_at", ""),
+        "completed_at": final_state.get("completed_at"),
     })
 
 
-# ── ENDPOINT 4 : Statut d'un job ──────────────────────────────────────────────
+# ── GET /jobs/{job_id}/status ─────────────────────────────────────────────────
 
 @app.get("/jobs/{job_id}/status")
-async def get_job_status(job_id: str) -> JSONResponse:
-    """Retourne le statut courant d'un job."""
-    config = {"configurable": {"thread_id": job_id}}
-
-    try:
-        snapshot = agent_graph.get_state(config)
-        state    = snapshot.values
-    except Exception:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} introuvable")
-
+async def get_status(job_id: str) -> JSONResponse:
+    config   = {"configurable": {"thread_id": job_id}}
+    snapshot = _get_snapshot(job_id, config)
+    state    = snapshot.values
     return JSONResponse({
         "job_id": job_id,
-        "status": state.get("status", "unknown"),
-        "sector": state.get("sector", "unknown"),
+        "status": state.get("status"),
+        "sector": state.get("sector"),
         "errors": state.get("errors", []),
     })
 
 
-# ── ENDPOINT 5 : Historique ───────────────────────────────────────────────────
-
-@app.get("/history/{sector}")
-async def get_history(sector: str) -> JSONResponse:
-    """Retourne l'historique des 50 derniers runs pour un secteur."""
-    storage = StorageManager()
-    history = storage.get_sector_history(sector)
-    return JSONResponse({"sector": sector, "runs": history})
-
-
-# ── ENDPOINT 6 : Health ───────────────────────────────────────────────────────
+# ── GET /health ───────────────────────────────────────────────────────────────
 
 @app.get("/health")
-async def health() -> JSONResponse:
-    """Vérification basique que l'API tourne."""
-    return JSONResponse({"status": "ok", "version": "2.0.0"})
+async def health():
+    try:
+        MinioClient().initialize_buckets()
+        minio_ok = True
+    except Exception:
+        minio_ok = False
+    return JSONResponse({
+        "status":  "ok",
+        "version": "3.0.0",
+        "minio":   "ok" if minio_ok else "unreachable",
+    })
+
+
+
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _get_snapshot(job_id: str, config: dict):
+    try:
+        snapshot = agent_graph.get_state(config)
+        if not snapshot.values:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} introuvable")
+        return snapshot
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} introuvable")
+
+

@@ -61,27 +61,21 @@ class Settings(BaseSettings):
         description="Nombre maximum de tokens par réponse LLM",
     )
 
-    # ── Chemins de stockage ────────────────────────────────────────────────────
-    # Tous relatifs à ROOT_DIR pour portabilité
-    bronze_dir: Path = Field(
-        default=ROOT_DIR / "storage" / "bronze",
-        description="Dossier pour les fichiers bruts originaux",
-    )
+    # ── MinIO ───────────────────────────────────────────────────────────────
+    # Adresse du serveur MinIO (installé en Docker sur ton PC)
+    minio_endpoint: str     = Field(default="localhost:9000")
+    minio_access_key: str   = Field(default="minioadmin")
+    minio_secret_key: str   = Field(default="minioadmin")
+    minio_secure: bool      = Field(default=False)  # False = HTTP (pas HTTPS)
 
-    silver_dir: Path = Field(
-        default=ROOT_DIR / "storage" / "silver",
-        description="Dossier pour les datasets nettoyés (Parquet)",
-    )
-
-    gold_db_path: Path = Field(
-        default=ROOT_DIR / "storage" / "gold" / "analytics.duckdb",
-        description="Chemin vers la base DuckDB Gold Layer",
-    )
-
-    tmp_dir: Path = Field(
-        default=ROOT_DIR / "storage" / "tmp",
-        description="Dossier temporaire pour les fichiers uploadés",
-    )
+    # Noms des buckets MinIO (créés automatiquement au démarrage)
+    minio_bronze_bucket: str = Field(default="bronze")
+    minio_silver_bucket: str = Field(default="silver")
+    minio_gold_bucket: str   = Field(default="gold")
+    
+    # ── Stockage temporaire local ────────────────────────────────────────────
+    # Les uploads sont stockés temporairement avant upload MinIO
+    tmp_dir: Path = Field(default=ROOT_DIR / "storage" / "tmp")
 
     # ── Projet dbt ────────────────────────────────────────────────────────────
     dbt_project_dir: Path = Field(
@@ -102,16 +96,18 @@ class Settings(BaseSettings):
 
     # Version de l'agent — injectée dans les colonnes tracking du dataset final
     agent_version: str = Field(
-        default="2.0.0",
+        default="3.0.0",
         description="Version de l'agent (injectée dans les données)",
     )
 
     # ── Qualité des données ────────────────────────────────────────────────────
     # Seuil minimum pour que le pipeline continue vers delivery
-    quality_threshold: float = Field(
-        default=80.0,
-        description="Score global minimum pour accepter le dataset (0-100)",
-    )
+    weight_completeness: float = Field(default=0.40)
+    weight_validity: float     = Field(default=0.40)
+    weight_uniqueness: float   = Field(default=0.20)
+
+    # Seuil de qualité acceptable (0-100)
+    quality_threshold: float = Field(default=80.0)
 
     # Multiplicateur IQR pour la détection des outliers (règle de Tukey)
     # 1.5 = standard académique reconnu
