@@ -2,7 +2,7 @@ from app.graph.state import(
     ExecutionTypeEnum, OrchestratorState, RouteEnum, SectorEnum, IntentEnum
 )
 from app.utils.logger import log_routing_decision
-
+from app.clients.nlq_client import ROUTING_TARGET_MAP
 #confidence rate
 CONFIDENCE_MIN_SECTOR = 0.60
 CONFIDENCE_MIN_INTENT =0.50
@@ -28,8 +28,9 @@ def routing_node(state: OrchestratorState) -> OrchestratorState:
     sector_conf = state.sector_confidence
     intent_conf = state.intent_confidence
     execution_type = state.execution_type
+    routing_target = state.routing_target
 
-    route, reason = _decide_route(sector, intent, sector_conf, intent_conf, execution_type)
+    route, reason = _decide_route(sector, intent, sector_conf, intent_conf, execution_type, routing_target)
 
     #Define fallback route
     fallback = _decide_fallback(sector, route)
@@ -52,11 +53,21 @@ def routing_node(state: OrchestratorState) -> OrchestratorState:
 
     return state
 
-def _decide_route(sector: SectorEnum,intent: IntentEnum,sector_conf: float,intent_conf: float, execution_type: ExecutionTypeEnum) -> tuple[RouteEnum, str]:
+def _decide_route(sector: SectorEnum,intent: IntentEnum,sector_conf: float,intent_conf: float, execution_type: ExecutionTypeEnum, routing_target: str = "") -> tuple[RouteEnum, str]:
     """
     Routing logic with 4 priority levels.
     Returns (route, reason).
     """
+    # Level 0 routing target from SectorContext Agent (if provided, it has the highest priority as it's a direct signal from the sector detection step)
+
+    if routing_target and sector_conf >= 0.80:
+        route = ROUTING_TARGET_MAP.get(routing_target)
+        if route:
+            return (
+                route,
+                f"routing_target='{routing_target}' fourni par Context Agent "
+                f"({sector_conf:.0%} confiance) → route directe."
+            )
 
     #Level 1: Confidence too low → Clarification
 

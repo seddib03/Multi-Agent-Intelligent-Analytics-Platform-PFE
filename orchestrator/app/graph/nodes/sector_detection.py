@@ -1,40 +1,26 @@
-from app.graph.state import OrchestratorState, SectorEnum
+from app.graph.state import OrchestratorState, SectorEnum, RouteEnum
+from app.clients.nlq_client import call_detect_sector
+import asyncio
 
-# Keywords per sector to simulate detection
-SECTOR_KEYWORDS = {
-    SectorEnum.TRANSPORT:     ["transport", "delivery", "trip", "fleet", "logistics", "km", "driver"],
-    SectorEnum.FINANCE:       ["finance", "revenue", "figure", "income", "margin", "budget", "cash", "ebitda"],
-    SectorEnum.RETAIL:        ["retail", "sales", "store", "inventory", "product", "customer", "basket"],
-    SectorEnum.MANUFACTURING: ["production", "factory", "manufacture", "quality", "defect", "yield"],
-    SectorEnum.PUBLIC:        ["public", "citizen", "public service", "town hall", "community"],
+# Mapping routing_target → RouteEnum
+ROUTING_TARGET_MAP = {
+    "transport_agent":     RouteEnum.TRANSPORT_AGENT,
+    "finance_agent":       RouteEnum.FINANCE_AGENT,
+    "retail_agent":        RouteEnum.RETAIL_AGENT,
+    "manufacturing_agent": RouteEnum.MANUFACTURING_AGENT,
+    "public_agent":        RouteEnum.PUBLIC_AGENT,
 }
 
 def sector_detection_node(state: OrchestratorState) -> OrchestratorState:
     """
-    Mock Sprint 1: keyword-based detection.
-    Sprint 2: replaced by the real ML Sector Detection Agent.
+    Sprint 1 mock (mots-clés) → remplacé par l'API réelle de la collègue.
+    Appelle POST /detect-sector et remplit le state avec le SectorContext.
     """
-    query_lower = state.query_raw.lower()
-    best_sector = SectorEnum.UNKNOWN
-    best_score = 0.0
+    # Appel à l'API de ta collègue
+    state, suggested_route = asyncio.run(call_detect_sector(state))
 
-    for sector, keywords in SECTOR_KEYWORDS.items():
-        matches = sum(1 for kw in keywords if kw in query_lower)
-        score = min(matches / 3, 1.0)  # Normalize between 0 and 1
-        if score > best_score:
-            best_score = score
-            best_sector = sector
-            
-    # If no match → low confidence
-    if best_score == 0:
-        best_sector = SectorEnum.UNKNOWN
-        best_score = 0.1
-
-    state.sector = best_sector
-    state.sector_confidence = round(best_score, 2)
-    state.processing_steps.append(
-        f"sector_detection → {best_sector.value} ({best_score:.0%})"
-    )
+    # Si elle suggère une route → on la stocke dans le state
+    if suggested_route:
+        state.routing_target = suggested_route.value
 
     return state
-        
