@@ -1,7 +1,7 @@
 import httpx
 from app.graph.state import OrchestratorState, SectorEnum, IntentEnum, RouteEnum, ExecutionTypeEnum 
 
-NLQ_API_URL = "http://localhost:8001/nlq_agent"  # Update with actual URL
+NLQ_API_URL = "http://127.0.0.1:8000"  # Update with actual URL
 
 async def call_nlq_and_context(state: OrchestratorState) -> OrchestratorState:
     """
