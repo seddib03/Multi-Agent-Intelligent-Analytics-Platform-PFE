@@ -1,0 +1,63 @@
+[
+{
+"column_name":"policy_id",
+"business_name":"Policy ID",
+"type":"int",
+"nullable":false,
+"identifier":true,
+"min":100000,
+"max":999999,
+"description":"Unique insurance policy id"
+},
+{
+"column_name": "client_id",
+"business_name": "Client ID",
+"type": "string",
+"nullable": false,
+"identifier": false,
+"pattern": "^CL-[0-9]{5}$",
+"description": "Unique client identifier"
+},
+{
+"column_name":"policy_start",
+"business_name":"Policy Start Date",
+"type":"date",
+"nullable":false,
+"format":"YYYY-MM-DD",
+"description":"Policy start date"
+},
+{
+"column_name":"policy_end",
+"business_name":"Policy End Date",
+"type":"date",
+"nullable":false,
+"format":"YYYY-MM-DD",
+"description":"Policy end date"
+},
+{
+"column_name":"premium",
+"business_name":"Premium Amount",
+"type":"float",
+"nullable":false,
+"min":100,
+"max":50000,
+"description":"Insurance premium"
+},
+{
+"column_name":"client_age",
+"type":"int",
+"min":18,
+"max":80,
+"nullable":false
+},
+{
+"column_name":"client_gender",
+"type":"string",
+"enum":["Male","Female"]
+},
+{
+"column_name":"policy_type",
+"type":"string",
+"enum":["Auto","Health","Home","Life"]
+}
+]
