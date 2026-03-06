@@ -1,0 +1,78 @@
+{
+  "secteur": "assurance",
+  "description": "Portefeuille de contrats d'assurance 2024",
+  "version": "1.0",
+  "source": "Système de gestion ACPR",
+
+  "champs": [
+    {
+      "nom_champ": "contrat_id",
+      "description": "Identifiant unique du contrat",
+      "type": "texte",
+      "obligatoire": true,
+      "format": "CTR-XXXXXX",
+      "exemple": "CTR-000001",
+      "remarque": "Clé primaire — ne peut pas être nul ni dupliqué"
+    },
+    {
+      "nom_champ": "client_id",
+      "description": "Identifiant du client souscripteur",
+      "type": "texte",
+      "obligatoire": true,
+      "format": "CLI-XXXXX",
+      "exemple": "CLI-00001"
+    },
+    {
+      "nom_champ": "prime_annuelle",
+      "description": "Montant de la prime annuelle en euros",
+      "type": "numerique",
+      "obligatoire": true,
+      "valeurs_acceptees": "entre 100 et 50000 euros",
+      "business_rules": "La prime doit toujours être un montant positif supérieur à 100 EUR"
+    },
+    {
+      "nom_champ": "montant_sinistre",
+      "description": "Montant total des sinistres déclarés",
+      "type": "numerique",
+      "obligatoire": false,
+      "valeurs_acceptees": "entre 0 et 500000 euros",
+      "business_rules": "Ne peut pas dépasser 500 000 EUR par contrat standard"
+    },
+    {
+      "nom_champ": "type_contrat",
+      "description": "Type de contrat d'assurance",
+      "type": "categorie",
+      "obligatoire": true,
+      "valeurs_possibles": ["AUTO", "HABITATION", "VIE"],
+      "business_rules": "Valeur en majuscules uniquement"
+    },
+    {
+      "nom_champ": "date_effet",
+      "description": "Date de début d'effet du contrat",
+      "type": "date",
+      "obligatoire": true,
+      "format_date": "YYYY-MM-DD",
+      "business_rules": "Doit être antérieure à date_echeance"
+    },
+    {
+      "nom_champ": "date_echeance",
+      "description": "Date d'échéance du contrat",
+      "type": "date",
+      "obligatoire": true,
+      "format_date": "YYYY-MM-DD",
+      "business_rules": "Doit être postérieure à date_effet d'exactement 1 an"
+    }
+  ],
+
+  "regles_globales": [
+    "Aucun contrat ne peut avoir une prime négative",
+    "Les doublons de contrat_id sont interdits",
+    "type_contrat doit toujours être en majuscules"
+  ],
+
+  "secteur_config": {
+    "regulateur": "ACPR",
+    "devise": "EUR",
+    "pays": "France"
+  }
+}
