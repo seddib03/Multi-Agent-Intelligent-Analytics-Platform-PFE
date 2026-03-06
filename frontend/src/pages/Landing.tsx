@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Upload, FileText, Cpu, BarChart2, Brain, Shield, Sliders, MessageSquare, Palette, Zap, TrendingUp, Truck, ShoppingBag, Settings, Building, ArrowRight } from 'lucide-react';
 import BrandLogo from '@/components/BrandLogo';
 
-const sectors = [' Finance', ' Transport', ' Retail', ' Manufacturing', '🏛️ Public'];
+const sectors = [' Finance', ' Transport', ' Retail', ' Manufacturing', ' Public'];
 
 const steps = [
   { icon: Upload, title: 'Uploadez vos données', desc: 'CSV, Excel ou JSON — jusqu\'à 100 MB' },
