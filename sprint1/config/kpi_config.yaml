@@ -1,0 +1,138 @@
+sectors:
+
+  transport:
+    keywords:
+      - airport, flight, passenger, gate, delay, boarding, terminal
+      - airline, runway, baggage, check-in, lounge, security
+      - expérience passagers, aéroport, vol, retard, embarquement
+      - améliorer expérience passagers, transport aérien
+    kpis:
+      - name: "On-Time Performance"
+        description: "Percentage of flights departing or arriving on time"
+        unit: "%"
+      - name: "Passenger Satisfaction Score"
+        description: "Average passenger satisfaction rating from surveys"
+        unit: "score/5"
+      - name: "Average Delay"
+        description: "Mean delay in minutes across all flights"
+        unit: "minutes"
+      - name: "Boarding Completion Rate"
+        description: "Percentage of passengers boarded before departure"
+        unit: "%"
+      - name: "Baggage Claim Wait Time"
+        description: "Average time for baggage retrieval after landing"
+        unit: "minutes"
+      - name: "Security Wait Time"
+        description: "Average queue time at security checkpoints"
+        unit: "minutes"
+    dashboard_focus: "Passenger Experience & Operational Efficiency"
+    recommended_charts:
+      - "Flight delay distribution (histogram)"
+      - "Satisfaction score over time (line chart)"
+      - "On-time performance by route (bar chart)"
+      - "KPI summary cards"
+
+  finance:
+    keywords:
+      - revenue, profit, transaction, invoice, portfolio, budget, banking
+      - financial, investment, loan, credit, trading, risk
+      - chiffre affaires, bénéfice, transaction, budget, trésorerie, risque
+    kpis:
+      - name: "Revenue Growth"
+        description: "Year-over-year or month-over-month revenue growth rate"
+        unit: "%"
+      - name: "Net Profit Margin"
+        description: "Net profit as a percentage of total revenue"
+        unit: "%"
+      - name: "Transaction Volume"
+        description: "Total number of transactions in the selected period"
+        unit: "count"
+      - name: "Customer Acquisition Cost"
+        description: "Average cost to acquire one new customer"
+        unit: "MAD"
+      - name: "Default Rate"
+        description: "Percentage of loans or credits currently in default"
+        unit: "%"
+    dashboard_focus: "Financial Performance & Risk Monitoring"
+    recommended_charts:
+      - "Revenue trend over time (line chart)"
+      - "Profit margin by segment (bar chart)"
+      - "Transaction volume heatmap"
+
+  retail:
+    keywords:
+      - product, sales, inventory, store, customer, sku, cart, order
+      - retail, shop, ecommerce, purchase, stock, basket
+      - vente, produit, stock, magasin, client, commande, panier
+    kpis:
+      - name: "Total Sales"
+        description: "Total revenue generated from product sales"
+        unit: "MAD"
+      - name: "Inventory Turnover"
+        description: "How quickly inventory is sold and replaced"
+        unit: "ratio"
+      - name: "Customer Return Rate"
+        description: "Percentage of customers making repeat purchases"
+        unit: "%"
+      - name: "Average Basket Size"
+        description: "Average transaction value per customer visit"
+        unit: "MAD"
+      - name: "Out-of-Stock Rate"
+        description: "Percentage of referenced products currently out of stock"
+        unit: "%"
+    dashboard_focus: "Sales Performance & Inventory Management"
+    recommended_charts:
+      - "Sales by category (bar chart)"
+      - "Inventory levels over time (line chart)"
+      - "Top performing products (ranking)"
+
+  manufacturing:
+    keywords:
+      - machine, production, defect, quality, oee, shift, factory, yield
+      - manufacturing, equipment, maintenance, throughput, breakdown
+      - production, machine, défaut, qualité, maintenance, usine, rendement
+    kpis:
+      - name: "OEE (Overall Equipment Effectiveness)"
+        description: "Composite measure combining availability, performance, and quality"
+        unit: "%"
+      - name: "Defect Rate"
+        description: "Percentage of produced units failing quality checks"
+        unit: "%"
+      - name: "Production Throughput"
+        description: "Number of units produced per hour or per shift"
+        unit: "units/hour"
+      - name: "Mean Time Between Failures"
+        description: "Average operating time between machine breakdowns"
+        unit: "hours"
+      - name: "Planned vs Actual Production"
+        description: "Variance between planned output and actual production"
+        unit: "%"
+    dashboard_focus: "Production Efficiency & Quality Control"
+    recommended_charts:
+      - "OEE trend over time (line chart)"
+      - "Defect rate by production line (bar chart)"
+      - "Machine availability heatmap"
+
+  public:
+    keywords:
+      - citizen, public service, government, municipality, urban, infrastructure
+      - hospital, school, administration, commune, ville
+      - citoyen, service public, commune, infrastructure, santé, collectivité
+    kpis:
+      - name: "Service Response Time"
+        description: "Average time to process and respond to citizen requests"
+        unit: "hours"
+      - name: "Citizen Satisfaction"
+        description: "Average satisfaction score from citizen surveys"
+        unit: "score/5"
+      - name: "Budget Utilization Rate"
+        description: "Percentage of allocated budget effectively spent"
+        unit: "%"
+      - name: "Infrastructure Maintenance Rate"
+        description: "Percentage of public infrastructure in good condition"
+        unit: "%"
+    dashboard_focus: "Public Service Delivery & Citizen Experience"
+    recommended_charts:
+      - "Service response time trend (line chart)"
+      - "Budget utilization by department (bar chart)"
+      - "Citizen satisfaction evolution"
