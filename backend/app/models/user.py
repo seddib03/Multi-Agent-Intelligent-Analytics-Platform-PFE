@@ -19,25 +19,23 @@ class Company(Base):
 class User(Base):
     __tablename__ = "users"
 
-    id            = Column(UUID(as_uuid=True), primary_key=True,
-                           default=uuid.uuid4)
-    email         = Column(String, unique=True, nullable=False)
-    password_hash = Column(String, nullable=False)
-    first_name    = Column(String, nullable=False)
-    last_name     = Column(String, nullable=False)
-    company_id    = Column(UUID(as_uuid=True),
-                           ForeignKey("companies.id"),
-                           nullable=False)
-    is_active     = Column(Boolean, default=True)
-    created_at    = Column(DateTime(timezone=True),
-                           server_default="now()")
-    last_login_at = Column(DateTime(timezone=True),
-                           nullable=True)
+    id           = Column(UUID(as_uuid=True), primary_key=True,
+                          default=uuid.uuid4)
+    keycloak_id  = Column(String, unique=True, nullable=False)
+   
 
+    email        = Column(String, unique=True, nullable=False)
+    first_name   = Column(String, nullable=False)
+    last_name    = Column(String, nullable=False)
+    company_id   = Column(UUID(as_uuid=True),
+                          ForeignKey("companies.id"),
+                          nullable=False)
+    is_active    = Column(Boolean, default=True)
+    created_at   = Column(DateTime(timezone=True),
+                          server_default="now()")
+
+    # Relations
     company     = relationship("Company", back_populates="users")
-    sessions    = relationship("AuthSession",
-                               back_populates="user",
-                               cascade="all, delete-orphan")
     preferences = relationship("UserPreferences",
                                back_populates="user",
                                uselist=False,

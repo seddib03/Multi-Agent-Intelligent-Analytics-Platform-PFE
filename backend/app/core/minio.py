@@ -15,6 +15,12 @@ minio_client = Minio(
 # ── Bucket principal (depuis docker-compose) ─────────────────
 BUCKET = settings.MINIO_BUCKET
 
+
+def ensure_buckets_exist() -> None:
+    """Create the configured bucket if it does not exist yet."""
+    if not minio_client.bucket_exists(BUCKET):
+        minio_client.make_bucket(BUCKET)
+
 # ── Préfixes par type de fichier ─────────────────────────────
 class Prefix:
     RAW       = "raw"        # fichiers bruts uploadés

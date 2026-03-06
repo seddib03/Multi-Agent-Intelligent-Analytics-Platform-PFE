@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store/useAppStore';
 import { Input } from '@/components/ui/input';
+import BrandLogo from '@/components/BrandLogo';
 
 export default function Register() {
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', company: '', password: '', confirmPassword: '' });
@@ -32,13 +33,12 @@ export default function Register() {
         <div className="absolute inset-0 bg-gradient-to-br from-dxc-royal/20 to-transparent" />
         <div className="relative z-10 text-center">
           <div className="flex items-center justify-center gap-2 mb-8">
-            <span className="font-display font-bold text-3xl text-dxc-white">DXC</span>
-            <span className="text-dxc-peach text-sm">Insight Platform</span>
+            <BrandLogo logoClassName="h-9" subtitleClassName="text-sm" />
           </div>
           <p className="text-dxc-white text-xl font-bold mb-2">Rejoignez des milliers d'équipes</p>
           <p className="text-dxc-white/70 text-lg max-w-md">qui analysent mieux avec l'IA</p>
           <div className="mt-12 flex flex-wrap justify-center gap-3">
-            {['🏦 Finance', '🚌 Transport', '🛍️ Retail', '🏭 Manufacturing', '🏛️ Public'].map((s, i) => (
+            {[' Finance', ' Transport', ' Retail', ' Manufacturing', ' Public'].map((s, i) => (
               <div key={i} className="glass-card rounded-lg px-4 py-2 text-dxc-peach text-sm">{s}</div>
             ))}
           </div>

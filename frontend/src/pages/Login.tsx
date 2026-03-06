@@ -4,6 +4,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { Eye, EyeOff } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { mockDemoProjects } from '@/data/mockData';
+import BrandLogo from '@/components/BrandLogo';
 
 export default function Login() {
   const [email, setEmail] = useState('demo@dxc.com');
@@ -33,8 +34,7 @@ export default function Login() {
         <div className="absolute inset-0 bg-gradient-to-br from-dxc-royal/20 to-transparent" />
         <div className="relative z-10 text-center">
           <div className="flex items-center justify-center gap-2 mb-8">
-            <span className="font-display font-bold text-3xl text-dxc-white">DXC</span>
-            <span className="text-dxc-peach text-sm">Insight Platform</span>
+            <BrandLogo logoClassName="h-9" subtitleClassName="text-sm" />
           </div>
           <p className="text-dxc-white/70 text-lg max-w-md">Connectez-vous pour accéder à vos projets d'analyse prédictive</p>
           <div className="mt-12 flex flex-wrap justify-center gap-3">
