@@ -1,0 +1,7 @@
+data_quality:
+  target: dev
+  outputs:
+    dev:
+      type:    duckdb
+      path:    "../storage/gold/analytics.duckdb"
+      threads: 4
