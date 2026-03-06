@@ -1,3 +1,4 @@
+import uuid
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +8,7 @@ from sqlalchemy         import select
 from app.core.database  import get_db
 from app.core.keycloak  import verify_token
 from app.models.user    import User, UserPreferences
+from app.services.minio_service import MinioService
 
 bearer_scheme = HTTPBearer()
 
@@ -138,3 +140,8 @@ async def get_internal_api_key(
             status_code = status.HTTP_403_FORBIDDEN,
             detail      = "API Key invalide",
         )
+
+
+def get_minio_service() -> MinioService:
+    """Return MinIO service dependency for dataset routes."""
+    return MinioService()
