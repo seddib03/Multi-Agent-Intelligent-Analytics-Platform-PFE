@@ -1,198 +1,95 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from fastapi import HTTPException
-from datetime import datetime, timedelta
-from app.models.user import User, Company, AuthSession, UserPreferences
-from app.schemas.auth import RegisterRequest, LoginRequest
-from app.core.security import (hash_password, verify_password,
-                                create_access_token, create_refresh_token)
+from sqlalchemy              import select
+from fastapi                 import HTTPException
+from app.models.user         import User, Company, UserPreferences
 import uuid
+
 
 class AuthService:
 
+    # ── Sync utilisateur à la première connexion Keycloak ────
     @staticmethod
-    async def register(db: AsyncSession,
-                       data: RegisterRequest) -> dict:
-
-        # Vérifier email unique
-        existing = await db.execute(
-            select(User).where(User.email == data.email)
-        )
-        if existing.scalar_one_or_none():
-            raise HTTPException(409, "Email déjà utilisé")
-
-        # Créer ou récupérer la company
-        company_result = await db.execute(
-            select(Company).where(Company.name == data.company_name)
-        )
-        company = company_result.scalar_one_or_none()
-        if not company:
-            company = Company(
-                id   = uuid.uuid4(),
-                name = data.company_name
-            )
-            db.add(company)
-            await db.flush()  # obtenir l'id avant commit
-
-        # Créer l'utilisateur
-        user = User(
-            id            = uuid.uuid4(),
-            email         = data.email,
-            password_hash = hash_password(data.password),
-            first_name    = data.first_name,
-            last_name     = data.last_name,
-            company_id    = company.id,
-        )
-        db.add(user)
-        await db.flush()
-
-        # Créer les préférences par défaut
-        prefs = UserPreferences(
-            id      = uuid.uuid4(),
-            user_id = user.id
-        )
-        db.add(prefs)
-
-        # Créer la session
-        refresh_token = create_refresh_token()
-        session = AuthSession(
-            id            = uuid.uuid4(),
-            user_id       = user.id,
-            refresh_token = refresh_token,
-            expires_at    = datetime.utcnow() + timedelta(days=30)
-        )
-        db.add(session)
-        await db.commit()
-
-        access_token = create_access_token(
-            str(user.id), user.email
-        )
-
-        return {
-            "access_token":  access_token,
-            "refresh_token": refresh_token,
-            "token_type":    "bearer",
-            "user": {
-                "id":           str(user.id),
-                "email":        user.email,
-                "first_name":   user.first_name,
-                "last_name":    user.last_name,
-                "company_name": company.name,
-                "created_at":   str(user.created_at),
-            }
-        }
-
-    @staticmethod
-    async def login(db: AsyncSession,
-                    data: LoginRequest) -> dict:
-
-        # Trouver l'utilisateur
+    async def sync_or_create(
+        db:          AsyncSession,
+        keycloak_id: str,
+        email:       str,
+        first_name:  str,
+        last_name:   str,
+        company_name: str,
+    ) -> dict:
+        """
+        Appelé par get_current_user() à chaque requête.
+        Crée l'utilisateur en Postgres si première connexion.
+        """
+        # Chercher par keycloak_id
         result = await db.execute(
-            select(User).where(User.email == data.email)
+            select(User).where(User.keycloak_id == keycloak_id)
         )
         user = result.scalar_one_or_none()
 
-        if not user or not verify_password(
-            data.password, user.password_hash
-        ):
-            raise HTTPException(401, "Email ou mot de passe incorrect")
-
-        if not user.is_active:
-            raise HTTPException(403, "Compte désactivé")
-
-        # Récupérer la company
-        company = await db.get(Company, user.company_id)
-
-        # Mettre à jour last_login
-        user.last_login_at = datetime.utcnow()
-
-        # Créer nouvelle session
-        refresh_token = create_refresh_token()
-        session = AuthSession(
-            id            = uuid.uuid4(),
-            user_id       = user.id,
-            refresh_token = refresh_token,
-            expires_at    = datetime.utcnow() + timedelta(days=30)
-        )
-        db.add(session)
-        await db.commit()
-
-        access_token = create_access_token(
-            str(user.id), user.email
-        )
-
-        return {
-            "access_token":  access_token,
-            "refresh_token": refresh_token,
-            "token_type":    "bearer",
-            "user": {
-                "id":           str(user.id),
-                "email":        user.email,
-                "first_name":   user.first_name,
-                "last_name":    user.last_name,
-                "company_name": company.name,
-                "created_at":   str(user.created_at),
-            }
-        }
-
-    @staticmethod
-    async def refresh(db: AsyncSession,
-                      refresh_token: str) -> dict:
-
-        result = await db.execute(
-            select(AuthSession).where(
-                AuthSession.refresh_token == refresh_token,
-                AuthSession.is_revoked    == False,
-                AuthSession.expires_at    > datetime.utcnow()
+        if not user:
+            # Première connexion → créer company si nouvelle
+            company_result = await db.execute(
+                select(Company).where(Company.name == company_name)
             )
-        )
-        session = result.scalar_one_or_none()
+            company = company_result.scalar_one_or_none()
+            if not company:
+                company = Company(
+                    id   = uuid.uuid4(),
+                    name = company_name or "Default"
+                )
+                db.add(company)
+                await db.flush()
 
-        if not session:
-            raise HTTPException(401, "Refresh token invalide ou expiré")
-
-        user = await db.get(User, session.user_id)
-
-        access_token = create_access_token(
-            str(user.id), user.email
-        )
-        return {
-            "access_token": access_token,
-            "token_type":   "bearer"
-        }
-
-    @staticmethod
-    async def logout(db: AsyncSession,
-                     refresh_token: str) -> None:
-
-        result = await db.execute(
-            select(AuthSession).where(
-                AuthSession.refresh_token == refresh_token
+            # Créer utilisateur
+            user = User(
+                id          = uuid.uuid4(),
+                keycloak_id = keycloak_id,
+                email       = email,
+                first_name  = first_name,
+                last_name   = last_name,
+                company_id  = company.id,
             )
-        )
-        session = result.scalar_one_or_none()
-        if session:
-            session.is_revoked = True
+            db.add(user)
+            await db.flush()
+
+            # Créer préférences par défaut
+            prefs = UserPreferences(
+                id      = uuid.uuid4(),
+                user_id = user.id,
+            )
+            db.add(prefs)
             await db.commit()
+            await db.refresh(user)
 
+        return {
+            "user_id":    str(user.id),
+            "keycloak_id": keycloak_id,
+            "email":      user.email,
+            "company_id": str(user.company_id),
+        }
+
+    # ── GET me ───────────────────────────────────────────────
     @staticmethod
-    async def get_me(db: AsyncSession,
-                     user_id: str) -> dict:
+    async def get_me(db: AsyncSession, user_id: str) -> dict:
         user    = await db.get(User, user_id)
+        if not user:
+            raise HTTPException(404, "Utilisateur introuvable")
+
         company = await db.get(Company, user.company_id)
-        prefs   = await db.execute(
+        result  = await db.execute(
             select(UserPreferences).where(
                 UserPreferences.user_id == user_id
             )
         )
-        prefs = prefs.scalar_one_or_none()
+        prefs = result.scalar_one_or_none()
 
         return {
             "id":           str(user.id),
             "email":        user.email,
             "first_name":   user.first_name,
             "last_name":    user.last_name,
-            "company_name": company.name,
+            "company_name": company.name if company else "",
             "created_at":   str(user.created_at),
             "preferences": {
                 "dark_mode":        prefs.dark_mode,
@@ -206,10 +103,11 @@ class AuthService:
             } if prefs else {}
         }
 
+    # ── UPDATE preferences ───────────────────────────────────
     @staticmethod
-    async def update_preferences(db: AsyncSession,
-                                  user_id: str,
-                                  data) -> dict:
+    async def update_preferences(
+        db: AsyncSession, user_id: str, data
+    ) -> dict:
         result = await db.execute(
             select(UserPreferences).where(
                 UserPreferences.user_id == user_id
@@ -232,13 +130,12 @@ class AuthService:
         await db.commit()
         return {"message": "Préférences sauvegardées"}
 
+    # ── DELETE me ────────────────────────────────────────────
     @staticmethod
-    async def delete_me(db: AsyncSession,
-                        user_id: str) -> None:
+    async def delete_me(db: AsyncSession, user_id: str) -> None:
         from app.services.minio_service import MinioService
-        # Cleanup MinIO
         await MinioService.delete_user_files(user_id)
-        # Supprimer user (cascade supprime sessions + prefs)
         user = await db.get(User, user_id)
-        await db.delete(user)
-        await db.commit()
+        if user:
+            await db.delete(user)
+            await db.commit()

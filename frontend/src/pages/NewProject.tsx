@@ -56,23 +56,10 @@ export default function NewProject() {
           )}
         </div>
 
-        <div>
-          <label className="text-sm font-medium mb-2 block">Type d'analyse</label>
-          <div className="grid grid-cols-2 gap-3">
-            {analysisTypes.map((a) => (
-              <button key={a.value} onClick={() => setType(a.value)}
-                className={`p-4 rounded-xl border text-left transition-all ${type === a.value ? 'border-dxc-royal bg-dxc-royal/5 shadow-sm' : 'border-border hover:border-dxc-royal/30'}`}>
-                <p className="font-bold text-sm mb-1">{a.label}</p>
-                <p className="text-xs text-muted-foreground">{a.desc}</p>
-              </button>
-            ))}
-          </div>
+        <div className="grid grid-cols-2 gap-4">
         </div>
 
-        <div>
-          <label className="text-sm font-medium mb-1 block">Horizon temporel</label>
-          <Input value={timeHorizon} onChange={(e) => setTimeHorizon(e.target.value)} placeholder="Ex: 3 mois, 1 semaine..." />
-        </div>
+        
 
         <button onClick={handleCreate} disabled={!title || !useCase}
           className="w-full bg-dxc-melon text-dxc-white py-3.5 rounded-lg font-bold hover:opacity-90 transition-opacity disabled:opacity-40">

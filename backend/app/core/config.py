@@ -26,6 +26,37 @@ class Settings(BaseSettings):
     MINIO_PREFIX_EXPORTS:   str = "exports"
 
     # ── JWT ───────────────────────────────────────────────
+    SECRET_KEY:          str = "changeme-in-production-32chars-min"
+    JWT_ALGORITHM:       str = "HS256"
+    JWT_EXPIRE_MINUTES:  int = 60
+    JWT_REFRESH_DAYS:    int = 30
+    
+    # ── Keycloak ──────────────────────────────────────────
+    KEYCLOAK_URL:           str = "http://localhost:8080"
+    KEYCLOAK_REALM:         str = "nexora"
+    KEYCLOAK_CLIENT_ID:     str = "nexora-frontend"
+    KEYCLOAK_CLIENT_SECRET: str = "change-this-secret"
+
+    @property
+    def KEYCLOAK_JWKS_URL(self) -> str:
+        return (
+            f"{self.KEYCLOAK_URL}/realms/{self.KEYCLOAK_REALM}"
+            f"/protocol/openid-connect/certs"
+        )
+
+    @property
+    def KEYCLOAK_TOKEN_URL(self) -> str:
+        return (
+            f"{self.KEYCLOAK_URL}/realms/{self.KEYCLOAK_REALM}"
+            f"/protocol/openid-connect/token"
+        )
+
+    @property
+    def KEYCLOAK_USERINFO_URL(self) -> str:
+        return (
+            f"{self.KEYCLOAK_URL}/realms/{self.KEYCLOAK_REALM}"
+            f"/protocol/openid-connect/userinfo"
+        )
     SECRET_KEY:         str = "changeme-in-production-32chars-min"
     JWT_ALGORITHM:      str = "HS256"
     JWT_EXPIRE_MINUTES: int = 60
