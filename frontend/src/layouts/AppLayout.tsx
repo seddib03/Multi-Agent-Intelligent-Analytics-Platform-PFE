@@ -2,6 +2,7 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore } from '@/store/useAppStore';
 import { ChevronRight, LogOut, User, Settings } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import BrandLogo from '@/components/BrandLogo';
 
 export default function AppLayout() {
   const { currentUser, logout, projects, currentProjectId } = useAppStore();
@@ -37,8 +38,7 @@ export default function AppLayout() {
       {/* Header */}
       <header className="bg-dxc-midnight h-14 flex items-center px-4 justify-between shrink-0 z-50 sticky top-0">
         <Link to="/app/projects" className="flex items-center gap-2">
-          <span className="font-display font-bold text-lg text-dxc-white">DXC</span>
-          <span className="text-dxc-peach text-xs font-body">Insight Platform</span>
+          <BrandLogo logoClassName="h-6" subtitleClassName="text-[11px]" />
         </Link>
 
         <div className="flex items-center gap-1 text-sm">

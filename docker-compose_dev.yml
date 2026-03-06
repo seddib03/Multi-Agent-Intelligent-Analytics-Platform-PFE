@@ -17,6 +17,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - nexora_net
 
   # ─── MinIO ─────────────────────────────────────────────
   minio:
@@ -36,6 +38,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - nexora_net
 
   # ─── MinIO Init ────────────────────────────────────────
   # Crée le bucket dxc-datasets au démarrage, puis s'arrête
@@ -56,8 +60,38 @@ services:
         echo 'Bucket $${MINIO_BUCKET} ready';
         exit 0;
       "
+    networks:
+      - nexora_net
 
   # ─── API ───────────────────────────────────────────────
+  # docker-compose.yml — ajouter ce service
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0
+    container_name: nexora_keycloak
+    restart: unless-stopped
+    command: start-dev          # mode dev — utiliser start en prod
+    environment:
+      KEYCLOAK_ADMIN:          ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin123}
+      KC_DB:                   postgres
+      KC_DB_URL:               jdbc:postgresql://postgres:5432/${POSTGRES_DB:-dxc_insight}
+      KC_DB_USERNAME:          ${POSTGRES_USER:-dxc}
+      KC_DB_PASSWORD:          ${POSTGRES_PASSWORD:-dxcpassword}
+      KC_HOSTNAME_STRICT:      false
+      KC_HTTP_ENABLED:         true
+    ports:
+      - "8080:8080"             # Console admin Keycloak
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - nexora_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      
   api:
     build:
       context: .
@@ -81,9 +115,16 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./app:/app/app   # hot-reload en développement
+      - ./backend/app:/app/app   
+      - ./backend/feature3:/app/feature3
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - nexora_net
 
 volumes:
   postgres_data:
   minio_data:
+
+networks:
+  nexora_net:
+    driver: bridge
