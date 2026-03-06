@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
 import { Upload, FileText, Cpu, BarChart2, Brain, Shield, Sliders, MessageSquare, Palette, Zap, TrendingUp, Truck, ShoppingBag, Settings, Building, ArrowRight } from 'lucide-react';
+import BrandLogo from '@/components/BrandLogo';
 
-const sectors = ['🏦 Finance', '🚌 Transport', '🛍️ Retail', '🏭 Manufacturing', '🏛️ Public'];
+const sectors = [' Finance', ' Transport', ' Retail', ' Manufacturing', '🏛️ Public'];
 
 const steps = [
   { icon: Upload, title: 'Uploadez vos données', desc: 'CSV, Excel ou JSON — jusqu\'à 100 MB' },
@@ -20,12 +21,14 @@ const features = [
 ];
 
 const sectorCards = [
-  { icon: TrendingUp, label: '🏦 Finance', useCase: 'Prédiction de churn client' },
-  { icon: Truck, label: '🚌 Transport', useCase: 'Prévision des retards' },
-  { icon: ShoppingBag, label: '🛍️ Retail', useCase: 'Recommandations produits' },
-  { icon: Settings, label: '🏭 Manufacturing', useCase: 'Maintenance prédictive' },
-  { icon: Building, label: '🏛️ Public', useCase: 'Optimisation des délais' },
+  { icon: TrendingUp, label: ' Finance', useCase: 'Prédiction de churn client' },
+  { icon: Truck, label: ' Transport', useCase: 'Prévision des retards' },
+  { icon: ShoppingBag, label: ' Retail', useCase: 'Recommandations produits' },
+  { icon: Settings, label: ' Manufacturing', useCase: 'Maintenance prédictive' },
+  { icon: Building, label: ' Public', useCase: 'Optimisation des délais' },
 ];
+
+const heroBackgroundPath = '/images/back.png';
 
 export default function Landing() {
   return (
@@ -34,8 +37,7 @@ export default function Landing() {
       <header className="fixed top-0 w-full bg-dxc-midnight z-50 transition-shadow" id="landing-header">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-display font-bold text-[22px] text-dxc-white">DXC</span>
-            <span className="text-dxc-peach text-[13px] font-body">Insight Platform</span>
+            <BrandLogo logoClassName="h-7" subtitleClassName="text-[13px]" />
           </div>
           <div className="flex items-center gap-3">
             <Link to="/login" className="border border-dxc-sky text-dxc-sky px-5 py-2 rounded-lg text-sm font-medium hover:bg-dxc-sky/10 transition-colors">
@@ -49,8 +51,13 @@ export default function Landing() {
       </header>
 
       {/* Hero */}
-      <section className="bg-dxc-midnight pt-32 pb-20 px-6">
-        <div className="max-w-4xl mx-auto text-center">
+      <section
+        className="relative pt-32 pb-20 px-6 bg-cover bg-center"
+        style={{ backgroundImage: `url(${heroBackgroundPath})` }}
+      >
+        <div className="absolute inset-0 bg-dxc-midnight/70" />
+
+        <div className="relative z-10 max-w-4xl mx-auto text-center">
           <div className="inline-block mb-8 px-4 py-1 rounded-full bg-dxc-royal/30 border border-dxc-royal/40 text-dxc-sky text-sm">
             ✦ Plateforme IA Multi-Agents
           </div>
@@ -63,7 +70,7 @@ export default function Landing() {
           </p>
           <div className="flex items-center justify-center gap-4 flex-wrap">
             <Link to="/register" className="bg-dxc-melon text-dxc-white px-8 py-4 rounded-[10px] text-base font-bold hover:opacity-90 transition-opacity inline-flex items-center gap-2">
-              🚀 Démarrer maintenant
+               Démarrer maintenant
             </Link>
             <button className="border border-dxc-sky text-dxc-sky px-8 py-4 rounded-[10px] text-base font-medium hover:bg-dxc-sky/10 transition-colors inline-flex items-center gap-2">
               Voir une démo <ArrowRight className="h-4 w-4" />
@@ -72,7 +79,7 @@ export default function Landing() {
         </div>
 
         {/* Scrolling sectors */}
-        <div className="mt-16 overflow-hidden">
+        <div className="relative z-10 mt-16 overflow-hidden">
           <div className="bg-dxc-royal/15 py-3">
             <div className="flex animate-scroll-infinite whitespace-nowrap">
               {[...sectors, ...sectors, ...sectors, ...sectors].map((s, i) => (
@@ -151,8 +158,8 @@ export default function Landing() {
       <footer className="bg-dxc-midnight border-t border-dxc-royal/20 py-6 px-6">
         <div className="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-2">
-            <span className="font-display font-bold text-dxc-white">DXC</span>
-            <span className="text-dxc-white/40 text-xs">© 2025 DXC Technology</span>
+            <BrandLogo showSubtitle={false} logoClassName="h-5" />
+            <span className="text-dxc-white/40 text-xs">© 2026 Intelligent Analytics Platform</span>
           </div>
           <div className="flex items-center gap-4 text-xs">
             <a href="#" className="text-dxc-sky hover:underline">Politique de confidentialité</a>
