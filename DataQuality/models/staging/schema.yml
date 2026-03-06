@@ -1,0 +1,46 @@
+version: 2
+models:
+- name: stg_assurance_dataset
+  description: Staging model pour le secteur assurance. Auto-généré par le Data Preparation
+    Agent.
+  columns:
+  - name: contrat_id
+    description: Colonne identifier — type string
+    tests:
+    - not_null
+    - unique
+    - regex_match:
+        pattern: ^CTR-[0-9]{6}$
+  - name: prime_annuelle
+    description: Colonne metric — type float
+    tests:
+    - not_null
+    - accepted_range:
+        min_value: 100
+        max_value: 50000
+  - name: montant_sinistre
+    description: Colonne metric — type float
+    tests:
+    - accepted_range:
+        min_value: 0
+        max_value: 500000
+  - name: client_id
+    description: Colonne dimension — type string
+    tests:
+    - not_null
+    - regex_match:
+        pattern: ^CLI-[0-9]{5}$
+  - name: type_contrat
+    description: Colonne dimension — type string
+    tests:
+    - not_null
+  - name: date_effet
+    description: Colonne temporal_key — type date
+    tests:
+    - not_null
+    - date_not_in_future
+  - name: date_echeance
+    description: Colonne temporal_key — type date
+    tests:
+    - not_null
+    - date_not_in_future

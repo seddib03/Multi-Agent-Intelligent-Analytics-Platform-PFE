@@ -1,0 +1,33 @@
+# API
+fastapi
+uvicorn
+python-multipart
+
+# Agent Orchestration
+langgraph
+langchain-core
+
+# LLM (préparé pour après MVP)
+langchain-openai
+openai
+
+# Data Processing
+pandas
+pyarrow
+openpyxl
+chardet
+
+# Validation
+pydantic
+pydantic-settings
+
+# Storage
+minio
+
+# Data Quality
+dbt-core
+dbt-duckdb
+
+# Utils
+python-dotenv
+loguru
