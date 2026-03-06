@@ -5,7 +5,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-
+from datetime import timedelta
 import pandas as pd
 from minio import Minio
 from minio.error import S3Error
@@ -235,3 +235,61 @@ class MinioClient:
             {"job_id": obj.object_name.split("/")[1]}
             for obj in objects
         ]
+    def download_gold_json(self, job_id: str, sector: str, filename: str) -> dict:
+        """
+        Lit un fichier JSON depuis MinIO Gold et le retourne en dict.
+
+        Gère les valeurs non-standard produites par ydata-profiling :
+            NaN, Infinity, -Infinity → remplacés par null avant parsing.
+        Ces valeurs sont valides en JavaScript mais pas en JSON strict.
+        """
+        import re
+
+        object_name = f"{sector}/{job_id}/{filename}"
+        response    = self._client.get_object(self._gold, object_name)
+        content     = response.read().decode("utf-8")
+
+        # Remplacer NaN / Infinity / -Infinity par null (JSON strict)
+        content = re.sub(r'\bNaN\b',       'null', content)
+        content = re.sub(r'\bInfinity\b',  'null', content)
+        content = re.sub(r'\b-Infinity\b', 'null', content)
+
+        return json.loads(content)
+    def upload_gold_raw(self, job_id: str, sector: str, raw_bytes: bytes, filename: str, content_type: str = "application/octet-stream") -> str:
+            """Upload des bytes bruts dans Gold (rapport HTML ydata-profiling)."""
+            object_name = f"{sector}/{job_id}/{filename}"
+            buffer      = io.BytesIO(raw_bytes)
+            self._client.put_object(
+                bucket_name=self._gold,
+                object_name=object_name,
+                data=buffer,
+                length=len(raw_bytes),
+                content_type=content_type,
+            )
+            logger.info("Gold raw uploadé : %s/%s (%.1f KB)", self._gold, object_name, len(raw_bytes) / 1024)
+            return object_name
+
+        # ── URL présignée ─────────────────────────────────────────────────────
+
+    def get_presigned_url(self, job_id: str, sector: str, filename: str, expires: int = 3600) -> str:
+            """
+            Génère une URL présignée pour accéder directement à un fichier Gold.
+
+            L'URL est valide pendant `expires` secondes (défaut : 1 heure).
+            Permet d'ouvrir le rapport HTML dans le navigateur sans credentials.
+            """
+            object_name = f"{sector}/{job_id}/{filename}"
+            url = self._client.presigned_get_object(
+                bucket_name=self._gold,
+                object_name=object_name,
+                expires=timedelta(seconds=expires),
+            )
+            return url
+
+        # ── Listing ───────────────────────────────────────────────────────────
+
+    def list_jobs(self, sector: str, bucket: str = "gold") -> list[dict]:
+        target  = getattr(self, f"_{bucket}", self._gold)
+        objects = self._client.list_objects(target, prefix=f"{sector}/", recursive=False)
+        return [{"job_id": obj.object_name.split("/")[1]} for obj in objects]
+        

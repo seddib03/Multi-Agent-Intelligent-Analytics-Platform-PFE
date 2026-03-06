@@ -33,6 +33,8 @@ class AgentState(TypedDict, total=False):
 
     # NODE 2 : profiling
     profiling_summary: Optional[dict]  # stats rapides par colonne
+    profiling_html_path: Optional[str]    # chemin MinIO Gold du rapport HTML
+    profiling_json_path: Optional[str]    # chemin MinIO Gold du rapport JSON complet
 
     # NODE 3 : quality_scoring
     quality_before: Optional[dict]
@@ -75,6 +77,8 @@ def build_initial_state(
         sector="unknown",
         raw_df=None, metadata=None, bronze_path=None,
         profiling_summary=None,
+        profiling_html_path=None,
+        profiling_json_path=None,
         quality_before=None,
         cleaning_plan=None,
         llm_summary=None, llm_reformulations=None,

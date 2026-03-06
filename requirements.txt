@@ -31,3 +31,6 @@ dbt-duckdb
 # Utils
 python-dotenv
 loguru
+
+# Profiling interactif ← NOUVEAU
+ydata-profiling
