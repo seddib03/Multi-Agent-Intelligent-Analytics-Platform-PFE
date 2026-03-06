@@ -40,8 +40,7 @@ async def logout(
 @router.get("/users/me")
 async def get_me(
     db: AsyncSession = Depends(get_db),
-    user = Depends(get_current_user)
-):
+    user = Depends(get_current_user)):
     return await AuthService.get_me(db, user["user_id"])
 
 @router.put("/users/me")
