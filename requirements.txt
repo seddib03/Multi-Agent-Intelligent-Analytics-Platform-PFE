@@ -34,3 +34,8 @@ loguru
 
 # Profiling interactif ← NOUVEAU
 ydata-profiling
+
+# dbt & DuckDB
+duckdb
+dbt-core
+dbt-duckdb

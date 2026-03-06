@@ -35,7 +35,6 @@ logger = logging.getLogger(__name__)
 
 
 def detect_anomalies(
-    df:             pd.DataFrame,
     metadata:       list[ColumnMeta],
     quality_report: QualityReport,
     job_id:         str,
@@ -48,7 +47,6 @@ def detect_anomalies(
     ont des violations, puis crée les AnomalyItems détaillés.
 
     Args:
-        df:             DataFrame Pandas
         metadata:       Liste de ColumnMeta
         quality_report: Rapport qualité AVANT (contient les détails)
         job_id:         UUID du job
@@ -59,7 +57,7 @@ def detect_anomalies(
     """
     anomalies = []
     meta_index = {m.column_name: m for m in metadata}
-    total      = len(df)
+    total      = quality_report.total_rows
 
     # Pour chaque colonne du rapport qualité
     for col_score in quality_report.columns:
@@ -102,28 +100,28 @@ def detect_anomalies(
             if detail.get("range_errors"):
                 anomalies.append(_make_range_anomaly(
                     col_meta, detail["range_errors"],
-                    df, total
+                    detail.get("range_errors_samples", []), total
                 ))
 
             # Enum errors
             if detail.get("enum_errors"):
                 anomalies.append(_make_enum_anomaly(
                     col_meta, detail["enum_errors"],
-                    df, total
+                    detail.get("enum_errors_samples", []), total
                 ))
 
             # Pattern errors
             if detail.get("pattern_errors"):
                 anomalies.append(_make_pattern_anomaly(
                     col_meta, detail["pattern_errors"],
-                    df, total
+                    detail.get("pattern_errors_samples", []), total
                 ))
 
             # Date errors
             if detail.get("date_errors"):
                 anomalies.append(_make_date_anomaly(
                     col_meta, detail["date_errors"],
-                    df, total
+                    detail.get("date_errors_samples", []), total
                 ))
 
     plan = CleaningPlan(
@@ -183,7 +181,7 @@ def _make_null_anomaly(
         ),
         affected_rows=null_rows,
         affected_count=null_count,
-        affected_pct=null_count / total * 100,
+        affected_pct=float(null_count / total * 100),
         action_1=a1, justification_1=j1,
         action_2=a2, justification_2=j2,
         action_3=a3, justification_3=j3,
@@ -210,7 +208,7 @@ def _make_duplicate_anomaly(
         ),
         affected_rows=dup_rows,
         affected_count=dup_count,
-        affected_pct=dup_count / total * 100,
+        affected_pct=float(dup_count / total * 100),
         action_1=CleaningAction.FLAG_ONLY,
         justification_1="Signaler sans modifier — examiner manuellement avant suppression",
         action_2=CleaningAction.DROP_DUPLICATES,
@@ -223,11 +221,10 @@ def _make_duplicate_anomaly(
 def _make_range_anomaly(
     meta:       ColumnMeta,
     range_rows: list[int],
-    df:         pd.DataFrame,
+    sample:     list[Any],
     total:      int,
 ) -> AnomalyItem:
     """Anomalie : valeurs hors range [min, max]."""
-    sample = df.loc[range_rows[:5], meta.column_name].tolist()
     rule   = f"[{meta.min}, {meta.max}]"
 
     return AnomalyItem(
@@ -242,7 +239,7 @@ def _make_range_anomaly(
         ),
         affected_rows=range_rows,
         affected_count=len(range_rows),
-        affected_pct=len(range_rows) / total * 100,
+        affected_pct=float(len(range_rows) / total * 100),
         sample_invalid_values=sample,
         params={"min": meta.min, "max": meta.max},
         action_1=CleaningAction.FLAG_ONLY,
@@ -257,11 +254,10 @@ def _make_range_anomaly(
 def _make_enum_anomaly(
     meta:      ColumnMeta,
     enum_rows: list[int],
-    df:        pd.DataFrame,
+    sample:    list[Any],
     total:     int,
 ) -> AnomalyItem:
     """Anomalie : valeurs absentes de la liste enum."""
-    sample = df.loc[enum_rows[:5], meta.column_name].tolist()
 
     return AnomalyItem(
         anomaly_id=f"anomaly_{uuid.uuid4().hex[:6]}",
@@ -275,7 +271,7 @@ def _make_enum_anomaly(
         ),
         affected_rows=enum_rows,
         affected_count=len(enum_rows),
-        affected_pct=len(enum_rows) / total * 100,
+        affected_pct=float(len(enum_rows) / total * 100),
         sample_invalid_values=sample,
         params={"valid_enum": meta.enum},
         action_1=CleaningAction.FLAG_ONLY,
@@ -290,11 +286,10 @@ def _make_enum_anomaly(
 def _make_pattern_anomaly(
     meta:         ColumnMeta,
     pattern_rows: list[int],
-    df:           pd.DataFrame,
+    sample:       list[Any],
     total:        int,
 ) -> AnomalyItem:
     """Anomalie : valeurs ne matchant pas le pattern regex."""
-    sample = df.loc[pattern_rows[:5], meta.column_name].tolist()
 
     return AnomalyItem(
         anomaly_id=f"anomaly_{uuid.uuid4().hex[:6]}",
@@ -308,7 +303,7 @@ def _make_pattern_anomaly(
         ),
         affected_rows=pattern_rows,
         affected_count=len(pattern_rows),
-        affected_pct=len(pattern_rows) / total * 100,
+        affected_pct=float(len(pattern_rows) / total * 100),
         sample_invalid_values=sample,
         params={"pattern": meta.pattern},
         action_1=CleaningAction.FLAG_ONLY,
@@ -338,7 +333,7 @@ def _make_type_anomaly(
         ),
         affected_rows=type_rows,
         affected_count=len(type_rows),
-        affected_pct=len(type_rows) / total * 100,
+        affected_pct=float(len(type_rows) / total * 100),
         action_1=CleaningAction.CAST_TYPE,
         justification_1=f"Forcer la conversion en {meta.type} (les non-convertibles → NaN)",
         action_2=CleaningAction.FLAG_ONLY,
@@ -351,11 +346,10 @@ def _make_type_anomaly(
 def _make_date_anomaly(
     meta:      ColumnMeta,
     date_rows: list[int],
-    df:        pd.DataFrame,
+    sample:    list[Any],
     total:     int,
 ) -> AnomalyItem:
     """Anomalie : dates non parseable selon le format."""
-    sample = df.loc[date_rows[:5], meta.column_name].tolist()
 
     return AnomalyItem(
         anomaly_id=f"anomaly_{uuid.uuid4().hex[:6]}",
@@ -369,7 +363,7 @@ def _make_date_anomaly(
         ),
         affected_rows=date_rows,
         affected_count=len(date_rows),
-        affected_pct=len(date_rows) / total * 100,
+        affected_pct=float(len(date_rows) / total * 100),
         sample_invalid_values=sample,
         params={"expected_format": meta.format},
         action_1=CleaningAction.PARSE_DATE,

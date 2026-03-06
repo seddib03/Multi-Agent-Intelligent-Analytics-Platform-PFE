@@ -143,8 +143,9 @@ def profiling_node(state: AgentState) -> dict:
         "✓ " + json_minio if json_minio else "✗ non généré",
     )
 
+    from models.quality_report import _to_native
     return {
-        "profiling_summary":   profiling_summary,
+        "profiling_summary":   _to_native(profiling_summary),
         "profiling_html_path": html_minio,
         "profiling_json_path": json_minio,
     }

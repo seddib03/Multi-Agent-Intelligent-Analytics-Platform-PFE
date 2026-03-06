@@ -30,6 +30,7 @@ class AgentState(TypedDict, total=False):
     raw_df:        Optional[dict]   # DataFrame sérialisé
     metadata:      Optional[list]   # liste de ColumnMeta sérialisés
     bronze_path:   Optional[str]    # chemin MinIO Bronze
+    duckdb_path:   Optional[str]    # chemin base locale DuckDB du job
 
     # NODE 2 : profiling
     profiling_summary: Optional[dict]  # stats rapides par colonne
@@ -75,7 +76,7 @@ def build_initial_state(
         dataset_path=dataset_path,
         metadata_path=metadata_path,
         sector="unknown",
-        raw_df=None, metadata=None, bronze_path=None,
+        raw_df=None, metadata=None, bronze_path=None, duckdb_path=None,
         profiling_summary=None,
         profiling_html_path=None,
         profiling_json_path=None,

@@ -48,10 +48,24 @@ def ingestion_node(state: AgentState) -> dict:
         state["dataset_path"], filename
     )
 
+    # ── Initialisation de DuckDB ──────────────────────────────────────────────
+    import duckdb
+    duckdb_dir = settings.duckdb_dir / state["job_id"]
+    duckdb_dir.mkdir(parents=True, exist_ok=True)
+    duckdb_path = str(duckdb_dir / "db.duckdb")
+
+    with duckdb.connect(duckdb_path) as conn:
+        # Créer la table raw_data avec le contenu de df + un ID de ligne
+        df_duck = df.copy()
+        df_duck["__row_id"] = range(len(df_duck))
+        conn.execute("CREATE TABLE raw_data AS SELECT * FROM df_duck")
+    
+    logger.info("Données ingérées dans DuckDB: %s", duckdb_path)
+
     # Sérialiser le DataFrame pour le state LangGraph
     raw_df_dict = {
         "columns": df.columns.tolist(),
-        "data":    df.values.tolist(),
+        "data":    df.where(pd.notnull(df), None).values.tolist(),
     }
 
     # Sérialiser les ColumnMeta (dataclasses → dicts)
@@ -63,5 +77,6 @@ def ingestion_node(state: AgentState) -> dict:
         "raw_df":      raw_df_dict,
         "metadata":    meta_dicts,
         "bronze_path": bronze_path,
+        "duckdb_path": duckdb_path,
         "sector":      sector,
     }

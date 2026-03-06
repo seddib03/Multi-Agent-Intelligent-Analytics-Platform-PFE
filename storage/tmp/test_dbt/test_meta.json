@@ -1,0 +1,1 @@
+[{"column_name": "id", "type": "int", "identifier": true, "nullable": false}, {"column_name": "age", "type": "int", "min": 0, "max": 100, "nullable": false}, {"column_name": "email", "type": "string", "pattern": "^[\\\\w\\.-]+@[\\\\w\\.-]+\\\\.\\\\w+$", "nullable": false}, {"column_name": "status", "type": "string", "enum": ["ACTIF", "INACTIF"], "nullable": false}]

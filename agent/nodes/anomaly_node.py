@@ -54,7 +54,6 @@ def anomaly_node(state: AgentState) -> dict:
     quality_before = QualityReport.from_dict(state["quality_before"])
 
     cleaning_plan = detect_anomalies(
-        df=df,
         metadata=metadata,
         quality_report=quality_before,
         job_id=state["job_id"],

@@ -52,11 +52,11 @@ def quality_node(state: AgentState) -> dict:
     metadata = _load_metadata(state["metadata"])
 
     quality_before = compute_quality_report(
-        df=df,
         metadata=metadata,
         label="AVANT",
         sector=state.get("sector", "unknown"),
         job_id=state["job_id"],
+        duckdb_path=state["duckdb_path"],
     )
 
     logger.info(

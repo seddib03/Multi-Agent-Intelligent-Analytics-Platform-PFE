@@ -77,9 +77,15 @@ class Settings(BaseSettings):
     # Les uploads sont stockés temporairement avant upload MinIO
     tmp_dir: Path = Field(default=ROOT_DIR / "storage" / "tmp")
 
+    # ── Bases de données locales DuckDB ──────────────────────────────────────
+    duckdb_dir: Path = Field(
+        default=ROOT_DIR / "storage" / "duckdb",
+        description="Dossier contenant les bases DuckDB par job",
+    )
+
     # ── Projet dbt ────────────────────────────────────────────────────────────
     dbt_project_dir: Path = Field(
-        default=ROOT_DIR / "DataQuality",
+        default=ROOT_DIR / "dbt_project",
         description="Racine du projet dbt",
     )
 
