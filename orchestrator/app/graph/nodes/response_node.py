@@ -1,4 +1,4 @@
-from app.graph.state import OrchestratorState
+from app.graph.state import OrchestratorState, RouteEnum
 
 
 def response_node(state: OrchestratorState) -> OrchestratorState:
@@ -7,6 +7,12 @@ def response_node(state: OrchestratorState) -> OrchestratorState:
     Sprint 5: to be replaced by the real Response Agent.
     """
     agent_resp = state.agent_response
+
+    if state.route == RouteEnum.CLARIFICATION:
+       state.needs_clarification = True          # ← manquait !
+       state.clarification_question = state.agent_response.get(
+           "question", "Pouvez-vous préciser votre demande ?"
+    )
 
     if state.agent_error:
         state.final_response = (
@@ -21,3 +27,4 @@ def response_node(state: OrchestratorState) -> OrchestratorState:
 
     state.processing_steps.append("response_node → response formatted ✅")
     return state
+    
