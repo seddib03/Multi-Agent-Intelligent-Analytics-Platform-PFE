@@ -1,7 +1,7 @@
 from typing import Optional
 from pydantic import BaseModel
 from app.graph.state import RouteEnum
-
+# This module defines the output schema for the orchestrator app, including the response format and metadata for debugging and analysis.
 #The response of the Orchestrator
 class OrchestratorResponse(BaseModel):
     # what Orchestrator return to UI

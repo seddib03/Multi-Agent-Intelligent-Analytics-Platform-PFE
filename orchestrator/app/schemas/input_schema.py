@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-
+# This module defines the input schema for the orchestrator app, including user query input and orchestrator state.
 #User query input
 class UserQueryInput(BaseModel):
     #what UI send to Orchestrator
