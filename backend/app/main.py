@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.minio import ensure_buckets_exist
+from app.core.database import init_db_schema
 from app.routers import auth, users, projects, datasets
 
 
@@ -11,6 +12,11 @@ from app.routers import auth, users, projects, datasets
 async def lifespan(app: FastAPI):
     # Startup
     print(f"🚀 DXC Insight API started — environment: {settings.ENVIRONMENT}")
+    try:
+        await init_db_schema()
+        print("✅ Database schema ready")
+    except Exception as e:
+        print(f"⚠️  Database schema init warning: {e}")
     try:
         ensure_buckets_exist()
         print(f"✅ MinIO bucket '{settings.MINIO_BUCKET}' ready")

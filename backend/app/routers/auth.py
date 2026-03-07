@@ -2,32 +2,45 @@ from fastapi                 import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio  import AsyncSession
 
 from app.core.database       import get_db
-from app.core.keycloak       import logout_keycloak
 from app.dependencies        import get_current_user
-from app.schemas.user        import UserUpdate, PreferencesUpdate
+from app.schemas.auth        import (
+    RegisterRequest, LoginRequest,
+    RefreshRequest, UserUpdate, PreferencesUpdate,
+)
 from app.services.auth_service import AuthService
 
 router = APIRouter()
 
 
+# ── POST /api/auth/register ──────────────────────────────────
+@router.post("/register", status_code=201)
+async def register(
+    body: RegisterRequest,
+    db:   AsyncSession = Depends(get_db),
+):
+    return await AuthService.register(db, body)
+
+
+# ── POST /api/auth/login ─────────────────────────────────────
+@router.post("/login")
+async def login(
+    body: LoginRequest,
+    db:   AsyncSession = Depends(get_db),
+):
+    return await AuthService.login(db, body)
+
+
+# ── POST /api/auth/refresh ───────────────────────────────────
+@router.post("/refresh")
+async def refresh(body: RefreshRequest):
+    return await AuthService.refresh(body.refresh_token)
+
+
 # ── POST /api/auth/logout ────────────────────────────────────
 @router.post("/logout")
-async def logout(
-    refresh_token: str,
-    user: dict = Depends(get_current_user),
-):
-    await logout_keycloak(refresh_token)
+async def logout(body: RefreshRequest):
+    await AuthService.logout(body.refresh_token)
     return {"message": "Déconnecté"}
-
-
-# ── GET /api/auth/me/sync ────────────────────────────────────
-@router.get("/me/sync")
-async def sync_user(
-    db:   AsyncSession = Depends(get_db),
-    user: dict         = Depends(get_current_user),
-):
-    """Appelé par le frontend après chaque login Keycloak."""
-    return await AuthService.get_me(db, user["user_id"])
 
 
 # ── GET /api/auth/users/me ───────────────────────────────────
