@@ -41,6 +41,12 @@ async def call_detect_sector(state: OrchestratorState):
 
     state.sector_confidence = sector_context.get("confidence", 0.0)
     state.kpi_mapping       = sector_context.get("kpis", [])
+    state.domain_constraints   = {
+    "dashboard_focus":      sector_context.get("dashboard_focus", ""),
+    "recommended_charts":   sector_context.get("recommended_charts", []),
+    "metadata_used":        sector_context.get("metadata_used", False),
+    "explanation":          sector_context.get("explanation", ""),
+}
 
     routing_target  = sector_context.get("routing_target", "")
     suggested_route = ROUTING_TARGET_MAP.get(routing_target)
@@ -97,3 +103,15 @@ async def call_nlq_chat(
     )
 
     return state
+async def reset_nlq_session(user_id: str) -> dict:
+    """
+    Appelle POST /chat/reset
+    Réinitialise l'historique de conversation d'un utilisateur.
+    """
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.post(
+            f"{NLQ_API_URL}/chat/reset",
+            json={"user_id": user_id}
+        )
+        return response.json()
+    # Retourne : {"history_cleared": true, "user_id": "...", "message": "..."}
