@@ -42,3 +42,12 @@ async def get_db():
             raise
         finally:
             await session.close()
+
+
+async def init_db_schema() -> None:
+    """Create missing tables from current ORM models (safe in dev)."""
+    # Ensure all model classes are imported so metadata is complete.
+    from app.models import dataset, project, user  # noqa: F401
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
