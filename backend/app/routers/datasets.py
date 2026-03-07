@@ -48,10 +48,10 @@ async def upload_dataset(
     project_id:   uuid.UUID,
     file:         UploadFile    = File(...),
     db:           AsyncSession  = Depends(get_db),
-    current_user: User          = Depends(get_current_user),
+    current_user: dict          = Depends(get_current_user),
     minio:        MinioService  = Depends(get_minio_service),
 ):
-    project = await _get_project_or_404(db, project_id, current_user.company_id)
+    project = await _get_project_or_404(db, project_id, current_user["company_id"])
 
     file_bytes = await file.read()
 
@@ -115,10 +115,10 @@ async def get_preview(
     dataset_id:   uuid.UUID,
     n:            int          = 10,
     db:           AsyncSession = Depends(get_db),
-    current_user: User         = Depends(get_current_user),
+    current_user: dict         = Depends(get_current_user),
     minio:        MinioService = Depends(get_minio_service),
 ):
-    await _get_project_or_404(db, project_id, current_user.company_id)
+    await _get_project_or_404(db, project_id, current_user["company_id"])
     dataset = await _get_dataset_or_404(db, dataset_id, project_id)
 
     svc = DatasetService(minio)
@@ -131,9 +131,9 @@ async def get_profile(
     project_id:   uuid.UUID,
     dataset_id:   uuid.UUID,
     db:           AsyncSession = Depends(get_db),
-    current_user: User         = Depends(get_current_user),
+    current_user: dict         = Depends(get_current_user),
 ):
-    await _get_project_or_404(db, project_id, current_user.company_id)
+    await _get_project_or_404(db, project_id, current_user["company_id"])
     await _get_dataset_or_404(db, dataset_id, project_id)
 
     result = await db.execute(
@@ -154,9 +154,9 @@ async def update_metadata(
     dataset_id:   uuid.UUID,
     body:         MetadataUpdateRequest,
     db:           AsyncSession = Depends(get_db),
-    current_user: User         = Depends(get_current_user),
+    current_user: dict         = Depends(get_current_user),
 ):
-    await _get_project_or_404(db, project_id, current_user.company_id)
+    await _get_project_or_404(db, project_id, current_user["company_id"])
     dataset = await _get_dataset_or_404(db, dataset_id, project_id)
 
     result = await db.execute(
@@ -180,10 +180,10 @@ async def delete_dataset(
     project_id:   uuid.UUID,
     dataset_id:   uuid.UUID,
     db:           AsyncSession = Depends(get_db),
-    current_user: User         = Depends(get_current_user),
+    current_user: dict         = Depends(get_current_user),
     minio:        MinioService = Depends(get_minio_service),
 ):
-    await _get_project_or_404(db, project_id, current_user.company_id)
+    await _get_project_or_404(db, project_id, current_user["company_id"])
     dataset = await _get_dataset_or_404(db, dataset_id, project_id)
 
     svc = DatasetService(minio)
