@@ -87,7 +87,7 @@ services:
     networks:
       - nexora_net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8080'"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -102,6 +102,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      keycloak:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-dxc}:${POSTGRES_PASSWORD:-dxcpassword}@postgres:5432/${POSTGRES_DB:-dxc_insight}
       MINIO_ENDPOINT: minio:9000
@@ -109,6 +111,12 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
       MINIO_BUCKET: ${MINIO_BUCKET:-dxc-datasets}
       MINIO_SECURE: "false"
+      KEYCLOAK_URL: ${KEYCLOAK_URL:-http://keycloak:8080}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-dxc}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dxc_frontend}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-0TEEu2mA9sOIY3YHZhMIMBfseUImh3WY}
+      KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:-dxc_backend}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-sbZ2ol7kpC6uUrZbmmO1zTn1C8TcrIzB}
       SECRET_KEY: ${SECRET_KEY:-changeme-in-production-32chars-min}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
       ENVIRONMENT: ${ENVIRONMENT:-development}
@@ -118,6 +126,19 @@ services:
       - ./backend/app:/app/app   
       - ./backend/feature3:/app/feature3
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - nexora_net
+
+  # ─── DXC Insight Hub Frontend ─────────────────────────
+  dxc-insight-hub:
+    build:
+      context: ./dxc-insight-hub
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "5173:5173"
     networks:
       - nexora_net
 
