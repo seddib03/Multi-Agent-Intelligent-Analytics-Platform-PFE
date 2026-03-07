@@ -1,61 +1,41 @@
+# tests/test_nlq_integration.py
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
-from app.graph.state import OrchestratorState, SectorEnum, ExecutionTypeEnum
-from app.clients.nlq_client import call_nlq_and_context
+from app.graph.state import OrchestratorState, SectorEnum, RouteEnum
+from app.clients.nlq_client import call_detect_sector
 
 
 @pytest.mark.asyncio
-async def test_real_nlq_integration():
-    """Teste l'intégration avec l'API de ta collègue (mockée)"""
+async def test_detect_sector_transport():
+    """Teste POST /detect-sector avec une query Transport"""
 
-    # ── Réponses simulées de son API ──────────────────────────────
-    mock_nlq = {
-        "intent": "compare",
-        "metric": "revenue",
-        "timeframe": "2022-2023",
-        "location": "Rabat",
-        "confidence": 0.82
-    }
-    mock_ctx = {
-        "sector": "retail",
-        "canonical_metric": "total_sales_amount",
-        "execution_type": "sql",
-        "confidence": 0.88,
-        "data_source": {"database": "retail_db", "table": "transactions"}
+    # Réponse simulée de son API
+    mock_sector_context = {
+        "sector": "transport",
+        "confidence": 0.92,
+        "kpis": ["retard_moyen", "taux_ponctualite", "charge_vols"],
+        "routing_target": "transport_agent"
     }
 
-    # ── State initial ─────────────────────────────────────────────
     state = OrchestratorState(
         user_id="u_test",
         session_id="sess_test",
-        query_raw="Compare revenue between 2022 and 2023 in Rabat"
+        query_raw="améliorer l'expérience des passagers de l'aéroport"
     )
 
-    # ── Mock du client HTTP ───────────────────────────────────────
-    mock_nlq_resp = MagicMock()
-    mock_nlq_resp.json.return_value = mock_nlq
-
-    mock_ctx_resp = MagicMock()
-    mock_ctx_resp.json.return_value = mock_ctx
+    mock_response = MagicMock()
+    mock_response.json.return_value = mock_sector_context
 
     mock_client = AsyncMock()
-    mock_client.post = AsyncMock(side_effect=[mock_nlq_resp, mock_ctx_resp])
+    mock_client.post = AsyncMock(return_value=mock_response)
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
-    # ── Lancer le test ────────────────────────────────────────────
     with patch("app.clients.nlq_client.httpx.AsyncClient", return_value=mock_client):
-        result = await call_nlq_and_context(state)
+        result_state, suggested_route = await call_detect_sector(state)
 
-    # ── Assertions ────────────────────────────────────────────────
-    assert result.sector == SectorEnum.RETAIL
-    assert result.sector_confidence == 0.88
-    assert result.intent.value == "compare"
-    assert result.intent_confidence == 0.82
-    assert result.execution_type == ExecutionTypeEnum.SQL
-    assert result.canonical_metric == "total_sales_amount"
-    assert result.metric_raw == "revenue"
-    assert result.timeframe == "2022-2023"
-    assert result.location == "Rabat"
-    assert result.data_source == {"database": "retail_db", "table": "transactions"}
-    assert any("nlq_client" in step for step in result.processing_steps)
+    assert result_state.sector == SectorEnum.TRANSPORT
+    assert result_state.sector_confidence == 0.92
+    assert "retard_moyen" in result_state.kpi_mapping
+    assert suggested_route == RouteEnum.TRANSPORT_AGENT
+    assert any("detect_sector" in step for step in result_state.processing_steps)
