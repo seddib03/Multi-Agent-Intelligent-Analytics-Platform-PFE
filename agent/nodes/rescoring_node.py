@@ -49,11 +49,13 @@ def rescoring_node(state: AgentState) -> dict:
     metadata = _load_metadata(state["metadata"])
 
     quality_after = compute_quality_report(
-        df=df,
+        # df=df,
         metadata=metadata,
         label="APRÈS",
         sector=state.get("sector", "unknown"),
         job_id=state["job_id"],
+        duckdb_path=state["duckdb_path"],
+
     )
 
     # Calculer le gain par rapport au score AVANT

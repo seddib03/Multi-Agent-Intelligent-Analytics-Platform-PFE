@@ -1,5 +1,0 @@
-id,age,email,status
-1,25.0,a@b.com,ACTIF
-2,150.0,invalid,INACTIF
-2,,c@d.com,DELETED
-4,30.0,e@f.com,ACTIF

@@ -81,7 +81,6 @@ def profiling_node(state: AgentState) -> dict:
         # ── Export HTML → fichier temporaire → upload MinIO ───────────────
         tmp_dir  = Path(tempfile.gettempdir())
         html_tmp = tmp_dir / f"profiling_{job_id[:8]}.html"
-        json_tmp = tmp_dir / f"profiling_{job_id[:8]}.json"
 
         logger.info("Export HTML en cours...")
         profile.to_file(str(html_tmp))
@@ -100,18 +99,17 @@ def profiling_node(state: AgentState) -> dict:
         html_tmp.unlink(missing_ok=True)
         logger.info("HTML uploadé MinIO : %s", html_minio)
 
-        # ── Export JSON → fichier temporaire → upload MinIO ───────────────
-        logger.info("Export JSON en cours...")
-        profile.to_file(str(json_tmp))
+        # ── Export JSON (optimisé via to_json()) ───────────────────────────
+        logger.info("Export JSON en cours (mémoire)...")
+        json_str = profile.to_json()
+        profile_dict = json.loads(json_str)
 
-        profile_dict = json.loads(json_tmp.read_text(encoding="utf-8"))
-        json_minio   = minio.upload_gold(
+        json_minio = minio.upload_gold(
             job_id=job_id,
             sector=sector,
             report=profile_dict,
             filename="profiling_report.json",
         )
-        json_tmp.unlink(missing_ok=True)
         logger.info("JSON uploadé MinIO : %s", json_minio)
 
         # ── Extraire le résumé compact pour le state ───────────────────────
@@ -132,9 +130,10 @@ def profiling_node(state: AgentState) -> dict:
 
     except Exception as e:
         logger.error(
-            "Erreur ydata-profiling : %s — fallback basique Pandas", e,
+            "Erreur critique NODE 2 (ydata-profiling) : %s", e,
             exc_info=True,
         )
+        # Fallback basique pour que le pipeline ne s'arrête pas
         profiling_summary = _basic_profiling(df)
 
     logger.info(

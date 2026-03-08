@@ -255,20 +255,38 @@ async def get_profiling_json(
     sector: str = "unknown",
 ) -> JSONResponse:
     """
-    Retourne le résumé structuré du profiling depuis MinIO Gold.
-
-    Lit le JSON complet ydata depuis MinIO, en extrait les métriques
-    utiles (sans histogrammes ni samples volumieux).
-
-    Exemple : GET /jobs/{id}/profiling-json?sector=assurance
+    Retourne le résumé structuré du profiling.
+    Tente de lire depuis le State d'abord, puis MinIO.
     """
+    summary = None
+    config  = {"configurable": {"thread_id": job_id}}
+    
     try:
-        full_json = MinioClient().download_gold_json(
-            job_id=job_id,
-            sector=sector,
-            filename="profiling_report.json",
-        )
-        summary = _extract_profiling_summary(full_json)
+        # 1. Tenter depuis le State
+        try:
+            snapshot = agent_graph.get_state(config)
+            if snapshot.values:
+                summary = snapshot.values.get("profiling_summary")
+                if summary:
+                    logger.info("Résumé profiling récupéré depuis le State pour le job %s", job_id)
+        except Exception as e:
+            logger.warning("Échec lecture state pour profiling %s : %s", job_id, e)
+
+        # 2. Tenter depuis MinIO si pas dans le state
+        if not summary:
+            try:
+                full_json = MinioClient().download_gold_json(
+                    job_id=job_id,
+                    sector=sector,
+                    filename="profiling_report.json",
+                )
+                summary = _extract_profiling_summary(full_json)
+                logger.info("Résumé profiling récupéré depuis MinIO pour le job %s", job_id)
+            except Exception as e:
+                logger.warning("Échec lecture MinIO pour profiling %s : %s", job_id, e)
+        
+        if not summary:
+            raise ValueError(f"Aucun résumé trouvé dans le State ou MinIO (secteur: {sector}).")
 
         return JSONResponse({
             "job_id":          job_id,
@@ -277,12 +295,12 @@ async def get_profiling_json(
             "html_report_url": f"/jobs/{job_id}/profiling?sector={sector}",
         })
     except Exception as e:
+        logger.error("Erreur globale profiling-json pour %s : %s", job_id, e)
         raise HTTPException(
             status_code=404,
             detail=(
-                f"JSON introuvable dans MinIO. "
-                f"gold / {sector} / {job_id} / profiling_report.json. "
-                f"Erreur : {e}"
+                f"Résumé de profiling introuvable pour {job_id} (ni dans l'état, ni dans MinIO). "
+                f"Vérifiez que le secteur '{sector}' est correct. Erreur : {e}"
             ),
         )
 
