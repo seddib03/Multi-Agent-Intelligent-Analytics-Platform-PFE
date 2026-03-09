@@ -19,13 +19,27 @@ async def call_prepare(
     Output : job_id + quality_before + anomalies plan
     """
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             with open(state.csv_path, "rb") as f:
-                response = await client.post(
+                """response = await client.post(
                     f"{DATA_PREP_API_URL}/prepare",
                     files={"dataset": f},
                     data={"metadata": json.dumps(state.metadata)}
-                )
+                )"""
+                import io
+                metadata_bytes = json.dumps(state.metadata).encode("utf-8")
+                response = await client.post(
+                    f"{DATA_PREP_API_URL}/prepare",
+                    files={
+                         "dataset":  ("dataset.csv", f, "text/csv"),
+                         "metadata": ("metadata.json", 
+                                    io.BytesIO(metadata_bytes), 
+                                    "application/json")
+    }
+)
+                print(f"HTTP Status : {response.status_code}")
+                print(f"Response    : {response.text[:500]}")
+            
                 result = response.json()
                 state.data_prep_job_id = result.get("job_id", "")
                 state.data_prep_status = DataPrepStatusEnum(
@@ -105,7 +119,7 @@ async def call_get_data_profile(
             },
             "quality_score": state.data_prep_quality.get(
                 "global", 0
-            ) * 100
+            ) 
         }
 
         state.processing_steps.append(
