@@ -5,6 +5,7 @@ from app.graph.nodes.nlq_node import nlq_node
 from app.graph.nodes.routing_node import routing_node
 from app.graph.nodes.dispatch_node import dispatch_node
 from app.graph.nodes.response_node import response_node
+from app.graph.nodes.data_prep_node import data_prep_node
 
 def build_orchestrator_graph():
     """
@@ -16,6 +17,7 @@ def build_orchestrator_graph():
 
     graph.add_node("sector_detection", _wrap(sector_detection_node))
     graph.add_node("nlq",              _wrap(nlq_node))
+    graph.add_node("data_prep",        _wrap(data_prep_node))
     graph.add_node("routing",          _wrap(routing_node))
     graph.add_node("dispatch",         _wrap(dispatch_node))
     graph.add_node("response",         _wrap(response_node))
@@ -25,7 +27,9 @@ def build_orchestrator_graph():
     # Sequential edges
 
     graph.add_edge("sector_detection", "nlq")
-    graph.add_edge("nlq",              "routing")
+    graph.add_edge("nlq",              "data_prep")
+    graph.add_edge("data_prep",        "routing")
+    graph.add_edge("routing",          "dispatch")
     graph.add_edge("dispatch",         "response")
     graph.add_edge("response",         END)
 
