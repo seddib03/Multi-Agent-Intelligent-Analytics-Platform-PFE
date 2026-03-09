@@ -1,31 +1,37 @@
-# DXC Insight Hub
+# Frontend App
 
-## Getting started
+## Overview
 
-Requirements:
+This frontend is built with React + TypeScript and uses Vite for development and production builds.
 
-- Node.js
-- npm
+## Prerequisites
 
-Install dependencies and start the app:
+- Node.js 18+
+- npm 9+
+
+## Local Development
 
 ```sh
 npm install
 npm run dev
 ```
 
-## Available scripts
+## Build
 
-- `npm run dev` — Start development server
-- `npm run build` — Build production bundle
-- `npm run preview` — Preview production build
-- `npm run lint` — Run ESLint
-- `npm run test` — Run unit tests
+```sh
+npm run build
+```
 
-## Tech stack
+## Preview Production Build
 
-- Vite
-- TypeScript
+```sh
+npm run preview
+```
+
+## Tech Stack
+
 - React
-- shadcn-ui
+- TypeScript
+- Vite
 - Tailwind CSS
+- shadcn/ui
