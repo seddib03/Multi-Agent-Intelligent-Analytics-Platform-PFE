@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from typing import Optional
 # This module defines the input schema for the orchestrator app, including user query input and orchestrator state.
 #User query input
 class UserQueryInput(BaseModel):
@@ -6,6 +7,8 @@ class UserQueryInput(BaseModel):
     user_id: str = Field(..., description="Unique Identifier of user")
     session_id: str = Field(..., description="Session Id for memory")
     query: str = Field(..., min_length=1, description="The question in natural language")
+    csv_path:  Optional[str] = None
+    metadata:  Optional[dict] = None
 
     class Config:
         json_schema_extra = {
