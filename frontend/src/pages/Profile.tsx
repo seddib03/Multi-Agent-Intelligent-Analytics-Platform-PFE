@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useAppStore } from "@/stores/appStore";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { t } from "@/lib/i18n";
+import BrandLogo from "@/components/BrandLogo";
 import { toast } from "sonner";
 
 export default function Profile() {
@@ -34,15 +35,21 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="bg-dxc-midnight text-white px-4 md:px-6 py-4 flex items-center gap-4">
-        <button onClick={() => navigate("/app")} className="hover:text-dxc-peach transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label={t("back", lang)}><ArrowLeft size={20} /></button>
-        <div>
-          <span className="font-bold text-xl">DXC</span>
-          <span className="text-dxc-peach text-xs ml-1">{t("insightPlatform", lang)}</span>
+      <header className="sticky top-0 z-40 bg-dxc-midnight text-white px-4 md:px-6 py-3">
+        <div className="max-w-2xl mx-auto flex flex-col items-center gap-2">
+          <BrandLogo logoClassName="h-8" subtitleClassName="text-[14px] font-semibold" showSubtitle />
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto py-10 px-4 md:px-6">
+      <div className="max-w-2xl mx-auto py-6 px-4 md:px-6">
+        <button
+          onClick={() => navigate("/app")}
+          className="mb-3 hover:text-dxc-peach transition-colors min-h-[44px] inline-flex items-center gap-2"
+          aria-label={t("back", lang)}
+        >
+          <ArrowLeft size={20} />
+          <span className="text-sm font-medium">Retour</span>
+        </button>
         <h1 className="text-2xl font-bold text-foreground mb-8">{t("myProfile", lang)}</h1>
         <div className="bg-card rounded-2xl shadow-sm p-6 md:p-8 space-y-8 border border-border">
           <div className="flex items-center gap-6">

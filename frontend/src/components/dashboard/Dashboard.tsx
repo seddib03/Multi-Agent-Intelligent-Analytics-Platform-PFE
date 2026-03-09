@@ -5,6 +5,7 @@ import { ACCENT_THEMES, DXC_CHART_COLORS } from "@/types/app";
 import type { AccentTheme, ChartStyle, Density, Language } from "@/types/app";
 import { RefreshCw, Download, Settings, X, ArrowUp, ArrowDown, MessageSquare, Check, Globe } from "lucide-react";
 import { AccountMenu } from "@/components/ui/AccountMenu";
+import BrandLogo from "@/components/BrandLogo";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { t } from "@/lib/i18n";
 import {
@@ -89,13 +90,7 @@ export function Dashboard() {
       {/* Header */}
       <div className="bg-dxc-midnight px-4 md:px-6 py-4 flex items-center justify-between flex-wrap gap-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <img src="/images/logo.png" alt="Logo" className="h-6 w-6 object-contain" />
-            <span className="text-dxc-peach text-xs font-semibold">Intelligent Analytics</span>
-          </div>
-          <h1 className="text-dxc-peach font-bold text-base md:text-lg truncate">
-            {t("dashboardTitle", language)} — {useAppStore.getState().onboarding.useCaseDescription.slice(0, 50)}...
-          </h1>
+          <BrandLogo logoClassName="h-7" subtitleClassName="text-[13px] font-semibold" className="mb-0.5" />
           <p className="text-white/80 text-xs mt-0.5">{sectorInfo.icon} {sectorInfo.label} · {t("binaryClassification", language)} · {t("updatedAt", language)} {timeStr}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
