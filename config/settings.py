@@ -108,9 +108,11 @@ class Settings(BaseSettings):
 
     # ── Qualité des données ────────────────────────────────────────────────────
     # Seuil minimum pour que le pipeline continue vers delivery
-    weight_completeness: float = Field(default=0.40)
-    weight_validity: float     = Field(default=0.40)
+    weight_completeness: float = Field(default=0.25)
+    weight_validity: float     = Field(default=0.25)
     weight_uniqueness: float   = Field(default=0.20)
+    weight_accuracy: float     = Field(default=0.15)
+    weight_consistency: float  = Field(default=0.15)
 
     # Seuil de qualité acceptable (0-100)
     quality_threshold: float = Field(default=80.0)

@@ -124,6 +124,48 @@ def detect_anomalies(
                     detail.get("date_errors_samples", []), total
                 ))
 
+        # ── Anomalies de Consistency (Business Rules) ─────────────────────
+        if col_score.consistency is not None and col_score.consistency < 100:
+            detail = col_score.consistency_detail
+            if detail.get("business_rule_errors"):
+                for br_error in detail["business_rule_errors"]:
+                    anomalies.append(_make_business_rule_anomaly(
+                        col_meta, br_error, "consistency", total
+                    ))
+
+        # ── Anomalies de Accuracy (Côté Business Rules / Custom) ───────────
+        if col_score.accuracy is not None and col_score.accuracy < 100:
+            detail = col_score.accuracy_detail
+            if detail.get("business_rule_errors"):
+                for br_error in detail["business_rule_errors"]:
+                    anomalies.append(_make_business_rule_anomaly(
+                        col_meta, br_error, "accuracy", total
+                    ))
+
+    # ── Anomalies Table-Level (ex: row_not_duplicate ou règles métier globales) ──
+    for tl_rule in getattr(quality_report, "table_level_business_rules", []):
+        rule_name = tl_rule.get("test_type", "règle métier")
+        count = tl_rule.get("count", 0)
+        rows = tl_rule.get("rows", [])
+        
+        anomalies.append(AnomalyItem(
+            anomaly_id=f"anomaly_{uuid.uuid4().hex[:6]}",
+            column_name="", # Table-level
+            dimension=tl_rule.get("dimension", "consistency"),
+            anomaly_type=AnomalyType.CUSTOM_RULE,
+            problem_description=f"Violation de la règle métier : '{rule_name}'. Affecte {count} ligne(s).",
+            affected_rows=rows[:500],
+            affected_count=count,
+            affected_pct=float(count / total * 100) if total else 0.0,
+            anomaly_source="business_rule",
+            action_1=CleaningAction.FLAG_ONLY,
+            justification_1="Signaler la violation pour investigation",
+            action_2=CleaningAction.DROP_ROWS,
+            justification_2="Supprimer les lignes invalides",
+            action_3=CleaningAction.FLAG_ONLY,
+            justification_3="Conserver sans modification",
+        ))
+
     plan = CleaningPlan(
         plan_id=f"plan_{job_id[:8]}",
         job_id=job_id,
@@ -372,4 +414,38 @@ def _make_date_anomaly(
         justification_2="Signaler sans modifier — correction manuelle recommandée",
         action_3=CleaningAction.DROP_ROWS,
         justification_3="Supprimer les lignes avec date invalide",
+    )
+
+
+def _make_business_rule_anomaly(
+    meta:       ColumnMeta,
+    br_error:   dict,
+    dimension:  str,
+    total:      int,
+) -> AnomalyItem:
+    """Anomalie : violation d'une règle métier (Business Rule)."""
+    
+    rule_name  = br_error.get("rule_name", "règle métier inconnue")
+    error_rows = br_error.get("failed_rows", [])
+    count      = len(error_rows)
+    
+    return AnomalyItem(
+        anomaly_id=f"anomaly_{uuid.uuid4().hex[:6]}",
+        column_name=meta.column_name,
+        dimension=dimension,
+        anomaly_type=AnomalyType.CUSTOM_RULE if hasattr(AnomalyType, 'CUSTOM_RULE') else AnomalyType.OUT_OF_RANGE,
+        anomaly_source="business_rule",
+        problem_description=(
+            f"La colonne '{meta.business_name}' viole la règle métier : '{rule_name}'. "
+            f"Ceci a affecté {count} ligne(s)."
+        ),
+        affected_rows=error_rows[:100],  # Limiter pour éviter les out-of-memory
+        affected_count=count,
+        affected_pct=float(count / total * 100) if total else 0.0,
+        action_1=CleaningAction.FLAG_ONLY,
+        justification_1="Signaler la violation pour investigation manuelle",
+        action_2=CleaningAction.DROP_ROWS,
+        justification_2="Supprimer les lignes ne respectant pas la règle métier",
+        action_3=CleaningAction.FLAG_ONLY, # Fallback
+        justification_3="Conserver en isolant",
     )

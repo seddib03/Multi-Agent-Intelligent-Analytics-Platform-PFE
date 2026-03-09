@@ -24,6 +24,7 @@ class AnomalyType(str, Enum):
     INVALID_ENUM     = "invalid_enum"      # Validity
     PATTERN_MISMATCH = "pattern_mismatch"  # Validity
     INVALID_DATE     = "invalid_date"      # Validity
+    CUSTOM_RULE      = "custom_rule"       # Business Rules (Consistency/Accuracy)
 
 
 class CleaningAction(str, Enum):
@@ -84,6 +85,9 @@ class AnomalyItem:
     justification_2: str
     justification_3: str
 
+    # Source de l'anomalie ("metadata" ou "business_rule")
+    anomaly_source: str = "metadata"
+
     # Valeurs invalides trouvées (sample pour affichage)
     sample_invalid_values: list = field(default_factory=list)
 
@@ -102,6 +106,7 @@ class AnomalyItem:
             "column_name":   self.column_name,
             "dimension":     self.dimension,
             "anomaly_type":  self.anomaly_type.value,
+            "anomaly_source": self.anomaly_source,
             "problem":       self.problem_description,
             "affected_rows": [r + 2 for r in self.affected_rows[:50]],
             "affected_count": self.affected_count,

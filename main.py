@@ -88,7 +88,6 @@ async def prepare(
         "status":         "waiting_validation",
         "sector":         state.get("sector", "unknown"),
         "quality_before": quality_before if quality_before else {},
-        "llm_summary":    state.get("llm_summary", ""),
         "plan":           cleaning_plan.to_dict() if cleaning_plan else {},
         "profiling_html": f"/jobs/{job_id}/profiling?sector={state.get('sector','unknown')}",
         "profiling_json": f"/jobs/{job_id}/profiling-json?sector={state.get('sector','unknown')}",
@@ -111,7 +110,6 @@ async def get_plan(job_id: str) -> JSONResponse:
     return JSONResponse({
         "job_id":         job_id,
         "status":         state.get("status"),
-        "llm_summary":    state.get("llm_summary", ""),
         "plan":           cleaning_plan.to_dict(),
         "quality_before": state.get("quality_before") or {},
     })
@@ -176,12 +174,16 @@ async def validate_plan(job_id: str, payload: ValidationRequest) -> JSONResponse
                 "completeness": qb_scores.get("completeness"),
                 "validity":     qb_scores.get("validity"),
                 "uniqueness":   qb_scores.get("uniqueness"),
+                "accuracy":     qb_scores.get("accuracy"),
+                "consistency":  qb_scores.get("consistency"),
             },
             "after": {
                 "global":       qa_scores.get("global"),
                 "completeness": qa_scores.get("completeness"),
                 "validity":     qa_scores.get("validity"),
                 "uniqueness":   qa_scores.get("uniqueness"),
+                "accuracy":     qa_scores.get("accuracy"),
+                "consistency":  qa_scores.get("consistency"),
             },
             "gain": round(
                 (qa_scores.get("global", 0) or 0) - (qb_scores.get("global", 0) or 0), 1

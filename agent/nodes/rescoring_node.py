@@ -2,7 +2,7 @@
 agent/nodes/rescoring_node.py
 NODE 7 — Rescoring
 ─────────────────────────────
-Recalcule les 3 dimensions de qualité APRÈS nettoyage.
+Recalcule les 5 dimensions de qualité APRÈS nettoyage.
 
 Utilise le même quality_engine que NODE 3 mais sur clean_df
 au lieu de raw_df. Le label est "APRÈS" pour la comparaison.
@@ -47,15 +47,15 @@ def rescoring_node(state: AgentState) -> dict:
 
     df       = _load_df(state["clean_df"])
     metadata = _load_metadata(state["metadata"])
+    business_rules = state.get("business_rules", [])
 
     quality_after = compute_quality_report(
-        # df=df,
         metadata=metadata,
         label="APRÈS",
         sector=state.get("sector", "unknown"),
         job_id=state["job_id"],
         duckdb_path=state["duckdb_path"],
-
+        business_rules=business_rules,
     )
 
     # Calculer le gain par rapport au score AVANT
@@ -67,11 +67,14 @@ def rescoring_node(state: AgentState) -> dict:
 
     logger.info(
         "NODE 7 terminé — score global APRÈS: %.1f%% "
-        "(Completeness: %.1f%% | Validity: %.1f%% | Uniqueness: %.1f%%) | gain: %+.1f%%",
+        "(Completeness: %.1f%% | Validity: %.1f%% | Uniqueness: %.1f%% "
+        "| Accuracy: %.1f%% | Consistency: %.1f%%) | gain: %+.1f%%",
         quality_after.global_score,
         quality_after.completeness_global,
         quality_after.validity_global,
         quality_after.uniqueness_global,
+        quality_after.accuracy_global,
+        quality_after.consistency_global,
         gain,
     )
     return {"quality_after": quality_after.to_dict()}

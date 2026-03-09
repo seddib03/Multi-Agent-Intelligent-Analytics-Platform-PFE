@@ -35,10 +35,12 @@ def ingestion_node(state: AgentState) -> dict:
     df = pd.read_csv(state["dataset_path"], dtype=str, keep_default_na=True)
     logger.info("Dataset chargé — %d lignes x %d colonnes", len(df), len(df.columns))
 
-    # Détecter le secteur depuis le metadata si présent
+    # Détecter le secteur et les business rules depuis le metadata si présent
     sector = "unknown"
+    business_rules = []
     if isinstance(raw_meta, dict):
         sector = raw_meta.get("sector", raw_meta.get("secteur", "unknown"))
+        business_rules = raw_meta.get("business_rules", [])
 
     # Upload Bronze MinIO
     minio = MinioClient()
@@ -72,11 +74,12 @@ def ingestion_node(state: AgentState) -> dict:
     import dataclasses
     meta_dicts = [dataclasses.asdict(m) for m in metadata]
 
-    logger.info("NODE 1 terminé — Bronze: %s", bronze_path)
+    logger.info("NODE 1 terminé — Bronze: %s, %d business rules", bronze_path, len(business_rules))
     return {
-        "raw_df":      raw_df_dict,
-        "metadata":    meta_dicts,
-        "bronze_path": bronze_path,
-        "duckdb_path": duckdb_path,
-        "sector":      sector,
+        "raw_df":         raw_df_dict,
+        "metadata":       meta_dicts,
+        "business_rules": business_rules,
+        "bronze_path":    bronze_path,
+        "duckdb_path":    duckdb_path,
+        "sector":         sector,
     }
