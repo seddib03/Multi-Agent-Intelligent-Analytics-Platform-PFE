@@ -62,7 +62,7 @@ export function ChatHistoryDrawer({ open, onClose }: ChatHistoryDrawerProps) {
   return (
     <>
       <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
-      <div className="fixed left-0 top-0 bottom-0 w-[320px] sm:w-[360px] bg-dxc-midnight z-50 animate-slide-in-left flex flex-col">
+      <div className="fixed left-0 top-0 bottom-0 w-[260px] bg-dxc-midnight z-50 animate-slide-in-left flex flex-col">
         <div className="p-4 border-b border-dxc-royal/20">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">

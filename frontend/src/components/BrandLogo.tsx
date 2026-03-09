@@ -24,7 +24,7 @@ export default function BrandLogo({
 
       {showSubtitle ? (
         <span className={cn('text-dxc-peach text-xs', subtitleClassName)}>
-          Intelligent Analytics Platform
+          Intelligent Analytics
         </span>
       ) : null}
     </div>

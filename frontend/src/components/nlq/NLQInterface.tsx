@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { SECTOR_LABELS, getSuggestedQuestions, generateMockResponse } from "@/lib/mockData";
 import { DXC_CHART_COLORS } from "@/types/app";
-import { Send, Download, BarChart3, Pin, Plus, MessageSquare, Lightbulb, History, Menu, X } from "lucide-react";
+import { Send, Download, BarChart3, Pin, Plus, MessageSquare, Lightbulb, History, Menu, X, User, Settings } from "lucide-react";
 import { ChatHistoryDrawer } from "@/components/chat/ChatHistoryDrawer";
 import { AccountMenu } from "@/components/ui/AccountMenu";
+import BrandLogo from "@/components/BrandLogo";
 import { t } from "@/lib/i18n";
 import { toast } from "sonner";
 import { useDarkMode } from "@/hooks/useDarkMode";
@@ -83,11 +85,13 @@ function ProcessingIndicator() {
 
 export function NLQInterface() {
   const { dataset, messages, addMessage, togglePin, setPhase, userPreferences, resetProject, clearMessages } = useAppStore();
+  const navigate = useNavigate();
   const lang = userPreferences.language;
   const [input, setInput] = useState("");
   const [processing, setProcessing] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   useDarkMode();
@@ -132,36 +136,32 @@ export function NLQInterface() {
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
       {/* Sidebar */}
-      <div className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 fixed lg:relative z-50 lg:z-auto w-[260px] bg-dxc-midnight flex flex-col shrink-0 h-full transition-transform duration-300`}>
-        <div className="p-4 border-b border-dxc-royal/20 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <img src="/images/logo.png" alt="Logo" className="h-7 w-7 object-contain" />
-            <span className="text-dxc-peach text-xs font-semibold">Intelligent Analytics</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <button onClick={() => setHistoryOpen(true)} className="p-1.5 rounded-lg bg-dxc-royal/20 text-dxc-peach hover:bg-dxc-royal/30 hover:text-dxc-white transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label={t("chatHistory", lang)}>
-              <History size={14} />
+      <div className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} ${sidebarCollapsed ? "lg:-translate-x-full lg:w-0 lg:overflow-hidden" : "lg:translate-x-0"} fixed lg:relative z-50 lg:z-auto w-[260px] bg-dxc-midnight flex flex-col shrink-0 h-full transition-transform duration-300`}>
+        <div className="p-3 border-b border-dxc-royal/20">
+          <div className="flex items-center justify-between gap-2">
+            <button onClick={() => setSidebarCollapsed(true)} className="hidden lg:flex p-1.5 rounded-lg bg-dxc-royal/20 text-dxc-white min-w-[36px] min-h-[36px] items-center justify-center" aria-label="Masquer la sidebar">
+              <X size={14} />
             </button>
-            <button onClick={() => setSidebarOpen(false)} className="p-1.5 rounded-lg text-dxc-peach hover:text-dxc-white lg:hidden min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label="Fermer le menu">
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-
-        {/* Active project name */}
-        <div className="px-4 pt-4 pb-1">
-          <p className="text-dxc-peach text-[10px] uppercase tracking-wider font-semibold">{t("activeProject", lang)}</p>
-          <p className="text-dxc-white text-xs font-medium mt-1 line-clamp-2">
-            {useAppStore.getState().onboarding.useCaseDescription || "—"}
-          </p>
-        </div>
-
-        <div className="p-4 pt-2">
-          <div className="bg-dxc-royal/20 border-l-[3px] border-dxc-melon rounded-r-lg p-3 space-y-2">
-            <div className="flex gap-1.5 flex-wrap">
-              <span className="text-xs bg-dxc-royal text-dxc-white px-1.5 py-0.5 rounded">{sectorInfo.icon} {sectorInfo.label}</span>
-              <span className="text-xs bg-dxc-melon/20 text-dxc-peach px-1.5 py-0.5 rounded">XGBoost · AUC 0.87</span>
+            <BrandLogo logoClassName="h-5" showSubtitle={false} />
+            <div className="flex items-center gap-2">
+              <button onClick={() => setHistoryOpen(true)} className="p-1.5 rounded-lg bg-dxc-royal/20 text-dxc-white min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label={t("chatHistory", lang)}>
+                <History size={14} />
+              </button>
+              <button onClick={() => setSidebarOpen(false)} className="p-1.5 rounded-lg text-dxc-peach lg:hidden min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label="Fermer le menu">
+                <X size={16} />
+              </button>
             </div>
+          </div>
+        </div>
+
+        <div className="px-4 pt-4 pb-1">
+          <p className="text-xs text-dxc-white">Secteur: <span className="text-dxc-melon font-semibold">{sectorInfo.label}</span></p>
+        </div>
+
+        <div className="px-4 pt-2 pb-1">
+          <div className="bg-dxc-royal/20 border-l-[3px] border-dxc-melon rounded-r-lg p-3 space-y-2">
+            <p className="text-dxc-peach text-[10px] uppercase tracking-wider font-semibold">Use case</p>
+            <p className="text-dxc-white text-xs font-medium line-clamp-2">{useAppStore.getState().onboarding.useCaseDescription || "—"}</p>
           </div>
         </div>
 
@@ -208,15 +208,34 @@ export function NLQInterface() {
         </div>
       </div>
 
+      {sidebarCollapsed && (
+        <div className="hidden lg:flex w-[56px] bg-dxc-midnight border-r border-dxc-royal/20 flex-col items-center gap-2 py-3 shrink-0 h-full">
+          <button onClick={() => setSidebarCollapsed(false)} className="p-2 rounded-lg bg-dxc-royal/20 text-dxc-white min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label="Reafficher la sidebar">
+            <Menu size={14} />
+          </button>
+          <div className="mt-auto flex flex-col items-center gap-2 pb-2">
+            <button onClick={() => setHistoryOpen(true)} className="p-2 rounded-lg bg-dxc-royal/20 text-dxc-white min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label={t("chatHistory", lang)}>
+              <History size={14} />
+            </button>
+            <button onClick={() => { clearMessages(); toast.success(t("newChatStarted", lang)); }} className="p-2 rounded-lg bg-dxc-royal/20 text-dxc-white min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label={t("newChat", lang)}>
+              <Plus size={14} />
+            </button>
+            <button onClick={() => navigate("/profile")} className="p-2 rounded-lg bg-dxc-royal/20 text-dxc-white min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label={t("myAccount", lang)}>
+              <User size={14} />
+            </button>
+            <button onClick={() => navigate("/settings")} className="p-2 rounded-lg bg-dxc-royal/20 text-dxc-white min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label={t("settings", lang)}>
+              <Settings size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
       <ChatHistoryDrawer open={historyOpen} onClose={() => setHistoryOpen(false)} />
 
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
         <div className="bg-card border-b border-border px-4 md:px-6 py-2 flex items-center gap-2 flex-wrap pl-14 lg:pl-6">
-          <div className="flex items-center gap-1.5 mr-1">
-            <img src="/images/logo.png" alt="Logo" className="h-5 w-5 object-contain" />
-            <span className="text-dxc-melon text-[10px] font-semibold">Intelligent Analytics</span>
-          </div>
+          <BrandLogo logoClassName="h-7" showSubtitle={false} className="mr-2" />
           <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded">{sectorInfo.label}</span>
           {useAppStore.getState().onboarding.analysisTypes.map((tStr) => (
             <span key={tStr} className="text-xs bg-dxc-melon/10 text-dxc-melon px-2 py-0.5 rounded">{tStr}</span>

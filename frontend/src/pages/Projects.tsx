@@ -7,6 +7,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { SECTOR_LABELS } from "@/lib/mockData";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { t } from "@/lib/i18n";
+import BrandLogo from "@/components/BrandLogo";
 
 export default function Projects() {
   const navigate = useNavigate();
@@ -23,10 +24,7 @@ export default function Projects() {
     <div className="min-h-screen bg-background">
       <header className="bg-dxc-midnight text-dxc-white px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div>
-            <span className="font-bold text-xl">DXC</span>
-            <span className="text-dxc-peach text-xs ml-1">{t("insightPlatform", lang)}</span>
-          </div>
+          <BrandLogo logoClassName="h-7" subtitleClassName="text-[13px] font-semibold" />
         </div>
         <div className="flex items-center gap-3">
           <AlertDialog>
