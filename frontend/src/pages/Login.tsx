@@ -8,6 +8,7 @@ import { LogIn, Eye, EyeOff, Mail, Lock, ArrowRight, BarChart3, Shield, Zap } fr
 import { useAppStore } from "@/stores/appStore";
 import { useAuth } from "@/hooks/useAuth";
 import { t } from "@/lib/i18n";
+import BrandLogo from "@/components/BrandLogo";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -40,17 +41,16 @@ const Login = () => {
   return (
     <div className="flex min-h-screen flex-row-reverse">
       {/* Branding panel — RIGHT side */}
-      <div className="hidden lg:flex lg:w-[48%] bg-dxc-midnight relative overflow-hidden flex-col justify-center items-center p-12">
+      <div className="hidden lg:flex lg:w-[48%] bg-dxc-midnight relative overflow-hidden flex-col justify-start items-center pt-20 pb-12 px-12">
         {/* Decorative blurs */}
         <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-dxc-royal/20 blur-[120px]" />
         <div className="absolute bottom-0 right-0 w-72 h-72 rounded-full bg-dxc-melon/10 blur-[100px]" />
 
         <div className="relative z-10 max-w-md w-full space-y-10">
           {/* Logo */}
-          <div>
-            <div className="flex items-center gap-2.5 mb-3">
-              <span className="text-white font-extrabold text-3xl tracking-tight">DXC</span>
-              <span className="text-dxc-peach text-sm font-semibold tracking-wide">{t("insightPlatform", lang)}</span>
+          <div className="text-center">
+            <div className="inline-flex">
+              <BrandLogo logoClassName="h-9" subtitleClassName="text-[15px] font-semibold" className="mb-2" />
             </div>
             <p className="text-white/40 text-sm leading-relaxed">{t("loginBrandingSubtitle", lang)}</p>
           </div>
@@ -91,8 +91,9 @@ const Login = () => {
         <div className="w-full max-w-[380px]">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-10">
-            <span className="text-primary font-extrabold text-2xl">DXC</span>
-            <span className="text-dxc-melon text-sm font-semibold ml-1.5">{t("insightPlatform", lang)}</span>
+            <div className="inline-flex">
+              <BrandLogo logoClassName="h-8" subtitleClassName="text-[14px] font-semibold" />
+            </div>
           </div>
 
           {/* Heading */}

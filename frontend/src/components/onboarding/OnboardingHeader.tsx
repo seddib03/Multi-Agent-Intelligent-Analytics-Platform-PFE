@@ -1,6 +1,7 @@
 import { useAppStore } from "@/stores/appStore";
 import { AccountMenu } from "@/components/ui/AccountMenu";
 import { t } from "@/lib/i18n";
+import BrandLogo from "@/components/BrandLogo";
 
 export function OnboardingHeader() {
   const step = useAppStore((s) => s.onboardingStep);
@@ -18,10 +19,7 @@ export function OnboardingHeader() {
   return (
     <div className="sticky top-0 z-50">
       <div className="bg-dxc-midnight px-4 md:px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center">
-          <img src="/images/logo.png" alt="Logo" className="h-7 w-7 object-contain" />
-          <span className="text-dxc-peach text-xs ml-2 font-semibold">Intelligent Analytics</span>
-        </div>
+        <BrandLogo logoClassName="h-7" subtitleClassName="text-[13px] font-semibold" showSubtitle />
         <AccountMenu variant="dark" position="top" />
       </div>
       <div className="bg-card border-b border-border px-4 md:px-6 py-3">
