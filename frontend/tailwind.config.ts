@@ -12,8 +12,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        display: ['"Space Grotesk"', 'system-ui', 'sans-serif'],
-        body: ['"DM Sans"', 'system-ui', 'sans-serif'],
+        sans: ["Inter", "system-ui", "sans-serif"],
+        mono: ["JetBrains Mono", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -59,17 +59,17 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
-        // DXC palette direct
-        "dxc-midnight": "hsl(var(--dxc-midnight))",
-        "dxc-white": "hsl(var(--dxc-white))",
-        "dxc-canvas": "hsl(var(--dxc-canvas))",
-        "dxc-peach": "hsl(var(--dxc-peach))",
-        "dxc-sky": "hsl(var(--dxc-sky))",
-        "dxc-gold": "hsl(var(--dxc-gold))",
-        "dxc-blue": "hsl(var(--dxc-blue))",
-        "dxc-melon": "hsl(var(--dxc-melon))",
-        "dxc-royal": "hsl(var(--dxc-royal))",
-        "dxc-red": "hsl(var(--dxc-red))",
+        // DXC Brand Colors
+        "dxc-midnight": "#0E1020",
+        "dxc-white": "#FFFFFF",
+        "dxc-canvas": "#F6F3F0",
+        "dxc-peach": "#FFC982",
+        "dxc-sky": "#A1E6FF",
+        "dxc-gold": "#FFAE41",
+        "dxc-blue": "#4995FF",
+        "dxc-melon": "#FF7E51",
+        "dxc-royal": "#004AAC",
+        "dxc-red": "#D14600",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -85,10 +85,30 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "fade-in": {
+          from: { opacity: "0", transform: "translateY(8px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "slide-in-right": {
+          from: { transform: "translateX(100%)" },
+          to: { transform: "translateX(0)" },
+        },
+        "progress-fill": {
+          from: { width: "0%" },
+          to: { width: "100%" },
+        },
+        "pulse-dot": {
+          "0%, 100%": { opacity: "0.3" },
+          "50%": { opacity: "1" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "fade-in": "fade-in 0.4s ease-out forwards",
+        "slide-in-right": "slide-in-right 0.3s ease-out",
+        "progress-fill": "progress-fill 1.5s ease-out forwards",
+        "pulse-dot": "pulse-dot 1.2s ease-in-out infinite",
       },
     },
   },

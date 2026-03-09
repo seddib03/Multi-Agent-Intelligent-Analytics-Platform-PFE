@@ -16,15 +16,15 @@ export default function BrandLogo({
   return (
     <div className={cn('flex items-center gap-1', className)}>
       <img
-        src="/images/logo.png"
+        src="/favion.ico"
         alt="DXC"
         className={cn('h-7 w-auto', logoClassName)}
         loading="eager"
       />
 
       {showSubtitle ? (
-        <span className={cn('text-dxc-peach text-xs font-body', subtitleClassName)}>
-          Intelligent Analytics Platform
+        <span className={cn('text-dxc-peach text-xs', subtitleClassName)}>
+          Intelligent Analytics
         </span>
       ) : null}
     </div>
