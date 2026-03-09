@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+.env
+storage/bronze/*
+storage/silver/*
+storage/gold/*
+!storage/bronze/.gitkeep
+!storage/silver/.gitkeep
+!storage/gold/.gitkeep
+.dbt/
+target/
+dbt_packages/
+logs/
+*.log
