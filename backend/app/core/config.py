@@ -25,12 +25,34 @@ class Settings(BaseSettings):
     MINIO_PREFIX_PROCESSED: str = "processed"
     MINIO_PREFIX_EXPORTS:   str = "exports"
 
-    # ── JWT ───────────────────────────────────────────────
-    SECRET_KEY:         str = "changeme-in-production-32chars-min"
-    JWT_ALGORITHM:      str = "HS256"
-    JWT_EXPIRE_MINUTES: int = 60
-    JWT_REFRESH_DAYS:   int = 30
+   # ── Keycloak ──────────────────────────────────────────
+    KEYCLOAK_URL:           str = "http://localhost:8080"
+    KEYCLOAK_REALM:         str = "dxc"
+    KEYCLOAK_CLIENT_ID:     str = "dxc_frontend"
+    KEYCLOAK_CLIENT_SECRET: str = "0TEEu2mA9sOIY3YHZhMIMBfseUImh3WY"
+    KEYCLOAK_ADMIN_CLIENT_ID:    str = "dxc_backend"
+    KEYCLOAK_ADMIN_CLIENT_SECRET:str = "sbZ2ol7kpC6uUrZbmmO1zTn1C8TcrIzB"
 
+    @property
+    def KEYCLOAK_TOKEN_URL(self) -> str:
+        return (
+            f"{self.KEYCLOAK_URL}/realms/{self.KEYCLOAK_REALM}"
+            f"/protocol/openid-connect/token"
+        )
+
+    @property
+    def KEYCLOAK_LOGOUT_URL(self) -> str:
+        return (
+            f"{self.KEYCLOAK_URL}/realms/{self.KEYCLOAK_REALM}"
+            f"/protocol/openid-connect/logout"
+        )
+
+    @property
+    def KEYCLOAK_ADMIN_USERS_URL(self) -> str:
+        return (
+            f"{self.KEYCLOAK_URL}/admin/realms/{self.KEYCLOAK_REALM}"
+            f"/users"
+        )
     # ── Upload ────────────────────────────────────────────
     MAX_UPLOAD_SIZE_MB: int = 50
 

@@ -2,7 +2,7 @@ from app.graph.state import(
     ExecutionTypeEnum, OrchestratorState, RouteEnum, SectorEnum, IntentEnum
 )
 from app.utils.logger import log_routing_decision
-
+from app.clients.nlq_client import ROUTING_TARGET_MAP
 #confidence rate
 CONFIDENCE_MIN_SECTOR = 0.60
 CONFIDENCE_MIN_INTENT =0.50
@@ -28,8 +28,9 @@ def routing_node(state: OrchestratorState) -> OrchestratorState:
     sector_conf = state.sector_confidence
     intent_conf = state.intent_confidence
     execution_type = state.execution_type
+    routing_target = state.routing_target
 
-    route, reason = _decide_route(sector, intent, sector_conf, intent_conf, execution_type)
+    route, reason = _decide_route(sector, intent, sector_conf, intent_conf, execution_type, routing_target)
 
     #Define fallback route
     fallback = _decide_fallback(sector, route)
@@ -52,13 +53,24 @@ def routing_node(state: OrchestratorState) -> OrchestratorState:
 
     return state
 
-def _decide_route(sector: SectorEnum,intent: IntentEnum,sector_conf: float,intent_conf: float, execution_type: ExecutionTypeEnum) -> tuple[RouteEnum, str]:
+def _decide_route(sector: SectorEnum,intent: IntentEnum,sector_conf: float,intent_conf: float, execution_type: ExecutionTypeEnum, routing_target: str = "") -> tuple[RouteEnum, str]:
     """
     Routing logic with 4 priority levels.
     Returns (route, reason).
     """
+    # Level 0 routing target from SectorContext Agent (if provided, it has the highest priority as it's a direct signal from the sector detection step)
+
+    if routing_target and sector_conf >= 0.80:
+        route = ROUTING_TARGET_MAP.get(routing_target)
+        if route:
+            return (
+                route,
+                f"routing_target='{routing_target}' fourni par Context Agent "
+                f"({sector_conf:.0%} confiance) → route directe."
+            )
 
     #Level 1: Confidence too low → Clarification
+    """
 
     if sector_conf < CONFIDENCE_MIN_SECTOR and sector == SectorEnum.UNKNOWN:
         return (
@@ -72,7 +84,13 @@ def _decide_route(sector: SectorEnum,intent: IntentEnum,sector_conf: float,inten
             f"Intent not recognized and confidence too low ({intent_conf:.0%}). "
             "Clarification required."
         )
-    
+    """
+    if sector == SectorEnum.UNKNOWN and sector_conf < CONFIDENCE_MIN_SECTOR:
+        if intent == IntentEnum.UNKNOWN and intent_conf < CONFIDENCE_MIN_INTENT:
+            return (
+                RouteEnum.CLARIFICATION,
+                f"Sector AND intent unknown with low confidence. Clarification required."
+            )
     # Level 2: execution type is insight → Insight Agent (even if sector is known, we want to prioritize insights)
     if execution_type == ExecutionTypeEnum.INSIGHT:
         return (
@@ -110,6 +128,8 @@ def _decide_route(sector: SectorEnum,intent: IntentEnum,sector_conf: float,inten
             "(KPI routing + Power BI)."
         )
     
+
+    """
     if intent in [IntentEnum.KPI_REQUEST, IntentEnum.PREDICTION]:
         if sector in KNOWN_SECTORS:
             return (
@@ -120,7 +140,22 @@ def _decide_route(sector: SectorEnum,intent: IntentEnum,sector_conf: float,inten
             RouteEnum.GENERIC_ML_AGENT,
             f"Intent '{intent.value}' with unknown sector → Generic ML Agent."
         )
+    """
+    if intent in [IntentEnum.KPI_REQUEST, IntentEnum.PREDICTION,
+                  IntentEnum.EXPLANATION]:          # ← ajouté
+        if sector in KNOWN_SECTORS:
+            return sector_to_route[sector], f"Intent '{intent.value}' → '{sector.value}'."
+        return RouteEnum.GENERIC_ML_AGENT, f"Intent '{intent.value}' unknown sector → Generic ML."
     
+     # ✅ NOUVEAU Level 6 — Secteur connu même si intent unknown
+    # Le routing_target de ta collègue a déjà identifié le secteur
+    # avec 95% de confiance → on fait confiance au secteur
+    if sector in KNOWN_SECTORS and sector_conf >= CONFIDENCE_MIN_SECTOR:
+        return (
+            sector_to_route[sector],
+            f"Sector '{sector.value}' known ({sector_conf:.0%}) despite unknown intent → sector agent."
+        )
+
     # Default: Clarification (we don't have a clear rule to route, we need clarification to avoid wrong answers)
     return RouteEnum.CLARIFICATION, "No clear routing rule matched → Clarification required."
 
