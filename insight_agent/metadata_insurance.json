@@ -1,0 +1,174 @@
+[
+    {
+        "column_name": "Num_facture",
+        "business_name": "Invoice Number",
+        "type": "int",
+        "nullable": false,
+        "identifier": true,
+        "pattern": null,
+        "min": 100000,
+        "max": 600000,
+        "format": null,
+        "enum": null,
+        "description": "Unique invoice identifier"
+    },
+    {
+        "column_name": "num_contrat",
+        "business_name": "Contract Number",
+        "type": "int",
+        "nullable": false,
+        "identifier": false,
+        "pattern": null,
+        "min": 16000,
+        "max": 16200,
+        "format": null,
+        "enum": null,
+        "description": "Contract reference number"
+    },
+    {
+        "column_name": "exe",
+        "business_name": "Exercise Year",
+        "type": "int",
+        "nullable": false,
+        "identifier": false,
+        "pattern": null,
+        "min": 2020,
+        "max": 2026,
+        "format": null,
+        "enum": null,
+        "description": "Fiscal year of the record"
+    },
+    {
+        "column_name": "dtemi",
+        "business_name": "Emission Date",
+        "type": "date",
+        "nullable": false,
+        "identifier": false,
+        "pattern": "MM/DD/YYYY",
+        "min": null,
+        "max": null,
+        "format": "MM/DD/YYYY",
+        "enum": null,
+        "description": "Date of emission of the invoice"
+    },
+    {
+        "column_name": "datedeb",
+        "business_name": "Start Date",
+        "type": "date",
+        "nullable": false,
+        "identifier": false,
+        "pattern": "MM/DD/YYYY",
+        "format": "MM/DD/YYYY",
+        "description": "Contract coverage start date"
+    },
+    {
+        "column_name": "datefin",
+        "business_name": "End Date",
+        "type": "date",
+        "nullable": false,
+        "identifier": false,
+        "pattern": "MM/DD/YYYY",
+        "format": "MM/DD/YYYY",
+        "description": "Contract coverage end date"
+    },
+    {
+        "column_name": "datcpt",
+        "business_name": "Accounting Date",
+        "type": "date",
+        "nullable": false,
+        "identifier": false,
+        "pattern": "MM/DD/YYYY",
+        "format": "MM/DD/YYYY",
+        "description": "Date the contract is accounted"
+    },
+    {
+        "column_name": "libop",
+        "business_name": "Operation Label",
+        "type": "string",
+        "nullable": false,
+        "identifier": false,
+        "pattern": null,
+        "enum": [
+            "Avenant",
+            "Terme",
+            "Affaire Nouvelle",
+            "Ristourne"
+        ],
+        "description": "Type of operation"
+    },
+    {
+        "column_name": "ncli",
+        "business_name": "Client Number",
+        "type": "int",
+        "nullable": false,
+        "identifier": false,
+        "min": 1000000,
+        "max": 35000000,
+        "description": "Client internal identifier"
+    },
+    {
+        "column_name": "Prime",
+        "business_name": "Premium Amount",
+        "type": "float",
+        "nullable": false,
+        "identifier": false,
+        "min": -10000,
+        "max": 70000,
+        "description": "Insurance premium amount"
+    },
+    {
+        "column_name": "nomncli",
+        "business_name": "Client Name",
+        "type": "string",
+        "nullable": false,
+        "identifier": false,
+        "pattern": "client_[0-9]+",
+        "description": "Client reference name"
+    },
+    {
+        "column_name": "nb_jour_couv",
+        "business_name": "Coverage Days",
+        "type": "int",
+        "nullable": false,
+        "identifier": false,
+        "min": 0,
+        "max": 365,
+        "description": "Number of days the contract covers"
+    },
+    {
+        "column_name": "client_age",
+        "business_name": "Client Age",
+        "type": "int",
+        "nullable": false,
+        "identifier": false,
+        "min": 18,
+        "max": 70,
+        "description": "Age of the client"
+    },
+    {
+        "column_name": "client_gender",
+        "business_name": "Client Gender",
+        "type": "string",
+        "nullable": false,
+        "identifier": false,
+        "enum": [
+            "Male",
+            "Female"
+        ],
+        "description": "Gender of the client"
+    },
+    {
+        "column_name": "client_marital_status",
+        "business_name": "Marital Status",
+        "type": "string",
+        "nullable": false,
+        "identifier": false,
+        "enum": [
+            "Single",
+            "Married",
+            "Widowed",
+            "Divorced"
+        ],
+        "description": "Marital status of the client"
+    }
+]
