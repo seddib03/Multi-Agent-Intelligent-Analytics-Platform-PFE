@@ -1,27 +1,47 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from fastapi import HTTPException
-from datetime import datetime, timedelta
-from app.models.user import User, Company, AuthSession, UserPreferences
-from app.schemas.auth import RegisterRequest, LoginRequest
-from app.core.security import (hash_password, verify_password,
-                                create_access_token, create_refresh_token)
+# app/services/auth_service.py
+from sqlalchemy.ext.asyncio  import AsyncSession
+from sqlalchemy               import select
+from fastapi                  import HTTPException
+from app.models.user          import User, Company, UserPreferences
+from app.schemas.auth         import RegisterRequest, LoginRequest
+from app.core.keycloak        import (
+    keycloak_register, keycloak_login,
+    keycloak_refresh, keycloak_logout,
+    verify_token,
+)
 import uuid
+
 
 class AuthService:
 
+    # ── Register ─────────────────────────────────────────────
     @staticmethod
-    async def register(db: AsyncSession,
-                       data: RegisterRequest) -> dict:
-
-        # Vérifier email unique
-        existing = await db.execute(
-            select(User).where(User.email == data.email)
+    async def register(
+        db:   AsyncSession,
+        data: RegisterRequest,
+    ) -> dict:
+        """
+        1. Créer l'utilisateur dans Keycloak
+        2. Login automatique pour obtenir les tokens
+        3. Créer l'utilisateur dans Postgres
+        """
+        # 1. Créer dans Keycloak (lève 409 si email existe)
+        await keycloak_register(
+            email      = data.email,
+            password   = data.password,
+            first_name = data.first_name,
+            last_name  = data.last_name,
+            company    = data.company_name,
         )
-        if existing.scalar_one_or_none():
-            raise HTTPException(409, "Email déjà utilisé")
 
-        # Créer ou récupérer la company
+        # 2. Login automatique
+        tokens = await keycloak_login(data.email, data.password)
+
+        # 3. Décoder le token pour obtenir le keycloak_id
+        payload = await verify_token(tokens["access_token"])
+        keycloak_id = payload["sub"]
+
+        # 4. Créer company + user + prefs dans Postgres
         company_result = await db.execute(
             select(Company).where(Company.name == data.company_name)
         )
@@ -29,49 +49,31 @@ class AuthService:
         if not company:
             company = Company(
                 id   = uuid.uuid4(),
-                name = data.company_name
+                name = data.company_name,
             )
             db.add(company)
-            await db.flush()  # obtenir l'id avant commit
+            await db.flush()
 
-        # Créer l'utilisateur
         user = User(
-            id            = uuid.uuid4(),
-            email         = data.email,
-            password_hash = hash_password(data.password),
-            first_name    = data.first_name,
-            last_name     = data.last_name,
-            company_id    = company.id,
+            id          = uuid.uuid4(),
+            keycloak_id = keycloak_id,
+            email       = data.email,
+            first_name  = data.first_name,
+            last_name   = data.last_name,
+            company_id  = company.id,
         )
         db.add(user)
         await db.flush()
 
-        # Créer les préférences par défaut
         prefs = UserPreferences(
             id      = uuid.uuid4(),
-            user_id = user.id
+            user_id = user.id,
         )
         db.add(prefs)
-
-        # Créer la session
-        refresh_token = create_refresh_token()
-        session = AuthSession(
-            id            = uuid.uuid4(),
-            user_id       = user.id,
-            refresh_token = refresh_token,
-            expires_at    = datetime.utcnow() + timedelta(days=30)
-        )
-        db.add(session)
         await db.commit()
 
-        access_token = create_access_token(
-            str(user.id), user.email
-        )
-
         return {
-            "access_token":  access_token,
-            "refresh_token": refresh_token,
-            "token_type":    "bearer",
+            **tokens,
             "user": {
                 "id":           str(user.id),
                 "email":        user.email,
@@ -82,49 +84,65 @@ class AuthService:
             }
         }
 
+    # ── Login ────────────────────────────────────────────────
     @staticmethod
-    async def login(db: AsyncSession,
-                    data: LoginRequest) -> dict:
+    async def login(
+        db:   AsyncSession,
+        data: LoginRequest,
+    ) -> dict:
+        """
+        1. Login via Keycloak (Direct Access Grant)
+        2. Sync user dans Postgres si besoin
+        3. Retourner tokens + profil
+        """
+        # 1. Login Keycloak → tokens
+        tokens = await keycloak_login(data.email, data.password)
 
-        # Trouver l'utilisateur
+        # 2. Décoder pour obtenir keycloak_id
+        payload     = await verify_token(tokens["access_token"])
+        keycloak_id = payload["sub"]
+
+        # 3. Sync Postgres
         result = await db.execute(
-            select(User).where(User.email == data.email)
+            select(User).where(User.keycloak_id == keycloak_id)
         )
         user = result.scalar_one_or_none()
 
-        if not user or not verify_password(
-            data.password, user.password_hash
-        ):
-            raise HTTPException(401, "Email ou mot de passe incorrect")
+        # Créer si première connexion (ex: user créé dans Keycloak
+        # directement par un admin)
+        if not user:
+            company_name = payload.get("company", "Default")
+            company_res  = await db.execute(
+                select(Company).where(Company.name == company_name)
+            )
+            company = company_res.scalar_one_or_none()
+            if not company:
+                company = Company(id=uuid.uuid4(), name=company_name)
+                db.add(company)
+                await db.flush()
 
-        if not user.is_active:
-            raise HTTPException(403, "Compte désactivé")
+            user = User(
+                id          = uuid.uuid4(),
+                keycloak_id = keycloak_id,
+                email       = data.email,
+                first_name  = payload.get("given_name", ""),
+                last_name   = payload.get("family_name", ""),
+                company_id  = company.id,
+            )
+            db.add(user)
+            await db.flush()
 
-        # Récupérer la company
+            prefs = UserPreferences(
+                id=uuid.uuid4(), user_id=user.id
+            )
+            db.add(prefs)
+            await db.commit()
+            await db.refresh(user)
+
         company = await db.get(Company, user.company_id)
 
-        # Mettre à jour last_login
-        user.last_login_at = datetime.utcnow()
-
-        # Créer nouvelle session
-        refresh_token = create_refresh_token()
-        session = AuthSession(
-            id            = uuid.uuid4(),
-            user_id       = user.id,
-            refresh_token = refresh_token,
-            expires_at    = datetime.utcnow() + timedelta(days=30)
-        )
-        db.add(session)
-        await db.commit()
-
-        access_token = create_access_token(
-            str(user.id), user.email
-        )
-
         return {
-            "access_token":  access_token,
-            "refresh_token": refresh_token,
-            "token_type":    "bearer",
+            **tokens,
             "user": {
                 "id":           str(user.id),
                 "email":        user.email,
@@ -135,64 +153,39 @@ class AuthService:
             }
         }
 
+    # ── Refresh ──────────────────────────────────────────────
     @staticmethod
-    async def refresh(db: AsyncSession,
-                      refresh_token: str) -> dict:
+    async def refresh(refresh_token: str) -> dict:
+        """Déléguer le refresh à Keycloak."""
+        return await keycloak_refresh(refresh_token)
 
-        result = await db.execute(
-            select(AuthSession).where(
-                AuthSession.refresh_token == refresh_token,
-                AuthSession.is_revoked    == False,
-                AuthSession.expires_at    > datetime.utcnow()
-            )
-        )
-        session = result.scalar_one_or_none()
-
-        if not session:
-            raise HTTPException(401, "Refresh token invalide ou expiré")
-
-        user = await db.get(User, session.user_id)
-
-        access_token = create_access_token(
-            str(user.id), user.email
-        )
-        return {
-            "access_token": access_token,
-            "token_type":   "bearer"
-        }
-
+    # ── Logout ───────────────────────────────────────────────
     @staticmethod
-    async def logout(db: AsyncSession,
-                     refresh_token: str) -> None:
+    async def logout(refresh_token: str) -> None:
+        """Révoquer la session dans Keycloak."""
+        await keycloak_logout(refresh_token)
 
-        result = await db.execute(
-            select(AuthSession).where(
-                AuthSession.refresh_token == refresh_token
-            )
-        )
-        session = result.scalar_one_or_none()
-        if session:
-            session.is_revoked = True
-            await db.commit()
-
+    # ── Get me ───────────────────────────────────────────────
     @staticmethod
-    async def get_me(db: AsyncSession,
-                     user_id: str) -> dict:
-        user    = await db.get(User, user_id)
+    async def get_me(db: AsyncSession, user_id: str) -> dict:
+        user = await db.get(User, user_id)
+        if not user:
+            raise HTTPException(404, "Utilisateur introuvable")
+
         company = await db.get(Company, user.company_id)
-        prefs   = await db.execute(
+        result  = await db.execute(
             select(UserPreferences).where(
                 UserPreferences.user_id == user_id
             )
         )
-        prefs = prefs.scalar_one_or_none()
+        prefs = result.scalar_one_or_none()
 
         return {
             "id":           str(user.id),
             "email":        user.email,
             "first_name":   user.first_name,
             "last_name":    user.last_name,
-            "company_name": company.name,
+            "company_name": company.name if company else "",
             "created_at":   str(user.created_at),
             "preferences": {
                 "dark_mode":        prefs.dark_mode,
@@ -206,21 +199,20 @@ class AuthService:
             } if prefs else {}
         }
 
+    # ── Update preferences ───────────────────────────────────
     @staticmethod
-    async def update_preferences(db: AsyncSession,
-                                  user_id: str,
-                                  data) -> dict:
+    async def update_preferences(
+        db: AsyncSession, user_id: str, data
+    ) -> dict:
         result = await db.execute(
             select(UserPreferences).where(
                 UserPreferences.user_id == user_id
             )
         )
         prefs = result.scalar_one_or_none()
-
         if not prefs:
             prefs = UserPreferences(
-                id      = uuid.uuid4(),
-                user_id = user_id
+                id=uuid.uuid4(), user_id=user_id
             )
             db.add(prefs)
 
@@ -232,13 +224,12 @@ class AuthService:
         await db.commit()
         return {"message": "Préférences sauvegardées"}
 
+    # ── Delete me ────────────────────────────────────────────
     @staticmethod
-    async def delete_me(db: AsyncSession,
-                        user_id: str) -> None:
+    async def delete_me(db: AsyncSession, user_id: str) -> None:
         from app.services.minio_service import MinioService
-        # Cleanup MinIO
         await MinioService.delete_user_files(user_id)
-        # Supprimer user (cascade supprime sessions + prefs)
         user = await db.get(User, user_id)
-        await db.delete(user)
-        await db.commit()
+        if user:
+            await db.delete(user)
+            await db.commit()
