@@ -88,7 +88,7 @@ export function Dashboard() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
-      <div className="bg-dxc-midnight px-4 md:px-6 py-4 flex items-center justify-between flex-wrap gap-2">
+      <div className="h-16 bg-dxc-midnight px-4 md:px-6 flex items-center justify-between flex-wrap gap-2">
         <div className="min-w-0">
           <BrandLogo logoClassName="h-7" subtitleClassName="text-[13px] font-semibold" className="mb-0.5" />
           <p className="text-white/80 text-xs mt-0.5">{sectorInfo.icon} {sectorInfo.label} · {t("binaryClassification", language)} · {t("updatedAt", language)} {timeStr}</p>
