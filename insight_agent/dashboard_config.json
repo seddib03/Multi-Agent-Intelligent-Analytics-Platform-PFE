@@ -1,0 +1,51 @@
+{
+  "kpis": [
+    {
+      "name": "Total Premiums",
+      "column": "Prime",
+      "aggregation": "SUM"
+    },
+    {
+      "name": "Average Client Age",
+      "column": "client_age",
+      "aggregation": "AVG"
+    },
+    {
+      "name": "Total Number of Contracts",
+      "column": "num_contrat",
+      "aggregation": "COUNT"
+    },
+    {
+      "name": "Average Coverage Days",
+      "column": "nb_jour_couv",
+      "aggregation": "AVG"
+    }
+  ],
+  "charts": [
+    {
+      "type": "line",
+      "title": "Premium Evolution Over Time",
+      "x": "datedeb",
+      "y": "Prime",
+      "aggregation": "SUM"
+    },
+    {
+      "type": "bar",
+      "title": "Contracts by Client Gender",
+      "x": "client_gender",
+      "y": "num_contrat",
+      "aggregation": "COUNT"
+    },
+    {
+      "type": "bar",
+      "title": "Contracts by Marital Status",
+      "x": "client_marital_status",
+      "y": "num_contrat",
+      "aggregation": "COUNT"
+    }
+  ],
+  "insights": [
+    "Premiums collected show temporal variations related to contract start dates, indicating seasonal patterns in insurance subscriptions.",
+    "The distribution of contracts across gender and marital status highlights the demographic segments most represented among insured clients."
+  ]
+}
