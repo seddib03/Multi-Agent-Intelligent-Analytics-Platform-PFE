@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Mail, Camera, Save } from "lucide-react";
+import { ArrowLeft, User, Mail, Building2, Camera, Save } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,8 @@ export default function Profile() {
 
   useEffect(() => {
     if (!user) return;
-    setFullName(user.user_metadata?.full_name || "");
+    const fullNameFromUser = user.user_metadata?.full_name || `${user.first_name || ""} ${user.last_name || ""}`.trim();
+    setFullName(fullNameFromUser);
   }, [user]);
 
   const handleSave = async () => {
@@ -66,6 +67,13 @@ export default function Profile() {
             <div className="space-y-2">
               <Label htmlFor="fullName" className="text-foreground">{t("fullName", lang)}</Label>
               <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder={t("enterName", lang)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="company" className="text-foreground">{t("company", lang)}</Label>
+              <div className="flex items-center gap-3 px-4 py-3 bg-muted rounded-lg">
+                <Building2 size={16} className="text-primary" />
+                <span className="text-foreground">{user?.company_name || "—"}</span>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="email" className="text-foreground">{t("email", lang)}</Label>
