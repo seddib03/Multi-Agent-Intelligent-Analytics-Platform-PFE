@@ -42,6 +42,14 @@ class ExecutionTypeEnum(str, Enum):
     INSIGHT    = "insight"
     UNKNOWN    = "unknown"
 
+# Data preparation for agent execution
+class DataPrepStatusEnum(str, Enum):
+    NOT_STARTED        = "not_started"
+    RUNNING            = "running"
+    WAITING_VALIDATION = "waiting_validation"  # Human-in-the-Loop
+    COMPLETED          = "completed"
+    FAILED             = "failed"
+
 #Orchestrator state
 
 class OrchestratorState(BaseModel):
@@ -49,12 +57,16 @@ class OrchestratorState(BaseModel):
     user_id: str = ""
     query_raw: str = ""
     session_id: str = ""
+    csv_path: str = ""
+    metadata: dict = Field(default_factory=dict)
 
     #Sector detection result
     sector: SectorEnum = SectorEnum.UNKNOWN
     sector_confidence: float = 0.0
-    kpi_mapping: list[str] = Field(default_factory=list)  
+   # kpi_mapping: list[str] = Field(default_factory=list)  
+    kpi_mapping: list[dict] = Field(default_factory=list)  # List of dicts with KPI details
     domain_constraints: dict = Field(default_factory=dict)
+    
 
     #NLQ Agent Result
     intent: IntentEnum = IntentEnum.UNKNOWN
@@ -69,6 +81,31 @@ class OrchestratorState(BaseModel):
     metric_raw: str = ""
     timeframe: str = ""
     location: str = ""
+    routing_target: str = ""
+
+    # Data preparation job status
+    data_prep_job_id: str = "" 
+    # Unique job ID returned by POST /prepare
+    # Used for all subsequent calls (/status, /validate, /profiling-json)
+    data_prep_status: DataPrepStatusEnum = DataPrepStatusEnum.NOT_STARTED
+    # Lifecycle: not_started → running → waiting_validation → completed
+    data_prep_paths: dict = Field(default_factory=dict)
+    # MinIO paths after cleaning
+    # ex: {"silver": "s3://silver/transport/job_id/data.parquet",
+    #       "gold":   "s3://gold/transport/job_id/"}
+
+    data_prep_quality: dict = Field(default_factory=dict)
+    # Scores qualité AVANT nettoyage
+    # ex: {"global": 0.85, "completeness": 0.9, "validity": 0.8}
+
+    data_prep_error: Optional[str] = None
+    # Error message if pipeline fails
+    data_profile: dict = Field(default_factory=dict)
+    # Dataset profile retrieved via /profiling-json
+    # Passed to NLQ Agent via POST /chat to generate precise SQL
+    # ex: {"row_count": 500, "columns": ["flight_id", "delay_minutes"],
+    #       "numeric_columns": [...], "quality_score": 85.0}
+
 
     # Routing Decision
     route: Optional[RouteEnum] = None
@@ -84,6 +121,7 @@ class OrchestratorState(BaseModel):
     response_format: Literal["text", "kpi", "chart", "table"] = "text"
 
     # Metadata
+    
     errors: list[str] = Field(default_factory=list)
     processing_steps: list[str] = Field(default_factory=list)  
     needs_clarification: bool = False

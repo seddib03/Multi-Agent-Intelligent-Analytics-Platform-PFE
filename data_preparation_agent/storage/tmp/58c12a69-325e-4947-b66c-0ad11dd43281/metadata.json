@@ -1,0 +1,1 @@
+{"table_name": "flights", "columns": [{"name": "flight_id", "type": "integer", "nullable": false, "unique": true}, {"name": "delay_minutes", "type": "float", "min_val": 0, "max_val": 500}, {"name": "gate", "type": "string", "nullable": true}, {"name": "satisfaction", "type": "float", "min_val": 0, "max_val": 5}], "business_rules": ["delay_minutes must be >= 0"]}
