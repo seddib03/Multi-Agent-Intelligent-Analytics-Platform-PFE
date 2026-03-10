@@ -114,7 +114,7 @@ class TestDatasetService:
 class TestMetadata:
     def test_metadata_saves_business_names(self):
         """test_metadata_saves_business_names ✓"""
-        from app.schemas.dataset import MetadataUpdateRequest, ColumnMetadataUpdate
+        from backend.app.schemas.dataset import MetadataUpdateRequest, ColumnMetadataUpdate
         req = MetadataUpdateRequest(columns=[
             ColumnMetadataUpdate(original_name="amount",   business_name="Montant transaction", business_type="numeric"),
             ColumnMetadataUpdate(original_name="category", business_name="Catégorie client"),
