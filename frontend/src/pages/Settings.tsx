@@ -74,9 +74,9 @@ export default function Settings() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-dxc-midnight text-dxc-white px-6 py-3">
-        <div className="max-w-2xl mx-auto flex flex-col items-center gap-2">
-          <BrandLogo logoClassName="h-8" subtitleClassName="text-[14px] font-semibold" showSubtitle />
+      <header className="sticky top-0 z-40 h-16 bg-dxc-midnight px-4 text-dxc-white md:px-6">
+        <div className="mx-auto flex h-full max-w-2xl items-center justify-center">
+          <BrandLogo logoClassName="h-7" subtitleClassName="text-[13px] font-semibold" showSubtitle />
         </div>
       </header>
 
