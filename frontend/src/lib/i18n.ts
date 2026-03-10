@@ -82,6 +82,13 @@ export const translations = {
     emailNotEditable: "L'email ne peut pas être modifié",
     saveChanges: "Enregistrer les modifications",
     profileSaved: "Profil enregistré",
+    deleteMyAccount: "Supprimer mon compte",
+    deletingAccount: "Suppression du compte...",
+    dangerZone: "Zone de danger",
+    dangerZoneDesc: "La suppression du compte est définitive et supprime l'accès à toutes vos données.",
+    deleteAccountTitle: "Supprimer ce compte ?",
+    deleteAccountConfirm: "Voulez-vous vraiment supprimer votre compte ? Cette action est irréversible.",
+    accountDeleted: "Compte supprimé avec succès.",
 
     // Projects page
     newProject: "Nouveau projet",
@@ -449,6 +456,13 @@ export const translations = {
     emailNotEditable: "Email cannot be changed",
     saveChanges: "Save changes",
     profileSaved: "Profile saved",
+    deleteMyAccount: "Delete my account",
+    deletingAccount: "Deleting account...",
+    dangerZone: "Danger zone",
+    dangerZoneDesc: "Account deletion is permanent and removes access to all your data.",
+    deleteAccountTitle: "Delete this account?",
+    deleteAccountConfirm: "Do you really want to delete your account? This action is irreversible.",
+    accountDeleted: "Account deleted successfully.",
 
     // Projects page
     newProject: "New project",
