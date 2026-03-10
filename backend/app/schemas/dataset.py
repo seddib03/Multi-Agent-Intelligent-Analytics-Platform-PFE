@@ -4,8 +4,7 @@ from typing import Optional, Any
 from pydantic import BaseModel
 
 
-# ─── Sub-models ───────────────────────────────────────────
-
+# ─── Sub-models ───────────────────────────────────────────────────────────────
 class ColumnProfile(BaseModel):
     original_name:  str
     detected_type:  str
@@ -15,8 +14,7 @@ class ColumnProfile(BaseModel):
     stats:          Optional[dict] = None
 
 
-# ─── Requests ─────────────────────────────────────────────
-
+# ─── Requests ─────────────────────────────────────────────────────────────────
 class ColumnMetadataUpdate(BaseModel):
     original_name: str
     business_name: Optional[str] = None
@@ -27,8 +25,19 @@ class MetadataUpdateRequest(BaseModel):
     columns: list[ColumnMetadataUpdate]
 
 
-# ─── Responses ────────────────────────────────────────────
+class ApplyCorrectionsRequest(BaseModel):
+    corrections: list[str]
+    """
+    Liste des corrections à appliquer. Valeurs possibles :
+    - impute_mean     : remplacer valeurs manquantes par la moyenne (colonnes numériques)
+    - impute_mode     : remplacer valeurs manquantes par le mode (colonnes catégorielles)
+    - drop_column     : supprimer les colonnes problématiques
+    - drop_duplicates : supprimer les lignes dupliquées
+    - normalize       : normaliser les valeurs numériques (min-max)
+    """
 
+
+# ─── Responses ────────────────────────────────────────────────────────────────
 class UploadResponse(BaseModel):
     file_id:           uuid.UUID
     original_filename: str
@@ -58,7 +67,6 @@ class DatasetColumnResponse(BaseModel):
     sample_values:  Optional[list]
     stats:          Optional[dict]
     column_order:   int
-
     model_config = {"from_attributes": True}
 
 
@@ -76,7 +84,40 @@ class DatasetResponse(BaseModel):
     row_count:         Optional[int]
     column_count:      Optional[int]
     quality_score:     Optional[float]
+    quality_report:    Optional[dict] = None
     created_at:        datetime
     updated_at:        datetime
-
     model_config = {"from_attributes": True}
+
+
+class QualityIssue(BaseModel):
+    type:     str
+    severity: str   # critical | warning | info
+    message:  str
+    fix:      str
+
+
+class ColumnQuality(BaseModel):
+    column:  str
+    issues:  list[QualityIssue]
+    score:   float
+
+
+class QualityReportResponse(BaseModel):
+    dataset_id:              uuid.UUID
+    global_score:            float
+    total_columns:           int
+    columns_ok:              int
+    columns_issues:          int
+    critical_count:          int
+    warning_count:           int
+    issues:                  list[ColumnQuality]
+    corrections_available:   list[str]
+
+
+class ApplyCorrectionsResponse(BaseModel):
+    dataset_id: uuid.UUID
+    applied:    list[str]
+    skipped:    list[str]
+    message:    str
+    note:       str
