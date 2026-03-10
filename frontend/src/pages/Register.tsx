@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { UserPlus, Eye, EyeOff, Mail, Lock, User, ArrowRight, CheckCircle2 } from "lucide-react";
+import { UserPlus, Eye, EyeOff, Mail, Lock, User, Building2, ArrowRight, CheckCircle2 } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { useAuth } from "@/hooks/useAuth";
 import { t } from "@/lib/i18n";
@@ -15,6 +15,7 @@ const Register = () => {
   const { signUp } = useAuth();
   const lang = useAppStore((s) => s.userPreferences.language);
   const [fullName, setFullName] = useState("");
+  const [companyName, setCompanyName] = useState((import.meta.env.VITE_DEFAULT_COMPANY_NAME as string | undefined) || "");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,7 +35,7 @@ const Register = () => {
     const { error } = await signUp({
       email,
       password,
-      options: { data: { full_name: fullName } },
+      options: { data: { full_name: fullName, company_name: companyName } },
     });
     setLoading(false);
     if (error) {
@@ -55,72 +56,61 @@ const Register = () => {
   return (
     <div className="flex min-h-screen">
       {/* Branding panel — LEFT side */}
-      <div className="hidden lg:flex lg:w-[48%] bg-dxc-midnight relative overflow-hidden flex-col justify-start items-center pt-20 pb-12 px-12">
+      <div className="hidden lg:flex lg:w-[48%] bg-dxc-midnight relative overflow-hidden items-center px-12 py-10">
         {/* Decorative blurs */}
         <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-dxc-melon/15 blur-[120px]" />
         <div className="absolute bottom-0 left-0 w-72 h-72 rounded-full bg-dxc-royal/15 blur-[100px]" />
 
-        <div className="relative z-10 max-w-md w-full space-y-10">
+        <div className="relative z-10 flex h-full w-full max-w-md flex-col">
           {/* Logo */}
-          <div className="text-center">
+          <div className="text-center pt-6">
             <div className="inline-flex">
-              <BrandLogo logoClassName="h-9" subtitleClassName="text-[15px] font-semibold" className="mb-2" />
+              <BrandLogo logoClassName="h-11" subtitleClassName="text-[17px] font-semibold" className="mb-3" />
             </div>
-            <p className="text-white/40 text-sm leading-relaxed">{t("registerBrandingSubtitle", lang)}</p>
+            <p className="mx-auto max-w-sm text-base leading-relaxed text-white/60">{t("registerBrandingSubtitle", lang)}</p>
           </div>
 
           {/* Benefits */}
-          <div className="space-y-4">
+          <div className="my-auto space-y-5 px-1">
             <p className="text-dxc-peach text-xs uppercase tracking-widest font-bold">{t("registerWhyJoin", lang)}</p>
             {benefits.map((key, i) => (
               <div key={i} className="flex items-center gap-3">
                 <CheckCircle2 size={16} className="text-dxc-gold shrink-0" />
-                <p className="text-white/70 text-sm">{t(key, lang)}</p>
+                <p className="text-white/70 text-sm leading-relaxed">{t(key, lang)}</p>
               </div>
             ))}
           </div>
 
           {/* CTA to login */}
-          <div className="pt-6 border-t border-white/10">
-            <p className="text-white/50 text-sm mb-3">{t("alreadyAccount", lang)}</p>
-            <Link
-              to="/login"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-dxc-peach/10 border border-dxc-peach/25 text-dxc-peach text-sm font-semibold hover:bg-dxc-peach/20 transition-all"
-            >
-              {t("login", lang)} <ArrowRight size={14} />
-            </Link>
+          <div className="border-t border-white/10 pt-6 text-center">
+            <p className="mb-4 text-base text-white/65">{t("alreadyAccount", lang)}</p>
+            <div>
+              <Link
+                to="/login"
+                className="inline-flex items-center gap-2 rounded-lg border border-dxc-peach/25 bg-dxc-peach/10 px-6 py-3 text-base font-semibold text-dxc-peach transition-all hover:bg-dxc-peach/20"
+              >
+                {t("login", lang)} <ArrowRight size={15} />
+              </Link>
+            </div>
+            <p className="mt-6 text-center text-xs text-white/30">© 2026 DXC Technology</p>
           </div>
         </div>
-
-        {/* Footer */}
-        <p className="absolute bottom-6 left-12 text-white/20 text-xs">© 2025 DXC Technology</p>
       </div>
 
       {/* Form panel — RIGHT side */}
       <div className="flex-1 flex items-center justify-center px-6 py-12 bg-background">
-        <div className="w-full max-w-[380px]">
-          {/* Mobile logo */}
-          <div className="lg:hidden text-center mb-10">
-            <div className="inline-flex">
-              <BrandLogo logoClassName="h-8" subtitleClassName="text-[14px] font-semibold" />
-            </div>
-          </div>
-
-          {/* Heading */}
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-foreground mb-2">{t("registerTitle", lang)}</h1>
-            <p className="text-muted-foreground text-sm">{t("registerSubtitle", lang)}</p>
-            <Link to="/" className="mt-3 inline-flex text-sm font-medium text-primary hover:underline">
-              Retour a l'accueil
-            </Link>
+        <div className="w-full max-w-[430px]">
+          <div className="mb-10 text-center">
+            <h1 className="text-3xl font-bold text-foreground mb-2">{t("registerTitle", lang)}</h1>
+            <p className="text-base text-muted-foreground">{t("registerSubtitle", lang)}</p>
           </div>
 
           {/* Form */}
-          <form onSubmit={handleRegister} className="space-y-5">
+          <form onSubmit={handleRegister} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="fullName" className="text-xs font-semibold text-foreground">{t("fullName", lang)}</Label>
+              <Label htmlFor="fullName" className="text-sm font-semibold text-foreground">{t("fullName", lang)}</Label>
               <div className="relative">
-                <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/40" />
+                <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground/40" />
                 <Input
                   id="fullName"
                   type="text"
@@ -128,15 +118,31 @@ const Register = () => {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   required
-                  className="pl-10 h-11 bg-card border-border focus:border-primary rounded-lg"
+                  className="h-12 rounded-lg border-border bg-card pl-11 text-base focus:border-primary"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-xs font-semibold text-foreground">{t("email", lang)}</Label>
+              <Label htmlFor="companyName" className="text-sm font-semibold text-foreground">{t("company", lang)}</Label>
               <div className="relative">
-                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/40" />
+                <Building2 size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground/40" />
+                <Input
+                  id="companyName"
+                  type="text"
+                  placeholder={t("companyPlaceholder", lang)}
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  required
+                  className="h-12 rounded-lg border-border bg-card pl-11 text-base focus:border-primary"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-sm font-semibold text-foreground">{t("email", lang)}</Label>
+              <div className="relative">
+                <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground/40" />
                 <Input
                   id="email"
                   type="email"
@@ -144,15 +150,15 @@ const Register = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="pl-10 h-11 bg-card border-border focus:border-primary rounded-lg"
+                  className="h-12 rounded-lg border-border bg-card pl-11 text-base focus:border-primary"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-xs font-semibold text-foreground">{t("password", lang)}</Label>
+              <Label htmlFor="password" className="text-sm font-semibold text-foreground">{t("password", lang)}</Label>
               <div className="relative">
-                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/40" />
+                <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground/40" />
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
@@ -161,15 +167,15 @@ const Register = () => {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="pl-10 pr-10 h-11 bg-card border-border focus:border-primary rounded-lg"
+                  className="h-12 rounded-lg border-border bg-card pl-11 pr-11 text-base focus:border-primary"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/40 hover:text-foreground transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground/40 transition-colors hover:text-foreground"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
               {password.length > 0 && (
@@ -194,7 +200,7 @@ const Register = () => {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full h-11 gap-2 bg-dxc-melon text-white hover:bg-dxc-red font-semibold text-sm rounded-lg mt-2"
+              className="mt-2 h-12 w-full gap-2 rounded-lg bg-dxc-melon text-base font-semibold text-white hover:bg-dxc-red"
             >
               {loading ? (
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -205,8 +211,7 @@ const Register = () => {
             </Button>
           </form>
 
-          {/* Mobile switch */}
-          <div className="mt-8 pt-6 border-t border-border lg:hidden">
+          <div className="mt-10 border-t border-border pt-6 text-center">
             <p className="text-center text-sm text-muted-foreground">
               {t("alreadyAccount", lang)}{" "}
               <Link to="/login" className="font-semibold text-primary hover:underline inline-flex items-center gap-1">
