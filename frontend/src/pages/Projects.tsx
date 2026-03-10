@@ -22,7 +22,8 @@ export default function Projects() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="bg-dxc-midnight text-dxc-white px-6 py-4 flex items-center justify-between">
+      <header className="h-16 bg-dxc-midnight px-4 text-dxc-white md:px-6">
+        <div className="flex h-full items-center justify-between">
         <div className="flex items-center gap-4">
           <BrandLogo logoClassName="h-7" subtitleClassName="text-[13px] font-semibold" />
         </div>
@@ -46,6 +47,7 @@ export default function Projects() {
             </AlertDialogContent>
           </AlertDialog>
           <AccountMenu variant="dark" position="top" />
+        </div>
         </div>
       </header>
 
