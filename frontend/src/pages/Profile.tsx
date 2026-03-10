@@ -5,6 +5,17 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { t } from "@/lib/i18n";
@@ -13,9 +24,10 @@ import { toast } from "sonner";
 
 export default function Profile() {
   const navigate = useNavigate();
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, usersDeleteMe } = useAuth();
   const [fullName, setFullName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const lang = useAppStore((s) => s.userPreferences.language);
   useDarkMode();
 
@@ -32,6 +44,20 @@ export default function Profile() {
     setSaving(false);
     if (error) toast.error(error.message);
     else toast.success(t("profileSaved", lang));
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    const { error } = await usersDeleteMe();
+    setDeleting(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success(t("accountDeleted", lang));
+    navigate("/", { replace: true });
   };
 
   return (
@@ -84,10 +110,44 @@ export default function Profile() {
               <p className="text-xs text-muted-foreground">{t("emailNotEditable", lang)}</p>
             </div>
           </div>
-          <Button onClick={handleSave} disabled={saving} className="w-full">
-            <Save size={16} className="mr-2" />
-            {saving ? t("saving", lang) : t("saveChanges", lang)}
-          </Button>
+          <div className="space-y-3">
+            <Button onClick={handleSave} disabled={saving || deleting} className="w-full">
+              <Save size={16} className="mr-2" />
+              {saving ? t("saving", lang) : t("saveChanges", lang)}
+            </Button>
+
+            <div className="rounded-xl border border-destructive/45 bg-destructive/10 p-4">
+              <p className="text-sm font-bold text-destructive">{t("dangerZone", lang)}</p>
+              <p className="mt-1 text-sm leading-relaxed text-foreground/85">{t("dangerZoneDesc", lang)}</p>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={deleting || saving}
+                    className="mt-3 w-full"
+                  >
+                    {deleting ? t("deletingAccount", lang) : t("deleteMyAccount", lang)}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>{t("deleteAccountTitle", lang)}</AlertDialogTitle>
+                    <AlertDialogDescription>{t("deleteAccountConfirm", lang)}</AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>{t("cancel", lang)}</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteAccount}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {t("confirm", lang)}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </div>
         </div>
       </div>
     </div>
