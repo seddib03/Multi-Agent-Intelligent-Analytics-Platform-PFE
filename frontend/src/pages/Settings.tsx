@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Bell, Moon, Globe, Shield, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,31 +7,76 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAppStore } from "@/stores/appStore";
 import { useDarkMode } from "@/hooks/useDarkMode";
+import { useAuth } from "@/hooks/useAuth";
 import { t } from "@/lib/i18n";
 import BrandLogo from "@/components/BrandLogo";
 import type { Language } from "@/types/app";
+import { toast } from "sonner";
 
 export default function Settings() {
   const navigate = useNavigate();
   const { userPreferences, updatePreferences } = useAppStore();
+  const { usersGetMe, updateMyPreferences } = useAuth();
   const [notifications, setNotifications] = useState(true);
   const [saving, setSaving] = useState(false);
   useDarkMode();
 
   const lang = userPreferences.language;
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPreferences = async () => {
+      const { data } = await usersGetMe();
+      if (!data?.preferences || cancelled) return;
+
+      updatePreferences({
+        darkMode: data.preferences.dark_mode ?? userPreferences.darkMode,
+        chartStyle: (data.preferences.chart_style as typeof userPreferences.chartStyle) ?? userPreferences.chartStyle,
+        density: (data.preferences.density as typeof userPreferences.density) ?? userPreferences.density,
+        accentTheme: (data.preferences.accent_theme as typeof userPreferences.accentTheme) ?? userPreferences.accentTheme,
+        dashboardLayout: (data.preferences.dashboard_layout as typeof userPreferences.dashboardLayout) ?? userPreferences.dashboardLayout,
+        visibleKPIs: data.preferences.visible_kpis ?? userPreferences.visibleKPIs,
+        primaryColor: data.preferences.primary_color ?? userPreferences.primaryColor,
+        secondaryColor: data.preferences.secondary_color ?? userPreferences.secondaryColor,
+      });
+    };
+
+    void loadPreferences();
+
+    return () => {
+      cancelled = true;
+    };
+    // Load once on page mount to hydrate local preferences from backend.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleSave = async () => {
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 1000));
+    const { error } = await updateMyPreferences({
+      dark_mode: userPreferences.darkMode,
+      chart_style: userPreferences.chartStyle,
+      density: userPreferences.density,
+      accent_theme: userPreferences.accentTheme,
+      primary_color: userPreferences.primaryColor,
+      secondary_color: userPreferences.secondaryColor,
+      dashboard_layout: userPreferences.dashboardLayout,
+      visible_kpis: userPreferences.visibleKPIs,
+    });
     setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(t("saveSettings", lang));
   };
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-dxc-midnight text-dxc-white px-6 py-3">
-        <div className="max-w-2xl mx-auto flex flex-col items-center gap-2">
-          <BrandLogo logoClassName="h-8" subtitleClassName="text-[14px] font-semibold" showSubtitle />
+      <header className="sticky top-0 z-40 h-16 bg-dxc-midnight px-4 text-dxc-white md:px-6">
+        <div className="mx-auto flex h-full max-w-2xl items-center justify-center">
+          <BrandLogo logoClassName="h-7" subtitleClassName="text-[13px] font-semibold" showSubtitle />
         </div>
       </header>
 
