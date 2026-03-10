@@ -15,12 +15,18 @@ class SectorEnum(str, Enum):
 #Definition of intent
 
 class IntentEnum(str, Enum):
-    KPI_REQUEST = "kpi_request"
-    PREDICTION = "prediction"
-    EXPLANATION = "explanation"
-    COMPARISON = "comparison"
-    DASHBOARD = "dashboard"
-    UNKNOWN = "unknown"
+    SQL             = "sql"
+    AGGREGATION     = "aggregation"
+    COMPARISON      = "comparison"
+    EXPLANATION     = "explanation"
+    PREDICTION      = "prediction"
+    SECTOR_ANALYSIS = "sector_analysis"
+    ANOMALY         = "anomaly"
+    DASHBOARD       = "dashboard"
+    KPI_REQUEST     = "kpi_request"
+    KPI_CHART       = "kpi_chart"
+    INSIGHT         = "insight"
+    UNKNOWN         = "unknown"
 
 #Definition of routing
 
@@ -72,6 +78,13 @@ class OrchestratorState(BaseModel):
     intent_confidence: float = 0.0
     entities: dict = Field(default_factory=dict)           
     query_structured: dict = Field(default_factory=dict)
+
+    requires_orchestrator: bool = False
+# True = le NLQ agent demande à l'orchestrateur de prendre la main
+
+    sub_agent: str = ""
+# "sector_prediction" ou "sector_explanation"
+# précise la TÂCHE que l'agent sectoriel doit faire
 
     # From context Agent
     canonical_metrics: str = ""
