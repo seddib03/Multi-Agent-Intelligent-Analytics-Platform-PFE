@@ -1,0 +1,120 @@
+[0m15:02:17.287177 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001F9F2BD2F90>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001F9F2BD2990>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001F9F2BD2390>]}
+
+
+============================== 15:02:17.300265 | a85a6664-35b9-417c-a290-60b5cdf32f12 ==============================
+[0m15:02:17.300265 [info ] [MainThread]: Running with dbt=1.11.7
+[0m15:02:17.304179 [debug] [MainThread]: running dbt with arguments {'static_parser': 'True', 'no_print': 'None', 'version_check': 'True', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'target_path': 'None', 'printer_width': '80', 'write_json': 'True', 'empty': 'None', 'log_cache_events': 'False', 'introspect': 'True', 'cache_selected_only': 'False', 'fail_fast': 'False', 'debug': 'False', 'log_format': 'default', 'partial_parse': 'True', 'send_anonymous_usage_stats': 'True', 'quiet': 'False', 'warn_error': 'None', 'profiles_dir': 'C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project', 'indirect_selection': 'eager', 'use_colors': 'True', 'invocation_command': 'dbt test --store-failures --project-dir C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project --profiles-dir C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project --select source:staging.raw_data', 'use_experimental_parser': 'False', 'log_path': 'C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project\\logs'}
+[0m15:02:17.319359 [info ] [MainThread]: Error importing adapter: No module named 'dbt.adapters.duckdb'
+[0m15:02:17.323003 [error] [MainThread]: Encountered an error:
+Runtime Error
+  Credentials in profile "default", target "dev" invalid: Runtime Error
+    Could not find adapter type duckdb!
+[0m15:02:17.328596 [debug] [MainThread]: Command `dbt test` failed at 15:02:17.326542 after 0.39 seconds
+[0m15:02:17.330120 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001F9F2BDAA50>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001F9F2BD8350>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001F9F1B8BFD0>]}
+[0m15:02:17.332173 [debug] [MainThread]: Flushing usage events
+[0m15:02:18.261364 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m15:09:18.666471 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000019B363E5A10>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000019B364D8610>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000019B364D8250>]}
+
+
+============================== 15:09:18.683068 | 21751fa2-4860-4b02-a469-867212aa59aa ==============================
+[0m15:09:18.683068 [info ] [MainThread]: Running with dbt=1.11.7
+[0m15:09:18.686625 [debug] [MainThread]: running dbt with arguments {'static_parser': 'True', 'no_print': 'None', 'version_check': 'True', 'target_path': 'None', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'printer_width': '80', 'write_json': 'True', 'empty': 'None', 'log_cache_events': 'False', 'introspect': 'True', 'cache_selected_only': 'False', 'fail_fast': 'False', 'debug': 'False', 'log_format': 'default', 'profiles_dir': 'C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project', 'send_anonymous_usage_stats': 'True', 'quiet': 'False', 'warn_error': 'None', 'partial_parse': 'True', 'indirect_selection': 'eager', 'use_colors': 'True', 'invocation_command': 'dbt test --store-failures --project-dir C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project --profiles-dir C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project --select source:staging.raw_data', 'use_experimental_parser': 'False', 'log_path': 'C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project\\logs'}
+[0m15:09:18.706843 [info ] [MainThread]: Error importing adapter: No module named 'dbt.adapters.duckdb'
+[0m15:09:18.709843 [error] [MainThread]: Encountered an error:
+Runtime Error
+  Credentials in profile "default", target "dev" invalid: Runtime Error
+    Could not find adapter type duckdb!
+[0m15:09:18.714848 [debug] [MainThread]: Command `dbt test` failed at 15:09:18.713850 after 0.70 seconds
+[0m15:09:18.715856 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000019B364D88D0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000019B364DA210>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000019B364CC650>]}
+[0m15:09:18.719433 [debug] [MainThread]: Flushing usage events
+[0m15:09:19.667835 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m15:16:48.641817 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001733D85EF50>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001733C8187D0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001733C81B390>]}
+
+
+============================== 15:16:48.655399 | 522c9186-b109-41b1-a9ca-eb1d5cbab4d1 ==============================
+[0m15:16:48.655399 [info ] [MainThread]: Running with dbt=1.11.7
+[0m15:16:48.655399 [debug] [MainThread]: running dbt with arguments {'version_check': 'True', 'no_print': 'None', 'static_parser': 'True', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'target_path': 'None', 'printer_width': '80', 'write_json': 'True', 'empty': 'None', 'log_cache_events': 'False', 'introspect': 'True', 'cache_selected_only': 'False', 'log_format': 'default', 'debug': 'False', 'fail_fast': 'False', 'partial_parse': 'True', 'send_anonymous_usage_stats': 'True', 'quiet': 'False', 'warn_error': 'None', 'profiles_dir': 'C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project', 'indirect_selection': 'eager', 'use_colors': 'True', 'invocation_command': 'dbt test --store-failures --project-dir C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project --profiles-dir C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project --select source:staging.raw_data', 'use_experimental_parser': 'False', 'log_path': 'C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project\\logs'}
+[0m15:16:48.665850 [info ] [MainThread]: Error importing adapter: No module named 'dbt.adapters.duckdb'
+[0m15:16:48.665850 [error] [MainThread]: Encountered an error:
+Runtime Error
+  Credentials in profile "default", target "dev" invalid: Runtime Error
+    Could not find adapter type duckdb!
+[0m15:16:48.676131 [debug] [MainThread]: Command `dbt test` failed at 15:16:48.676131 after 0.35 seconds
+[0m15:16:48.676131 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001733C81A6D0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001733C80D290>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001733C80CA50>]}
+[0m15:16:48.681025 [debug] [MainThread]: Flushing usage events
+[0m15:16:49.573400 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m15:17:03.262686 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000027ACE0D8710>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000027ACE0DB190>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000027ACE0DA990>]}
+
+
+============================== 15:17:03.271071 | 68aa21f4-6901-4a1a-8a40-e9278bd3473d ==============================
+[0m15:17:03.271071 [info ] [MainThread]: Running with dbt=1.11.7
+[0m15:17:03.278665 [debug] [MainThread]: running dbt with arguments {'version_check': 'True', 'no_print': 'None', 'static_parser': 'True', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'target_path': 'None', 'printer_width': '80', 'write_json': 'True', 'introspect': 'True', 'log_cache_events': 'False', 'empty': 'None', 'cache_selected_only': 'False', 'fail_fast': 'False', 'debug': 'False', 'log_format': 'default', 'partial_parse': 'True', 'send_anonymous_usage_stats': 'True', 'quiet': 'False', 'warn_error': 'None', 'profiles_dir': 'C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project', 'indirect_selection': 'eager', 'invocation_command': 'dbt test --store-failures --project-dir C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project --profiles-dir C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project --select source:staging.raw_data', 'use_colors': 'True', 'use_experimental_parser': 'False', 'log_path': 'C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project\\logs'}
+[0m15:17:03.281207 [info ] [MainThread]: Error importing adapter: No module named 'dbt.adapters.duckdb'
+[0m15:17:03.281207 [error] [MainThread]: Encountered an error:
+Runtime Error
+  Credentials in profile "default", target "dev" invalid: Runtime Error
+    Could not find adapter type duckdb!
+[0m15:17:03.291568 [debug] [MainThread]: Command `dbt test` failed at 15:17:03.291568 after 0.21 seconds
+[0m15:17:03.293709 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000027ACE0DA190>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000027ACE146C10>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000027ACE0CD650>]}
+[0m15:17:03.294769 [debug] [MainThread]: Flushing usage events
+[0m15:17:03.982039 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m15:34:22.339072 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000021F3B9E60D0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000021F3F28A690>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000021F3F20D090>]}
+
+
+============================== 15:34:22.348750 | 481972df-5758-42db-8198-a66c6042dedb ==============================
+[0m15:34:22.348750 [info ] [MainThread]: Running with dbt=1.11.7
+[0m15:34:22.350767 [debug] [MainThread]: running dbt with arguments {'static_parser': 'True', 'no_print': 'None', 'version_check': 'True', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'target_path': 'None', 'printer_width': '80', 'write_json': 'True', 'empty': 'None', 'log_cache_events': 'False', 'introspect': 'True', 'cache_selected_only': 'False', 'log_format': 'default', 'debug': 'False', 'fail_fast': 'False', 'profiles_dir': 'C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project', 'send_anonymous_usage_stats': 'True', 'quiet': 'False', 'warn_error': 'None', 'partial_parse': 'True', 'invocation_command': 'dbt test --store-failures --project-dir C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project --profiles-dir C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project --select source:staging.raw_data', 'indirect_selection': 'eager', 'use_colors': 'True', 'use_experimental_parser': 'False', 'log_path': 'C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project\\logs'}
+[0m15:34:22.365443 [info ] [MainThread]: Error importing adapter: No module named 'dbt.adapters.duckdb'
+[0m15:34:22.367035 [error] [MainThread]: Encountered an error:
+Runtime Error
+  Credentials in profile "default", target "dev" invalid: Runtime Error
+    Could not find adapter type duckdb!
+[0m15:34:22.370359 [debug] [MainThread]: Command `dbt test` failed at 15:34:22.369779 after 0.27 seconds
+[0m15:34:22.370359 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000021F3F20D750>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000021F3F20F0D0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000021F3F20FF10>]}
+[0m15:34:22.372390 [debug] [MainThread]: Flushing usage events
+[0m15:34:23.280612 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m15:34:34.506181 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000013FEB3DCC10>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000013FEFC76F50>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000013FEEC2D5D0>]}
+
+
+============================== 15:34:34.515891 | e0c709a9-31a9-4f84-b3e4-3dbfafa46da9 ==============================
+[0m15:34:34.515891 [info ] [MainThread]: Running with dbt=1.11.7
+[0m15:34:34.515891 [debug] [MainThread]: running dbt with arguments {'version_check': 'True', 'no_print': 'None', 'static_parser': 'True', 'target_path': 'None', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'printer_width': '80', 'write_json': 'True', 'introspect': 'True', 'log_cache_events': 'False', 'empty': 'None', 'cache_selected_only': 'False', 'log_format': 'default', 'debug': 'False', 'fail_fast': 'False', 'profiles_dir': 'C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project', 'send_anonymous_usage_stats': 'True', 'quiet': 'False', 'warn_error': 'None', 'partial_parse': 'True', 'invocation_command': 'dbt test --store-failures --project-dir C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project --profiles-dir C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project --select source:staging.raw_data', 'use_colors': 'True', 'indirect_selection': 'eager', 'use_experimental_parser': 'False', 'log_path': 'C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project\\logs'}
+[0m15:34:34.529800 [info ] [MainThread]: Error importing adapter: No module named 'dbt.adapters.duckdb'
+[0m15:34:34.529800 [error] [MainThread]: Encountered an error:
+Runtime Error
+  Credentials in profile "default", target "dev" invalid: Runtime Error
+    Could not find adapter type duckdb!
+[0m15:34:34.537581 [debug] [MainThread]: Command `dbt test` failed at 15:34:34.537581 after 0.28 seconds
+[0m15:34:34.537581 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000013FEEC3A890>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000013FEEC38A50>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000013FEEC2F110>]}
+[0m15:34:34.542963 [debug] [MainThread]: Flushing usage events
+[0m15:34:35.276871 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m15:39:03.056966 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000023A1AE9ADD0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000023A1AE98BD0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000023A1AE98390>]}
+
+
+============================== 15:39:03.063466 | 64f0d781-5200-48ce-9b09-546690f3f231 ==============================
+[0m15:39:03.063466 [info ] [MainThread]: Running with dbt=1.11.7
+[0m15:39:03.069329 [debug] [MainThread]: running dbt with arguments {'version_check': 'True', 'no_print': 'None', 'static_parser': 'True', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'target_path': 'None', 'printer_width': '80', 'write_json': 'True', 'introspect': 'True', 'log_cache_events': 'False', 'empty': 'None', 'cache_selected_only': 'False', 'fail_fast': 'False', 'debug': 'False', 'log_format': 'default', 'partial_parse': 'True', 'send_anonymous_usage_stats': 'True', 'quiet': 'False', 'warn_error': 'None', 'profiles_dir': 'C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project', 'use_colors': 'True', 'indirect_selection': 'eager', 'invocation_command': 'dbt test --store-failures --project-dir C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project --profiles-dir C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project --select source:staging.raw_data', 'use_experimental_parser': 'False', 'log_path': 'C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project\\logs'}
+[0m15:39:03.074450 [info ] [MainThread]: Error importing adapter: No module named 'dbt.adapters.duckdb'
+[0m15:39:03.074450 [error] [MainThread]: Encountered an error:
+Runtime Error
+  Credentials in profile "default", target "dev" invalid: Runtime Error
+    Could not find adapter type duckdb!
+[0m15:39:03.083892 [debug] [MainThread]: Command `dbt test` failed at 15:39:03.083892 after 0.33 seconds
+[0m15:39:03.083892 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000023A1BEDF090>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000023A1BEDF390>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000023A1BEDCD50>]}
+[0m15:39:03.088357 [debug] [MainThread]: Flushing usage events
+[0m15:39:03.928123 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m15:39:19.931031 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000017ABAB48610>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000017ABABB6B90>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000017ABAB4AC90>]}
+
+
+============================== 15:39:19.939645 | dda71c85-7d05-4321-ab29-89d2033eeb64 ==============================
+[0m15:39:19.939645 [info ] [MainThread]: Running with dbt=1.11.7
+[0m15:39:19.941174 [debug] [MainThread]: running dbt with arguments {'version_check': 'True', 'no_print': 'None', 'static_parser': 'True', 'target_path': 'None', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'printer_width': '80', 'write_json': 'True', 'empty': 'None', 'log_cache_events': 'False', 'introspect': 'True', 'cache_selected_only': 'False', 'fail_fast': 'False', 'debug': 'False', 'log_format': 'default', 'partial_parse': 'True', 'send_anonymous_usage_stats': 'True', 'quiet': 'False', 'warn_error': 'None', 'profiles_dir': 'C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project', 'indirect_selection': 'eager', 'invocation_command': 'dbt test --store-failures --project-dir C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project --profiles-dir C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project --select source:staging.raw_data', 'use_colors': 'True', 'use_experimental_parser': 'False', 'log_path': 'C:\\Users\\salma\\OneDrive\\Desktop\\PFE\\Multi-Agent-Intelligent-Analytics-Platform-PFE\\data_preparation_agent\\dbt_project\\logs'}
+[0m15:39:19.955426 [info ] [MainThread]: Error importing adapter: No module named 'dbt.adapters.duckdb'
+[0m15:39:19.957450 [error] [MainThread]: Encountered an error:
+Runtime Error
+  Credentials in profile "default", target "dev" invalid: Runtime Error
+    Could not find adapter type duckdb!
+[0m15:39:19.957450 [debug] [MainThread]: Command `dbt test` failed at 15:39:19.957450 after 0.34 seconds
+[0m15:39:19.961838 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000017ABABD7F90>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000017ABABD7E10>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000017ABAB3CA10>]}
+[0m15:39:19.963972 [debug] [MainThread]: Flushing usage events
+[0m15:39:20.655432 [debug] [MainThread]: An error was encountered while trying to flush usage events
