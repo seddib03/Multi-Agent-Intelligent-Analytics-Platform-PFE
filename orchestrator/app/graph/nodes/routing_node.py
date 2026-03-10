@@ -89,10 +89,6 @@ def _decide_route(
                 f"Context Agent ({sector_conf:.0%} confiance) → route directe."
             )
 
-<<<<<<< HEAD
-    #Level 1: Confidence too low → Clarification
-    """
-=======
     # ── Niveau 0 bis — requires_orchestrator=True depuis /chat ────
     # ✅ NOUVEAU — le NLQ Agent a classifié l'intent ET désigné un agent cible
     # Plus précis que le Niveau 0 car il tient compte de l'INTENT réel
@@ -109,7 +105,6 @@ def _decide_route(
                 f"Niveau 0bis — NLQ routing: '{routing_target}'"
                 f"{sub_info} | intent={intent.value}."
             )
->>>>>>> orchestrator
 
     # ── Niveau 1 — Confiance trop faible → Clarification ─────────
     if sector_conf < CONFIDENCE_MIN_SECTOR and sector == SectorEnum.UNKNOWN:
@@ -124,19 +119,8 @@ def _decide_route(
             f"Niveau 1 — Intent non reconnu et confiance trop faible "
             f"({intent_conf:.0%}). Clarification requise."
         )
-<<<<<<< HEAD
-    """
-    if sector == SectorEnum.UNKNOWN and sector_conf < CONFIDENCE_MIN_SECTOR:
-        if intent == IntentEnum.UNKNOWN and intent_conf < CONFIDENCE_MIN_INTENT:
-            return (
-                RouteEnum.CLARIFICATION,
-                f"Sector AND intent unknown with low confidence. Clarification required."
-            )
-    # Level 2: execution type is insight → Insight Agent (even if sector is known, we want to prioritize insights)
-=======
 
     # ── Niveau 2 — execution_type = insight → Insight Agent ──────
->>>>>>> orchestrator
     if execution_type == ExecutionTypeEnum.INSIGHT:
         return (
             RouteEnum.INSIGHT_AGENT,
@@ -160,58 +144,12 @@ def _decide_route(
         if sector in sector_to_route:
             return (
                 sector_to_route[sector],
-<<<<<<< HEAD
-                f"SQL query with known sector → Sector-specific agent for '{sector.value}'."
-            )
-        return RouteEnum.GENERIC_ML_AGENT, "SQL query with unknown sector → Generic ML Agent (fallback to clarification if it fails)."
-
-    
-    
-    #Level 5: Dashboard/Chart intent → Insight Agent
-    # Regardless of sector, dashboards always go to Insight
-
-    if intent in [IntentEnum.DASHBOARD, IntentEnum.COMPARISON]:
-        return (
-            RouteEnum.INSIGHT_AGENT,
-            f"Intent '{intent.value}' requires the Insight Agent "
-            "(KPI routing + Power BI)."
-        )
-    
-
-    """
-    if intent in [IntentEnum.KPI_REQUEST, IntentEnum.PREDICTION]:
-        if sector in KNOWN_SECTORS:
-            return (
-                sector_to_route[sector],
-                f"Intent '{intent.value}' with known sector → '{sector.value}' agent."
-=======
                 f"Niveau 4 — SQL query with known sector → agent '{sector.value}'."
->>>>>>> orchestrator
             )
         return (
             RouteEnum.GENERIC_ML_AGENT,
             "Niveau 4 — SQL query with unknown sector → Generic ML Agent."
         )
-<<<<<<< HEAD
-    """
-    if intent in [IntentEnum.KPI_REQUEST, IntentEnum.PREDICTION,
-                  IntentEnum.EXPLANATION]:          # ← ajouté
-        if sector in KNOWN_SECTORS:
-            return sector_to_route[sector], f"Intent '{intent.value}' → '{sector.value}'."
-        return RouteEnum.GENERIC_ML_AGENT, f"Intent '{intent.value}' unknown sector → Generic ML."
-    
-     # ✅ NOUVEAU Level 6 — Secteur connu même si intent unknown
-    # Le routing_target de ta collègue a déjà identifié le secteur
-    # avec 95% de confiance → on fait confiance au secteur
-    if sector in KNOWN_SECTORS and sector_conf >= CONFIDENCE_MIN_SECTOR:
-        return (
-            sector_to_route[sector],
-            f"Sector '{sector.value}' known ({sector_conf:.0%}) despite unknown intent → sector agent."
-        )
-
-    # Default: Clarification (we don't have a clear rule to route, we need clarification to avoid wrong answers)
-    return RouteEnum.CLARIFICATION, "No clear routing rule matched → Clarification required."
-=======
 
     # ── Niveau 5 — Intent connu ───────────────────────────────────
     if intent in [IntentEnum.DASHBOARD, IntentEnum.COMPARISON,
@@ -250,7 +188,6 @@ def _decide_route(
         RouteEnum.CLARIFICATION,
         "Défaut — Aucune règle de routing satisfaite → Clarification requise."
     )
->>>>>>> orchestrator
 
 
 def _decide_fallback(sector: SectorEnum, primary_route: RouteEnum) -> RouteEnum:

@@ -104,18 +104,7 @@ async def call_detect_sector(state: OrchestratorState):
             f"routing_target={routing_target}"
         )
 
-<<<<<<< HEAD
-    state.sector_confidence = sector_context.get("confidence", 0.0)
-    state.kpi_mapping       = sector_context.get("kpis", [])
-    state.domain_constraints   = {
-    "dashboard_focus":      sector_context.get("dashboard_focus", ""),
-    "recommended_charts":   sector_context.get("recommended_charts", []),
-    "metadata_used":        sector_context.get("metadata_used", False),
-    "explanation":          sector_context.get("explanation", ""),
-}
-=======
         return state, suggested_route
->>>>>>> orchestrator
 
     except httpx.ConnectError:
         state.errors.append("❌ NLQ API /detect-sector non disponible")
@@ -183,33 +172,20 @@ async def call_nlq_chat(
         )
 
     except httpx.ConnectError:
-        state.errors.append(" NLQ API /chat non disponible")
+        state.errors.append("❌ NLQ API /chat non disponible")
         state.processing_steps.append("nlq_chat → ERREUR connexion")
 
     return state
 
 
-<<<<<<< HEAD
-    return state
-async def reset_nlq_session(user_id: str) -> dict:
-    """
-    Appelle POST /chat/reset
-    Réinitialise l'historique de conversation d'un utilisateur.
-=======
 async def reset_nlq_session(user_id: str) -> dict:
     """
     Appelle POST /chat/reset (Collègue 1).
     Nettoie l'historique de conversation de l'utilisateur.
->>>>>>> orchestrator
     """
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.post(
             f"{NLQ_API_URL}/chat/reset",
             json={"user_id": user_id}
         )
-<<<<<<< HEAD
         return response.json()
-    # Retourne : {"history_cleared": true, "user_id": "...", "message": "..."}
-=======
-        return response.json()
->>>>>>> orchestrator

@@ -88,7 +88,7 @@ class OrchestratorState(BaseModel):
 # précise la TÂCHE que l'agent sectoriel doit faire
 
     # From context Agent
-    canonical_metrics: str = ""
+    canonical_metric: str = ""
     execution_type: ExecutionTypeEnum = ExecutionTypeEnum.UNKNOWN
     data_source: dict = Field(default_factory=dict)
     metric_raw: str = ""
