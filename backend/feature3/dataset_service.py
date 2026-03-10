@@ -28,7 +28,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.core.minio import delete_file, download_file, upload_file
 from app.models.dataset import Dataset, DatasetColumn
-from app.schemas.dataset import (
+from backend.app.schemas.dataset import (
     ColumnMetadataUpdate,
     DatasetMetadataUpdate,
     PreviewResponse,
