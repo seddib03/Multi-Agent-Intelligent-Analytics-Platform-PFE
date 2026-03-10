@@ -14,17 +14,15 @@ from app.services.sector_detection_service import detect_sector
 router = APIRouter(tags=["Projects"])
 
 
-# ─── Helpers ──────────────────────────────────────────────
-
 async def _get_project_or_404(
     db: AsyncSession,
     project_id: uuid.UUID,
-    company_id: str,
+    owner_id: uuid.UUID,
 ) -> Project:
     result = await db.execute(
         select(Project).where(
             Project.id == project_id,
-            Project.company_id == company_id,
+            Project.owner_id == owner_id,
         )
     )
     project = result.scalar_one_or_none()
@@ -33,16 +31,14 @@ async def _get_project_or_404(
     return project
 
 
-# ─── Routes ───────────────────────────────────────────────
-
 @router.get("", response_model=List[ProjectResponse])
 async def list_projects(
     db:           AsyncSession = Depends(get_db),
-    current_user: dict         = Depends(get_current_user),
+    current_user: User         = Depends(get_current_user),
 ):
     result = await db.execute(
         select(Project)
-        .where(Project.company_id == current_user["company_id"])
+        .where(Project.owner_id == current_user.id)
         .order_by(Project.created_at.desc())
     )
     return result.scalars().all()
@@ -52,7 +48,7 @@ async def list_projects(
 async def create_project(
     body:         ProjectCreate,
     db:           AsyncSession = Depends(get_db),
-    current_user: dict         = Depends(get_current_user),
+    current_user: User         = Depends(get_current_user),
 ):
     project = Project(
         name=body.name,
@@ -60,8 +56,8 @@ async def create_project(
         use_case=body.use_case,
         detected_sector=detect_sector(body.use_case or ""),
         visual_preferences=str(body.visual_preferences) if body.visual_preferences else None,
-        owner_id=uuid.UUID(current_user["user_id"]),
-        company_id=current_user["company_id"],
+        business_rules=body.business_rules,
+        owner_id=current_user.id,
     )
     db.add(project)
     await db.flush()
@@ -73,9 +69,9 @@ async def create_project(
 async def get_project(
     project_id:   uuid.UUID,
     db:           AsyncSession = Depends(get_db),
-    current_user: dict         = Depends(get_current_user),
+    current_user: User         = Depends(get_current_user),
 ):
-    return await _get_project_or_404(db, project_id, current_user["company_id"])
+    return await _get_project_or_404(db, project_id, current_user.id)
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
@@ -83,13 +79,15 @@ async def update_project(
     project_id:   uuid.UUID,
     body:         ProjectUpdate,
     db:           AsyncSession = Depends(get_db),
-    current_user: dict         = Depends(get_current_user),
+    current_user: User         = Depends(get_current_user),
 ):
-    project = await _get_project_or_404(db, project_id, current_user["company_id"])
+    project = await _get_project_or_404(db, project_id, current_user.id)
 
     if body.name               is not None: project.name               = body.name
     if body.description        is not None: project.description        = body.description
     if body.visual_preferences is not None: project.visual_preferences = str(body.visual_preferences)
+    if body.business_rules     is not None: project.business_rules     = body.business_rules
+    if body.status             is not None: project.status             = body.status
     if body.use_case           is not None:
         project.use_case        = body.use_case
         project.detected_sector = detect_sector(body.use_case)
@@ -103,7 +101,7 @@ async def update_project(
 async def delete_project(
     project_id:   uuid.UUID,
     db:           AsyncSession = Depends(get_db),
-    current_user: dict         = Depends(get_current_user),
+    current_user: User         = Depends(get_current_user),
 ):
-    project = await _get_project_or_404(db, project_id, current_user["company_id"])
+    project = await _get_project_or_404(db, project_id, current_user.id)
     await db.delete(project)
