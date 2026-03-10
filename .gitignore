@@ -31,3 +31,28 @@ target/
 dbt_packages/
 logs/
 *.log
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# VSCode
+.vscode/
+
+# Environment
+.env
+
+# Data
+data/
+datasets/
+*.csv
+*.json
+
+# Models
+models/
+*.pkl
+*.joblib
+
+# OS
+.DS_Store
+Thumbs.db
