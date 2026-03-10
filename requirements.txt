@@ -65,3 +65,6 @@ dbt-duckdb
 # Utils
 python-dotenv
 loguru
+
+alembic==1.14.0
+psycopg2-binary==2.9.10
