@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { UserPlus, Eye, EyeOff, Mail, Lock, User, ArrowRight, CheckCircle2 } from "lucide-react";
+import { UserPlus, Eye, EyeOff, Mail, Lock, User, Building2, ArrowRight, CheckCircle2 } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { useAuth } from "@/hooks/useAuth";
 import { t } from "@/lib/i18n";
@@ -15,6 +15,7 @@ const Register = () => {
   const { signUp } = useAuth();
   const lang = useAppStore((s) => s.userPreferences.language);
   const [fullName, setFullName] = useState("");
+  const [companyName, setCompanyName] = useState((import.meta.env.VITE_DEFAULT_COMPANY_NAME as string | undefined) || "");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,7 +35,7 @@ const Register = () => {
     const { error } = await signUp({
       email,
       password,
-      options: { data: { full_name: fullName } },
+      options: { data: { full_name: fullName, company_name: companyName } },
     });
     setLoading(false);
     if (error) {
@@ -116,6 +117,22 @@ const Register = () => {
                   placeholder={t("namePlaceholder", lang)}
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
+                  required
+                  className="h-12 rounded-lg border-border bg-card pl-11 text-base focus:border-primary"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="companyName" className="text-sm font-semibold text-foreground">{t("company", lang)}</Label>
+              <div className="relative">
+                <Building2 size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground/40" />
+                <Input
+                  id="companyName"
+                  type="text"
+                  placeholder={t("companyPlaceholder", lang)}
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
                   required
                   className="h-12 rounded-lg border-border bg-card pl-11 text-base focus:border-primary"
                 />
