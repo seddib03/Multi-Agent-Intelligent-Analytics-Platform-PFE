@@ -55,6 +55,8 @@ class Settings(BaseSettings):
         )
     # ── Upload ────────────────────────────────────────────
     MAX_UPLOAD_SIZE_MB: int = 50
+    # dossier utilisé pour stocker temporairement les fichiers uploadés
+    TEMP_UPLOAD_DIR: str = "./tmp/uploads"
 
     # ── CORS ──────────────────────────────────────────────
     FRONTEND_URL: str = "http://localhost:5173"

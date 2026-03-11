@@ -16,7 +16,7 @@ export function StepMetadata() {
   const { dataset, updateDataset, setOnboardingStep, userPreferences } = useAppStore();
   const lang = userPreferences.language;
   const { columns, detectedSector, businessRules } = dataset;
-  const sectorInfo = SECTOR_LABELS[detectedSector];
+  const sectorInfo = SECTOR_LABELS[detectedSector] ?? { icon: "📊", label: detectedSector ?? "General" };
 
   const updateColumn = (idx: number, field: keyof ColumnMetadata, value: string) => {
     const updated = [...columns];
@@ -48,7 +48,7 @@ export function StepMetadata() {
                 </thead>
                 <tbody>
                   {columns.map((col, i) => {
-                    const badge = TYPE_BADGES[col.semanticType];
+                    const badge = TYPE_BADGES[col.semanticType] ?? TYPE_BADGES["ignore"];
                     return (
                       <tr key={col.originalName} className={`border-b border-border ${col.semanticType === "target" ? "bg-dxc-melon/10" : "bg-card"}`}>
                         <td className="px-3 py-2">
@@ -104,7 +104,7 @@ export function StepMetadata() {
               {columns.filter((c) => c.semanticType === "identifier").map((c) => (
                 <p key={c.originalName} className="text-dxc-gold">⚠️ "{c.originalName}" {t("autoExcluded", lang)}</p>
               ))}
-              {columns.filter((c) => c.missingPercent > 5).map((c) => (
+              {columns.filter((c) => (c.missingPercent ?? 0) > 5).map((c) => (
                 <p key={c.originalName} className="text-dxc-gold">⚠️ {c.missingPercent}% {t("missingValues", lang)} "{c.originalName}" → {t("medianImputation", lang)}</p>
               ))}
               <p className="text-dxc-sky">💡 {t("mlTask", lang)}</p>

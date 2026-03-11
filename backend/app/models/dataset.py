@@ -12,8 +12,10 @@ class Dataset(Base):
     id:                    Mapped[uuid.UUID]   = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id:            Mapped[uuid.UUID]   = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
     original_filename:     Mapped[str]         = mapped_column(String(255), nullable=False)
-    minio_key:             Mapped[str]         = mapped_column(String(500), nullable=False)
-    minio_processed_key:   Mapped[str | None]  = mapped_column(String(500), nullable=True)
+    # path on local filesystem where the uploaded file was saved
+    file_path:              Mapped[str]         = mapped_column(String(500), nullable=False)
+    # optional processed version path
+    processed_path:         Mapped[str | None]  = mapped_column(String(500), nullable=True)
     file_format:           Mapped[str]         = mapped_column(String(20), nullable=False)   # csv | xlsx | json
     file_size_bytes:       Mapped[int]         = mapped_column(Integer, nullable=False)
     row_count:             Mapped[int | None]  = mapped_column(Integer, nullable=True)
