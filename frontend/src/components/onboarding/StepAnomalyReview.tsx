@@ -183,8 +183,9 @@ export function StepAnomalyReview() {
           >
             {t("ignoreAll", lang)}
           </button>
+          {/* if the review step is ever reached it should behave like launch since quality is disabled */}
           <button
-            onClick={() => setOnboardingStep(5)}
+            onClick={() => setOnboardingStep(4)}
             disabled={!allResolved}
             className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
