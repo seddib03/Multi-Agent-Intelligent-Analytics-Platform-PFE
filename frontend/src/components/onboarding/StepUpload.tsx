@@ -4,15 +4,25 @@ import { Upload, FileCheck, Trash2, Plus, Loader2, AlertCircle } from "lucide-re
 import { useAppStore } from "@/stores/appStore";
 import { t } from "@/lib/i18n";
 import { uploadDataset, type UploadResponse } from "@/lib/datasetsApi";
+import type { ColumnMetadata } from "@/types/app";
+
+type SemanticType = "numeric" | "date" | "category" | "target" | "identifier" | "ignore";
 
 interface UploadedFile {
   name:         string;
   datasetId:    string;
   rowCount:     number;
   columnCount:  number;
-  qualityScore: number;
   preview:      Record<string, unknown>[];
-  columns:      { original_name: string; detected_type: string; null_percent: number }[];
+  columns:      { original_name: string; detected_type: string; null_percent: number; unique_count: number; sample_values?: unknown[] }[];
+  mappedColumns: ColumnMetadata[];
+}
+
+function toSemanticType(detected: string): SemanticType {
+  if (detected === "numeric")  return "numeric";
+  if (detected === "datetime") return "date";
+  if (detected === "boolean")  return "category";
+  return "category";
 }
 
 export function StepUpload() {
@@ -46,35 +56,43 @@ export function StepUpload() {
         clearInterval(progressInterval);
         setProgress(100);
 
+        const mappedColumns: ColumnMetadata[] = result.columns.map((col) => ({
+          originalName:   col.original_name,
+          businessName:   col.original_name,
+          semanticType:   toSemanticType(col.detected_type),
+          detectedType:   col.detected_type,
+          missingPercent: col.null_percent,
+          uniqueCount:    col.unique_count,
+          sampleValues:   col.sample_values ?? [],
+          unit:           "",
+          description:    "",
+        }));
+
         const newFile: UploadedFile = {
-          name:         file.name,
-          datasetId:    result.file_id,
-          rowCount:     result.row_count,
-          columnCount:  result.column_count,
-          qualityScore: result.quality_score,
-          preview:      result.preview,
-          columns:      result.columns,
+          name:          file.name,
+          datasetId:     result.file_id,
+          rowCount:      result.row_count,
+          columnCount:   result.column_count,
+          preview:       result.preview,
+          columns:       result.columns,
+          mappedColumns,
         };
 
-        // ── Calculer les valeurs AVANT setFiles ──────────────────────────
-        const currentFiles = useAppStore.getState ? files : [];
-        const next         = [...files, newFile];
-        const totalRows    = next.reduce((s, f) => s + f.rowCount, 0);
-        const totalCols    = next.reduce((s, f) => s + f.columnCount, 0);
-        const avgQuality   = Math.round(next.reduce((s, f) => s + f.qualityScore, 0) / next.length);
-        const newIdx       = next.length - 1;
+        const next       = [...files, newFile];
+        const totalRows  = next.reduce((s, f) => s + f.rowCount, 0);
+        const totalCols  = next.reduce((s, f) => s + f.columnCount, 0);
+        const newIdx     = next.length - 1;
 
-        // ── Zustand en premier (hors render) ─────────────────────────────
         updateDataset({
-          fileName:       next.map((f) => f.name).join(", "),
-          rowCount:       totalRows,
-          columnCount:    totalCols,
-          qualityScore:   avgQuality,
-          detectedSector: (result.detected_sector as never) ?? "general",
-          previewData:    result.preview,
-        });
+          fileName:         next.map((f) => f.name).join(", "),
+          rowCount:         totalRows,
+          columnCount:      totalCols,
+          detectedSector:   (result.detected_sector as never) ?? "general",
+          previewData:      result.preview,
+          columns:          next[0].mappedColumns,
+          uploadedDatasets: next.map((f) => ({ fileName: f.name, columns: f.mappedColumns })),
+        } as never);
 
-        // ── React state ensuite ──────────────────────────────────────────
         setFiles(next);
         setActiveFileIdx(newIdx);
 
@@ -89,9 +107,7 @@ export function StepUpload() {
   );
 
   const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
-      acceptedFiles.forEach((file) => handleUpload(file));
-    },
+    (acceptedFiles: File[]) => { acceptedFiles.forEach((file) => handleUpload(file)); },
     [handleUpload],
   );
 
@@ -109,14 +125,19 @@ export function StepUpload() {
   const removeFile = (idx: number) => {
     const next = files.filter((_, i) => i !== idx);
     if (next.length === 0) {
-      updateDataset({ fileName: "", rowCount: 0, columnCount: 0, qualityScore: 0, previewData: [] });
+      updateDataset({ fileName: "", rowCount: 0, columnCount: 0, previewData: [], columns: [], uploadedDatasets: [] } as never);
       setActiveFileIdx(0);
     } else {
-      const newIdx     = Math.min(activeFileIdx, next.length - 1);
-      const totalRows  = next.reduce((s, f) => s + f.rowCount, 0);
-      const totalCols  = next.reduce((s, f) => s + f.columnCount, 0);
-      const avgQuality = Math.round(next.reduce((s, f) => s + f.qualityScore, 0) / next.length);
-      updateDataset({ fileName: next.map((f) => f.name).join(", "), rowCount: totalRows, columnCount: totalCols, qualityScore: avgQuality, previewData: next[newIdx].preview });
+      const newIdx    = Math.min(activeFileIdx, next.length - 1);
+      const totalRows = next.reduce((s, f) => s + f.rowCount, 0);
+      const totalCols = next.reduce((s, f) => s + f.columnCount, 0);
+      updateDataset({
+        fileName: next.map((f) => f.name).join(", "),
+        rowCount: totalRows, columnCount: totalCols,
+        previewData: next[newIdx].preview,
+        columns: next[0].mappedColumns,
+        uploadedDatasets: next.map((f) => ({ fileName: f.name, columns: f.mappedColumns })),
+      } as never);
       setActiveFileIdx(newIdx);
     }
     setFiles(next);
@@ -207,6 +228,7 @@ export function StepUpload() {
 
           {activeFile && (
             <>
+              {/* ── File summary (sans score qualité) ── */}
               <div className="bg-card rounded-xl shadow-sm border border-border p-5 flex items-center gap-4">
                 <FileCheck className="text-primary shrink-0" size={24} />
                 <div className="flex-1">
@@ -216,20 +238,9 @@ export function StepUpload() {
                     <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded font-medium">{activeFile.columnCount} {t("cols", lang)}</span>
                   </div>
                 </div>
-                <div className="relative w-14 h-14">
-                  <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
-                    <circle cx="18" cy="18" r="15.5" fill="none" className="stroke-muted" strokeWidth="3" />
-                    <circle cx="18" cy="18" r="15.5" fill="none"
-                      stroke={activeFile.qualityScore > 70 ? "#004AAC" : activeFile.qualityScore > 40 ? "#FFAE41" : "#D14600"}
-                      strokeWidth="3"
-                      strokeDasharray={`${activeFile.qualityScore} ${100 - activeFile.qualityScore}`}
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-foreground">{activeFile.qualityScore}</span>
-                </div>
               </div>
 
+              {/* ── Preview table ── */}
               {activeFile.preview.length > 0 && (
                 <div className="rounded-xl overflow-hidden border border-border shadow-sm">
                   <div className="overflow-x-auto">
@@ -254,21 +265,6 @@ export function StepUpload() {
                   </div>
                 </div>
               )}
-
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-foreground">{t("columnQuality", lang)}</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {activeFile.columns.map((col) => (
-                    <div key={col.original_name} className="bg-card rounded-lg p-2 border border-border">
-                      <span className="text-xs font-mono text-muted-foreground">{col.original_name}</span>
-                      <div className="h-1.5 bg-muted rounded-full mt-1 overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${100 - col.null_percent}%`, background: col.null_percent > 5 ? "#FF7E51" : "#004AAC" }} />
-                      </div>
-                      <span className="text-xs text-muted-foreground">{col.null_percent.toFixed(1)}% {t("missing", lang)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </>
           )}
         </>
