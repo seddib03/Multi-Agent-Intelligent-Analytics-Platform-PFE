@@ -97,7 +97,7 @@ export function NLQInterface() {
   useDarkMode();
 
   const sector = dataset.detectedSector;
-  const sectorInfo = SECTOR_LABELS[sector];
+  const sectorInfo = SECTOR_LABELS[sector] ?? { icon: "📊", label: sector ?? "Général" };
   const suggestions = getSuggestedQuestions(sector);
   const chartStyle = userPreferences.chartStyle;
 

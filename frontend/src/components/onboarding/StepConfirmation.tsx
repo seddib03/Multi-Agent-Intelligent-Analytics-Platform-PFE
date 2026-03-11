@@ -19,12 +19,12 @@ export function StepConfirmation() {
   const [currentStep, setCurrentStep] = useState(-1);
   const [done, setDone] = useState(false);
 
-  const sectorInfo = SECTOR_LABELS[dataset.detectedSector];
+  const sectorInfo  = SECTOR_LABELS[dataset.detectedSector] ?? { icon: "📊", label: dataset.detectedSector ?? "Général" };
+  const safeSector  = dataset.detectedSector in SECTOR_LABELS ? dataset.detectedSector : "finance";
   const accentTheme = ACCENT_THEMES[userPreferences.accentTheme];
-  const targetCol = dataset.columns.find((c) => c.semanticType === "target");
+  const targetCol   = dataset.columns.find((c) => c.semanticType === "target");
 
   const LAUNCH_STEPS: LaunchStep[] = [
-    { label: "Data Preparation Agent", agent: lang === "fr" ? "Nettoyage · Normalisation · Imputation" : "Cleaning · Normalization · Imputation", detail: lang === "fr" ? "des valeurs manquantes" : "of missing values", result: `42 312 ${t("linesProcessed", lang)}` },
     { label: "Generic Predictive Agent (AutoML)", agent: "Test XGBoost · LightGBM ·", detail: "Logistic Regression", result: "XGBoost — AUC: 0.871 · F1: 0.83" },
     { label: "Insight Agent", agent: lang === "fr" ? "Génération des métriques ·" : "Metrics generation ·", detail: "Feature importance", result: `8 ${t("insightsGenerated", lang)}` },
   ];
@@ -37,17 +37,17 @@ export function StepConfirmation() {
       if (currentStep < LAUNCH_STEPS.length - 1) {
         setCurrentStep(currentStep + 1);
       } else {
-        const fi = generateFeatureImportance(dataset.columns);
-        const entities = generateEntities(dataset.detectedSector);
+        const fi       = generateFeatureImportance(dataset.columns);
+        const entities = generateEntities(safeSector);
         updateModelResults({ featureImportance: fi, topRiskyEntities: entities });
-        const kpis = SECTOR_KPIS[dataset.detectedSector];
+        const kpis = SECTOR_KPIS[safeSector] ?? [];
         updatePreferences({ visibleKPIs: kpis.map((k) => k.key) });
         setDone(true);
         setTimeout(() => setPhase(2), 1500);
       }
     }, 1800);
     return () => clearTimeout(timer);
-  }, [currentStep, dataset, setPhase, updateModelResults, updatePreferences]);
+  }, [currentStep]);
 
   if (launching) {
     return (
@@ -90,23 +90,20 @@ export function StepConfirmation() {
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("useCase", lang)}</h3>
           <p className="text-sm text-foreground line-clamp-2">{onboarding.useCaseDescription}</p>
           <div className="flex gap-2 mt-2 flex-wrap">
-             <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded font-medium">{sectorInfo.icon} {sectorInfo.label}</span>
+            <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded font-medium">{sectorInfo.icon} {sectorInfo.label}</span>
             {onboarding.analysisTypes.map((tStr) => (
               <span key={tStr} className="text-xs bg-dxc-melon text-white px-2 py-0.5 rounded font-medium">{tStr}</span>
             ))}
           </div>
         </div>
 
-        <div className="p-5 flex items-center gap-3">
-          <div className="flex-1">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("dataset", lang)}</h3>
-            <p className="text-sm text-foreground font-medium mt-1">📄 {dataset.fileName}</p>
-            <div className="flex gap-2 mt-1">
-               <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded">{dataset.rowCount.toLocaleString()} {t("rows", lang)}</span>
-              <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded">{dataset.columnCount} {t("cols", lang)}</span>
-            </div>
+        <div className="p-5">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("dataset", lang)}</h3>
+          <p className="text-sm text-foreground font-medium mt-1">📄 {dataset.fileName}</p>
+          <div className="flex gap-2 mt-1">
+            <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded">{dataset.rowCount.toLocaleString()} {t("rows", lang)}</span>
+            <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded">{dataset.columnCount} {t("cols", lang)}</span>
           </div>
-          <div className="text-2xl font-bold text-primary">{dataset.qualityScore}/100</div>
         </div>
 
         {targetCol && (
@@ -140,7 +137,7 @@ export function StepConfirmation() {
       </div>
 
       <div className="flex justify-between items-center flex-wrap gap-3">
-        <button onClick={() => setOnboardingStep(4)} className="px-6 py-2 text-primary border border-primary rounded-lg hover:bg-primary/5 transition-colors">
+        <button onClick={() => setOnboardingStep(3)} className="px-6 py-2 text-primary border border-primary rounded-lg hover:bg-primary/5 transition-colors">
           ← {t("back", lang)}
         </button>
         <button
