@@ -8,11 +8,12 @@ export function OnboardingHeader() {
   const setOnboardingStep = useAppStore((s) => s.setOnboardingStep);
   const lang = useAppStore((s) => s.userPreferences.language);
 
+  // currently we hide the "quality" phase until after launch
   const steps = [
     t("stepUseCase", lang),
     t("stepData", lang),
     t("stepMetadata", lang),
-    t("stepQuality", lang),
+    // quality step intentionally removed for now
     t("stepLaunch", lang),
   ];
 
@@ -33,7 +34,7 @@ export function OnboardingHeader() {
               <div key={label} className="flex items-center flex-1">
                 <div className="flex items-center gap-1.5 sm:gap-2 flex-1">
                   <button
-                    onClick={() => canNavigate && setOnboardingStep(idx as 1 | 2 | 3 | 4 | 5)}
+                    onClick={() => canNavigate && setOnboardingStep(idx as 1 | 2 | 3 | 4)}
                     disabled={!canNavigate}
                     className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-semibold shrink-0 transition-all ${
                       isDone
