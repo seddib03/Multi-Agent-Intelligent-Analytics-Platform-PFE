@@ -17,11 +17,13 @@ async def lifespan(app: FastAPI):
         print("✅ Database schema ready")
     except Exception as e:
         print(f"⚠️  Database schema init warning: {e}")
+    # make sure temporary upload folder exists
     try:
-        ensure_buckets_exist()
-        print(f"✅ MinIO bucket '{settings.MINIO_BUCKET}' ready")
+        import os
+        os.makedirs(settings.TEMP_UPLOAD_DIR, exist_ok=True)
+        print(f"✅ Temp upload dir '{settings.TEMP_UPLOAD_DIR}' ready")
     except Exception as e:
-        print(f"⚠️  MinIO bucket init warning: {e}")
+        print(f"⚠️  Temp upload dir init warning: {e}")
     yield
     # Shutdown
     print("👋 DXC Insight API stopped")
@@ -40,12 +42,14 @@ app = FastAPI(
 )
 
 # ─── CORS ─────────────────────────────────────────────────
+# use FRONTEND_URL from settings; in development allow localhost variants
+origins = [settings.FRONTEND_URL]
+if settings.DEBUG:
+    origins.append("http://localhost:3000")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=(
-        ["*"] if settings.ENVIRONMENT == "development"
-        else ["https://your-frontend-domain.com"]
-    ),
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -6,9 +6,8 @@ import time
 from typing import Any
 
 import pandas as pd
-from minio.error import S3Error
 
-from app.core.minio import BUCKET, minio_client
+from app.core.config import settings
 
 
 class DatasetService:
@@ -18,25 +17,31 @@ class DatasetService:
         self.minio_service = minio_service
 
     def upload(self, file_bytes: bytes, filename: str | None, project_id: str) -> dict[str, Any]:
+        """Persist the uploaded bytes to a temporary directory and profile the dataset.
+
+        Result dictionary includes `file_path` instead of a MinIO key.
+        """
         safe_filename = filename or "upload.csv"
         file_format = os.path.splitext(safe_filename)[1].lower().lstrip(".") or "csv"
 
+        # profile using pandas as before
         df = self._read_dataframe(file_bytes, file_format)
 
-        object_key = f"{project_id}/raw/{int(time.time())}_{safe_filename}"
-        minio_client.put_object(
-            bucket_name=BUCKET,
-            object_name=object_key,
-            data=io.BytesIO(file_bytes),
-            length=len(file_bytes),
-            content_type=self._content_type(file_format),
-        )
+        # ensure project-specific subdirectory exists
+        dest_dir = os.path.join(settings.TEMP_UPLOAD_DIR, str(project_id))
+        os.makedirs(dest_dir, exist_ok=True)
+        timestamp = int(time.time())
+        local_path = os.path.join(dest_dir, f"{timestamp}_{safe_filename}")
+
+        # write raw bytes to disk
+        with open(local_path, "wb") as f:
+            f.write(file_bytes)
 
         columns = [self._column_profile(df, col, idx) for idx, col in enumerate(df.columns)]
         preview_df = df.head(10).where(pd.notna(df.head(10)), None)
 
         return {
-            "minio_key": object_key,
+            "file_path": local_path,
             "file_format": file_format,
             "file_size_bytes": len(file_bytes),
             "row_count": int(len(df.index)),
@@ -46,13 +51,10 @@ class DatasetService:
             "columns": columns,
         }
 
-    def get_preview_from_minio(self, minio_key: str, file_format: str, n: int = 10) -> dict[str, Any]:
-        response = minio_client.get_object(BUCKET, minio_key)
-        try:
-            data = response.read()
-        finally:
-            response.close()
-            response.release_conn()
+    def get_preview(self, file_path: str, file_format: str, n: int = 10) -> dict[str, Any]:
+        """Read a local file and return a small preview."""
+        with open(file_path, "rb") as f:
+            data = f.read()
 
         df = self._read_dataframe(data, file_format)
         preview_df = df.head(n).where(pd.notna(df.head(n)), None)
@@ -62,12 +64,11 @@ class DatasetService:
             "columns": [str(c) for c in df.columns],
         }
 
-    def delete_file(self, minio_key: str) -> None:
+    def delete_file(self, file_path: str) -> None:
         try:
-            minio_client.remove_object(BUCKET, minio_key)
-        except S3Error as exc:
-            if exc.code != "NoSuchKey":
-                raise
+            os.remove(file_path)
+        except FileNotFoundError:
+            pass
 
     def _read_dataframe(self, raw: bytes, file_format: str) -> pd.DataFrame:
         fmt = (file_format or "").lower()
