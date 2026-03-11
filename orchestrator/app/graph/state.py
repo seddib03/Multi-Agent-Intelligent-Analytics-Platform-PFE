@@ -69,8 +69,9 @@ class OrchestratorState(BaseModel):
     #Sector detection result
     sector: SectorEnum = SectorEnum.UNKNOWN
     sector_confidence: float = 0.0
-   # kpi_mapping: list[str] = Field(default_factory=list)  
-    kpi_mapping: list[dict] = Field(default_factory=list)  # List of dicts with KPI details
+    # kpi_mapping: list[str] = Field(default_factory=list)  
+    kpi_mapping: list[dict] = Field(default_factory=list)
+
     domain_constraints: dict = Field(default_factory=dict)
     
 
