@@ -24,8 +24,17 @@ def _to_native(obj: Any) -> Any:
             val = _to_native(v)
             if val is not None:
                 # Keep if not an empty collection
+                # EXCEPT for critical keys we want to see even if empty (like affected_rows)
                 if isinstance(val, (dict, list)) and len(val) == 0:
-                    continue
+                    exempt_keys = (
+                        "affected_rows", "rows", "null_rows", "duplicate_rows", 
+                        "invalid_rows", "range_errors", "enum_errors", 
+                        "pattern_errors", "date_errors", "type_errors",
+                        "out_of_range_rows", "inconsistent_rows",
+                        "br_accuracy_rows", "br_validity_rows"
+                    )
+                    if k not in exempt_keys:
+                        continue
                 cleaned[k] = val
         return cleaned
 

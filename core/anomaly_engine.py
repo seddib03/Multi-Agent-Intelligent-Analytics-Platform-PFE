@@ -17,6 +17,69 @@ from models.quality_report import QualityReport
 logger = logging.getLogger(__name__)
 
 
+def _make_generic_br_anomaly(
+    meta:       ColumnMeta,
+    error_rows: list[int],
+    dimension:  str,
+    total:      int,
+    count:      int = 0,
+) -> AnomalyItem:
+    """Anomalie générique pour Business Rules (utilisé quand on a juste les lignes)."""
+
+    if count == 0:
+        count = len(error_rows)
+
+    return AnomalyItem(
+        anomaly_id=f"anomaly_{uuid.uuid4().hex[:6]}",
+        column_name=meta.column_name,
+        dimension=dimension,
+        anomaly_type=AnomalyType.CUSTOM_RULE if hasattr(AnomalyType, "CUSTOM_RULE") else AnomalyType.OUT_OF_RANGE,
+        anomaly_source="business_rule",
+        problem_description=(
+            f"La colonne '{meta.business_name}' viole une règle métier ({dimension}). "
+            f"Ceci a affecté {count} ligne(s)."
+        ),
+        affected_rows=error_rows[:500],
+        affected_count=count,
+        affected_pct=float(count / total * 100) if total else 0.0,
+        action_1=CleaningAction.FLAG_ONLY,
+        justification_1="Signaler la violation pour investigation manuelle",
+        action_2=CleaningAction.DROP_ROWS,
+        justification_2="Supprimer les lignes ne respectant pas la règle métier",
+        action_3=CleaningAction.FLAG_ONLY,
+        justification_3="Conserver sans modification",
+    )
+
+
+def _make_generic_validity_anomaly(
+    meta:   ColumnMeta,
+    detail: dict,
+    total:  int,
+) -> AnomalyItem:
+    """Anomalie générique pour violation de validité (quand le type précis est inconnu)."""
+    count = detail.get("invalid_count", 0)
+    
+    return AnomalyItem(
+        anomaly_id=f"anomaly_{uuid.uuid4().hex[:6]}",
+        column_name=meta.column_name,
+        dimension="validity",
+        anomaly_type=AnomalyType.WRONG_TYPE,
+        problem_description=(
+            f"La colonne '{meta.business_name}' contient {count} valeur(s) invalides "
+            f"en contradiction avec les règles de validité du metadata."
+        ),
+        affected_rows=[], # On n'a pas pu les récupérer par type précis
+        affected_count=count,
+        affected_pct=float(count / total * 100) if total else 0.0,
+        action_1=CleaningAction.FLAG_ONLY,
+        justification_1="Signaler pour investigation — le type d'erreur n'a pas pu être catégorisé",
+        action_2=CleaningAction.DROP_ROWS,
+        justification_2="Supprimer les lignes avec valeurs invalides",
+        action_3=CleaningAction.FLAG_ONLY,
+        justification_3="Conserver sans modification",
+    )
+
+
 def detect_anomalies(
     metadata:       list[ColumnMeta],
     quality_report: QualityReport,
@@ -49,15 +112,17 @@ def detect_anomalies(
         if col_meta is None:
             continue
 
-        # ── Anomalies de Completeness (nulls) ─────────────────────────────
+    # ── Anomalies de Completeness (nulls) ─────────────────────────────
         if col_score.completeness is not None and col_score.completeness < 100:
             detail   = col_score.completeness_detail
             null_rows = detail.get("null_rows", [])
             null_count = detail.get("null_count", 0)
 
-            anomalies.append(_make_null_anomaly(
-                col_meta, null_rows, null_count, total
-            ))
+            # Si count > 0, on garde car c'est une anomalie même si rows est vide
+            if null_count > 0:
+                anomalies.append(_make_null_anomaly(
+                    col_meta, null_rows, null_count, total
+                ))
 
         # ── Anomalies de Uniqueness (doublons) ────────────────────────────
         if col_score.uniqueness is not None and col_score.uniqueness < 100:
@@ -65,72 +130,143 @@ def detect_anomalies(
             dup_rows  = detail.get("duplicate_rows", [])
             dup_count = detail.get("duplicate_count", 0)
 
-            anomalies.append(_make_duplicate_anomaly(
-                col_meta, dup_rows, dup_count, total
-            ))
+            if dup_count > 0:
+                anomalies.append(_make_duplicate_anomaly(
+                    col_meta, dup_rows, dup_count, total
+                ))
 
         # ── Anomalies de Validity ─────────────────────────────────────────
         if col_score.validity is not None and col_score.validity < 100:
             detail = col_score.validity_detail
+            invalid_count = detail.get("invalid_count", 0)
 
-            # Type errors
-            if detail.get("type_errors"):
-                anomalies.append(_make_type_anomaly(
-                    col_meta, detail["type_errors"], total
-                ))
+            if invalid_count > 0:
+                # On essaie d'identifier le type précis
+                found_any = False
+                
+                # Type errors
+                if detail.get("type_errors"):
+                    anomalies.append(_make_type_anomaly(
+                        col_meta, detail["type_errors"], total
+                    ))
+                    found_any = True
 
-            # Range errors
-            if detail.get("range_errors"):
-                anomalies.append(_make_range_anomaly(
-                    col_meta, detail["range_errors"],
-                    detail.get("range_errors_samples", []), total
-                ))
+                # Enum errors
+                if detail.get("enum_errors"):
+                    anomalies.append(_make_enum_anomaly(
+                        col_meta, detail["enum_errors"],
+                        detail.get("enum_errors_samples", []), total
+                    ))
+                    found_any = True
 
-            # Enum errors
-            if detail.get("enum_errors"):
-                anomalies.append(_make_enum_anomaly(
-                    col_meta, detail["enum_errors"],
-                    detail.get("enum_errors_samples", []), total
-                ))
+                # Pattern errors
+                if detail.get("pattern_errors"):
+                    anomalies.append(_make_pattern_anomaly(
+                        col_meta, detail["pattern_errors"],
+                        detail.get("pattern_errors_samples", []), total
+                    ))
+                    found_any = True
 
-            # Pattern errors
-            if detail.get("pattern_errors"):
-                anomalies.append(_make_pattern_anomaly(
-                    col_meta, detail["pattern_errors"],
-                    detail.get("pattern_errors_samples", []), total
-                ))
+                # Date errors
+                if detail.get("date_errors"):
+                    anomalies.append(_make_date_anomaly(
+                        col_meta, detail["date_errors"],
+                        detail.get("date_errors_samples", []), total
+                    ))
+                    found_any = True
+                
+                # Business Rules on Validity (br_validity_rows)
+                if detail.get("br_validity_rows"):
+                     anomalies.append(_make_generic_br_anomaly(
+                        col_meta, detail["br_validity_rows"], "validity", total, 
+                        detail.get("br_validity_errors", 0)
+                    ))
+                     found_any = True
 
-            # Date errors
-            if detail.get("date_errors"):
-                anomalies.append(_make_date_anomaly(
-                    col_meta, detail["date_errors"],
-                    detail.get("date_errors_samples", []), total
-                ))
+                # Fallback : si on a un invalid_count mais aucune clé spécifique n'a de lignes
+                if not found_any:
+                    anomalies.append(_make_generic_validity_anomaly(
+                        col_meta, detail, total
+                    ))
+
+        # ── Anomalies de Accuracy (Côté Business Rules / Custom + Range) ──
+        if col_score.accuracy is not None and col_score.accuracy < 100:
+            detail = col_score.accuracy_detail
+            acc_count = detail.get("out_of_range_count", 0) or detail.get("br_accuracy_errors", 0)
+            
+            if acc_count > 0:
+                # Range errors (from quality_engine)
+                if detail.get("out_of_range_count", 0) > 0:
+                    anomalies.append(_make_range_anomaly(
+                        col_meta, detail.get("out_of_range_rows", []),
+                        detail.get("out_of_range_samples", []), total
+                    ))
+
+                # Business rules accuracy
+                if detail.get("br_accuracy_errors", 0) > 0:
+                     anomalies.append(_make_generic_br_anomaly(
+                        col_meta, detail.get("br_accuracy_rows", []), "accuracy", total,
+                        detail.get("br_accuracy_errors", 0)
+                    ))
+                
+                # Legacy/Generic branch
+                if detail.get("business_rule_errors"):
+                    for br_error in detail["business_rule_errors"]:
+                        anomalies.append(_make_business_rule_anomaly(
+                            col_meta, br_error, "accuracy", total
+                        ))
 
         # ── Anomalies de Consistency (Business Rules) ─────────────────────
         if col_score.consistency is not None and col_score.consistency < 100:
             detail = col_score.consistency_detail
+            
+            if detail.get("inconsistent_rows"):
+                 anomalies.append(_make_generic_br_anomaly(
+                    col_meta, detail["inconsistent_rows"], "consistency", total,
+                    detail.get("inconsistent_count", 0)
+                ))
+
             if detail.get("business_rule_errors"):
                 for br_error in detail["business_rule_errors"]:
                     anomalies.append(_make_business_rule_anomaly(
                         col_meta, br_error, "consistency", total
                     ))
 
-        # ── Anomalies de Accuracy (Côté Business Rules / Custom) ───────────
-        if col_score.accuracy is not None and col_score.accuracy < 100:
-            detail = col_score.accuracy_detail
-            if detail.get("business_rule_errors"):
-                for br_error in detail["business_rule_errors"]:
-                    anomalies.append(_make_business_rule_anomaly(
-                        col_meta, br_error, "accuracy", total
-                    ))
-
     # ── Anomalies Table-Level (ex: row_not_duplicate ou règles métier globales) ──
+    
+    # 1. Duplication de lignes (table-level uniqueness)
+    if hasattr(quality_report, "row_duplication_score") and quality_report.row_duplication_score < 100:
+        dup_info = quality_report.row_duplication_detail
+        if dup_info and dup_info.get("duplicate_row_count", 0) > 0:
+            anomalies.append(AnomalyItem(
+                anomaly_id=f"anomaly_{uuid.uuid4().hex[:6]}",
+                column_name="", # Table-level
+                dimension="uniqueness",
+                anomaly_type=AnomalyType.DUPLICATE,
+                problem_description=(
+                    f"Le dataset contient {dup_info['duplicate_row_count']} ligne(s) "
+                    f"totalement identiques (doublons complets)."
+                ),
+                affected_rows=dup_info.get("duplicate_rows", [])[:500],
+                affected_count=dup_info["duplicate_row_count"],
+                affected_pct=float(dup_info["duplicate_row_count"] / total * 100) if total else 0.0,
+                action_1=CleaningAction.DROP_DUPLICATES,
+                justification_1="Supprimer les doublons complets — recommandé pour l'intégrité",
+                action_2=CleaningAction.FLAG_ONLY,
+                justification_2="Signaler sans modifier — si les doublons sont légitimes",
+                action_3=CleaningAction.DROP_ROWS,
+                justification_3="Supprimer TOUTES les occurrences des lignes dupliquées",
+            ))
+
+    # 2. Business rules globales
     for tl_rule in getattr(quality_report, "table_level_business_rules", []):
         rule_name = tl_rule.get("test_type", "règle métier")
         count = tl_rule.get("count", 0)
         rows = tl_rule.get("rows", [])
         
+        if count == 0:
+            continue
+
         anomalies.append(AnomalyItem(
             anomaly_id=f"anomaly_{uuid.uuid4().hex[:6]}",
             column_name="", # Table-level

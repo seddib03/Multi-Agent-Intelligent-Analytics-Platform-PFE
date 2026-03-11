@@ -171,8 +171,8 @@ async def validate_plan(job_id: str, payload: ValidationRequest) -> JSONResponse
     if qb_dict: qb_dict = QualityReport.from_dict(qb_dict).to_dict(apply_offsets=True)
     if qa_dict: qa_dict = QualityReport.from_dict(qa_dict).to_dict(apply_offsets=True)
     
-    qb_scores = qb_dict.get("scores", {}) if qb_dict else {}
-    qa_scores = qa_dict.get("scores", {}) if qa_dict else {}
+    qb_scores = qb_dict.get("global_scores", {}) if qb_dict else {}
+    qa_scores = qa_dict.get("global_scores", {}) if qa_dict else {}
 
     return JSONResponse({
         "job_id":  job_id,

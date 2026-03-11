@@ -289,30 +289,52 @@ def compute_quality_report(
 
                         has_row_id = "__row_id" in avail_cols
                         has_col = col_name and col_name.lower() in avail_cols
+                        
+                        # dbt aliases techniques pour tests natifs
+                        dbt_aliases = ["value_field", "unique_field"]
+                        found_alias = next((a for a in dbt_aliases if a in avail_cols), None)
 
-                        if has_row_id and has_col:
-                            res = conn.execute(
-                                f'SELECT __row_id, "{col_name}" FROM {qualified_name} LIMIT 2000'
-                            ).fetchall()
-                            failed_rows    = [int(r[0]) for r in res]
-                            sample_invalid = [r[1] for r in res[:5] if r[1] is not None]
-                        elif has_row_id:
-                            res = conn.execute(
-                                f'SELECT __row_id FROM {qualified_name} LIMIT 2000'
-                            ).fetchall()
-                            failed_rows = [int(r[0]) for r in res]
-                        elif has_col:
-                            # Tests natifs dbt (accepted_values, unique) — pas de __row_id
-                            res = conn.execute(
-                                f'SELECT "{col_name}" FROM {qualified_name} LIMIT 50'
-                            ).fetchall()
-                            sample_invalid = [r[0] for r in res if r[0] is not None]
-                            logger.debug(
-                                "Table %s sans __row_id — %d valeurs échantillonnées",
-                                qualified_name, len(sample_invalid),
-                            )
+                        if has_row_id:
+                            # Cas standard : on a l'ID de ligne (soit dbt-native on_fail, soit macro custom)
+                            if has_col:
+                                res = conn.execute(
+                                    f'SELECT __row_id, "{col_name}" FROM {qualified_name} LIMIT 2000'
+                                ).fetchall()
+                                failed_rows    = [int(r[0]) for r in res]
+                                sample_invalid = [r[1] for r in res[:5] if r[1] is not None]
+                            elif found_alias:
+                                res = conn.execute(
+                                    f'SELECT __row_id, "{found_alias}" FROM {qualified_name} LIMIT 2000'
+                                ).fetchall()
+                                failed_rows    = [int(r[0]) for r in res]
+                                sample_invalid = [r[1] for r in res[:5] if r[1] is not None]
+                            else:
+                                res = conn.execute(
+                                    f'SELECT __row_id FROM {qualified_name} LIMIT 2000'
+                                ).fetchall()
+                                failed_rows = [int(r[0]) for r in res]
+                        elif has_col or found_alias:
+                            # Fallback pour tests natifs dbt (unique, accepted_values) qui n'ont pas __row_id
+                            # On joint avec raw_data pour retrouver les IDs originaux
+                            effective_col = col_name if has_col else found_alias
+                            logger.info("Récupération des __row_id par join pour %s (via %s)", col_name, effective_col)
+                            try:
+                                res = conn.execute(
+                                    f'SELECT __row_id, "{col_name}" FROM raw_data '
+                                    f'WHERE "{col_name}" IN (SELECT "{effective_col}" FROM {qualified_name}) '
+                                    f'LIMIT 2000'
+                                ).fetchall()
+                                failed_rows    = [int(r[0]) for r in res]
+                                sample_invalid = [r[1] for r in res[:5] if r[1] is not None]
+                            except Exception as e:
+                                logger.warning("Echec du join pour retrouver les IDs (%s): %s", effective_col, e)
+                                # Dernier recours : juste les valeurs
+                                res = conn.execute(
+                                    f'SELECT "{effective_col}" FROM {qualified_name} LIMIT 50'
+                                ).fetchall()
+                                sample_invalid = [r[0] for r in res if r[0] is not None]
                         else:
-                            # Table avec colonnes inconnues (ex: n_records, value_field)
+                            # Table avec colonnes inconnues
                             logger.debug(
                                 "Table %s — colonnes: %s (pas de __row_id ni %s)",
                                 qualified_name, avail_cols, col_name,
