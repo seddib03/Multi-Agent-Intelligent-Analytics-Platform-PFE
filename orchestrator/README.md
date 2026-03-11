@@ -44,12 +44,12 @@ The orchestrator runs a 5-node LangGraph pipeline on every request:
 Calls POST /detect-sector on the NLQ Agent.
 Fills: state.sector, state.sector_confidence, state.kpi_mapping, state.routing_target.
 
-## Node 2 — nlq_node
+### Node 2 — nlq_node
 Calls POST /chat on the NLQ Agent with the full sector context.
 Fills: state.intent, state.intent_confidence, state.requires_orchestrator, state.sub_agent.
 If requires_orchestrator=True, the NLQ agent delegates routing back to the orchestrator.
 
-## Node 3 — data_prep_node
+### Node 3 — data_prep_node
 If a CSV is provided, calls POST /prepare on the Data Preparation Agent.
 Polls for job completion, then retrieves the data profile via GET /profiling-json.
 Fills: state.data_profile, state.data_prep_quality, state.data_prep_paths.
@@ -94,21 +94,21 @@ orchestrator/
 
 ## Installation
 Prerequisites: Python 3.11, pip
-bash# 1. Clone the repository
+### 1. Clone the repository
 git clone https://github.com/seddib03/Multi-Agent-Intelligent-Analytics-Platform-PFE.git
 cd Multi-Agent-Intelligent-Analytics-Platform-PFE/orchestrator
 
-# 2. Create and activate virtual environment
+### 2. Create and activate virtual environment
 python -m venv venv
-# Windows
+#### Windows
 venv\Scripts\activate
-# Linux/Mac
+#### Linux/Mac
 source venv/bin/activate
 
-# 3. Install dependencies
+### 3. Install dependencies
 pip install -r requirements.txt
 
-## requirements.txt (main dependencies):
+### requirements.txt (main dependencies):
 fastapi
 uvicorn
 langgraph
@@ -121,30 +121,30 @@ pytest-asyncio
 
 ## Configuration
 Create a .env file at the root of orchestrator/:
-# Collègue 1 — NLQ + Sector Detection Agent
+#### Collègue 1 — NLQ + Sector Detection Agent
 NLQ_API_URL=http://127.0.0.1:8000
 
-# Collègue 2 — Data Preparation Agent
+#### Collègue 2 — Data Preparation Agent
 DATA_PREP_API_URL=http://127.0.0.1:8001
 
-# Collègue 3 — Insight Agent (à compléter)
+#### Collègue 3 — Insight Agent (à compléter)
 INSIGHT_API_URL=http://127.0.0.1:8002
 
-# General
+### General
 APP_ENV=development
 LOG_LEVEL=DEBUG
 
-## Running the API
+### Running the API
 Make sure the other agents are running first, then:
 
 uvicorn app.main:app --reload --port 8080
 The orchestrator will be available at: http://localhost:8080
 Swagger docs: http://localhost:8080/docs
 
-## API Reference
-#### POST /analyze
+### API Reference
+##### POST /analyze
 Main endpoint. Receives a user query and optional dataset, runs the full pipeline.
-#### Request — multipart/form-data:
+##### Request — multipart/form-data:
 | Field     | Type        | Required | Description               |
 | --------- | ----------- | -------- | ------------------------- |
 | query_raw | string      | ✅        | Natural language question |
@@ -152,7 +152,7 @@ Main endpoint. Receives a user query and optional dataset, runs the full pipelin
 | metadata  | JSON string | ❌        | Column description        |
 
 
-## Example metadata:
+#### Example metadata:
 json{
   "table_name": "insurance",
   "columns": [
@@ -162,7 +162,7 @@ json{
   "business_rules": ["Prime must be > 0"]
 }
 
-## Response — application/json:
+#### Response — application/json:
 json{
   "route": "Finance_Sector_Agent",
   "route_reason": "Niveau 0bis — NLQ routing: finance_agent | intent=prediction.",
@@ -189,16 +189,16 @@ json{
   "errors": []
 }
 
-### Example with curl:
+#### Example with curl:
 bashcurl -X POST http://localhost:8080/analyze \
   -F "query_raw=Analyse les primes d'assurance par région" \
   -F "dataset=@insurance.csv" \
   -F 'metadata={"table_name":"insurance","columns":[]}'
-### Example without CSV:
+#### Example without CSV:
 bashcurl -X POST http://localhost:8080/analyze \
   -F "query_raw=Quels sont les KPIs du secteur transport ?"
 
-## Routing Logic
+### Routing Logic
 The routing_node applies 7 priority levels to decide the target agent:
 | Level   | Condition                | Route               |
 | ------- | ------------------------ | ------------------- |
@@ -212,7 +212,7 @@ The routing_node applies 7 priority levels to decide the target agent:
 | Default | No rule                  | Clarification       |
 
 
-## Routing targets:
+### Routing targets:
 | routing_target           | Agent               |
 | ------------------------ | ------------------- |
 | transport_agent          | Transport Agent     |
@@ -224,21 +224,21 @@ The routing_node applies 7 priority levels to decide the target agent:
 | insight_agent            | Insight Agent       |
 
 
-## Running Tests
-# All tests
+### Running Tests
+#### All tests
 pytest tests/ -v
 
-# Routing logic only (no external API needed)
+### Routing logic only (no external API needed)
 pytest tests/test_routing.py -v
 
-# Data prep integration (no external API needed — uses mocks)
+### Data prep integration (no external API needed — uses mocks)
 pytest tests/test_data_prep_integration.py -v
 
-# End-to-end real test (requires Collègue 1 API running on port 8000)
+### End-to-end real test (requires Collègue 1 API running on port 8000)
 python tests/test_real.py
 
-## Integration with Other Agents
-### Collègue 1 — NLQ + Context Agent (port 8000)
+#### Integration with Other Agents
+##### Collègue 1 — NLQ + Context Agent (port 8000)
 The orchestrator calls two endpoints:
 
 - POST /detect-sector — sends user_query, receives sector + confidence + routing_target
@@ -246,14 +246,14 @@ The orchestrator calls two endpoints:
 
 When requires_orchestrator: true in the /chat response, the orchestrator takes control of routing using the routing_target and sub_agent fields.
 
-### Collègue 2 — Data Preparation Agent (port 8001)
+##### Collègue 2 — Data Preparation Agent (port 8001)
 Called only when the user provides a CSV file.
 
 POST /prepare — sends dataset + metadata, receives job_id
 GET /jobs/{job_id}/status — polls until completed
 GET /jobs/{job_id}/profiling-json — retrieves the data profile, which is then forwarded to Collègue 1's /chat
 
-### Collègue 3 — Insight Agent (port TBD)
+##### Collègue 3 — Insight Agent (port TBD)
 Called when route = Insight_Agent. Integration in progress.
 Will receive: data_profile, sector, query_raw, kpi_mapping.
 
