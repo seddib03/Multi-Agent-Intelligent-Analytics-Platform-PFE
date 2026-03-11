@@ -65,12 +65,12 @@ Calls the target agent and formats the final response.
 orchestrator/
 ├── app/
 │   ├── clients/
-│   │   ├── nlq_client.py          # HTTP client — Collègue 1 (/detect-sector, /chat)
-│   │   ├── data_prep_client.py    # HTTP client — Collègue 2 (/prepare, /profiling-json)
-│   │   └── insight_client.py      # HTTP client — Collègue 3 (à venir)
+│   │   ├── nlq_client.py
+│   │   ├── data_prep_client.py
+│   │   └── insight_client.py
 │   ├── graph/
-│   │   ├── orchestrator.py        # LangGraph graph definition
-│   │   ├── state.py               # OrchestratorState — Pydantic model
+│   │   ├── orchestrator.py
+│   │   ├── state.py
 │   │   └── nodes/
 │   │       ├── sector_detection_node.py
 │   │       ├── nlq_node.py
@@ -79,14 +79,14 @@ orchestrator/
 │   │       ├── dispatch_node.py
 │   │       └── response_node.py
 │   ├── schemas/
-│   │   └── input_schema.py        # UserQueryInput
+│   │   └── input_schema.py
 │   ├── utils/
 │   │   └── logger.py
-│   └── main.py                    # FastAPI entrypoint
+│   └── main.py
 ├── tests/
 │   ├── test_routing.py
 │   ├── test_data_prep_integration.py
-│   └── test_real.py               # End-to-end manual tests
+│   └── test_real.py
 ├── .env
 ├── .gitignore
 ├── pytest.ini
