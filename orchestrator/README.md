@@ -62,6 +62,8 @@ Fills: state.route, state.route_reason, state.fallback_route.
 Calls the target agent and formats the final response.
 
 ## Project Structure
+````markdown
+```bash
 orchestrator/
 ├── app/
 │   ├── clients/
