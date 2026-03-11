@@ -1,4 +1,4 @@
-from app.graph.orchestrator import build_orchestrator_graph
+"""from app.graph.orchestrator import build_orchestrator_graph
 from app.graph.state import OrchestratorState
 from app.schemas.input_schema import UserQueryInput
 from app.schemas.output_schema import OrchestratorResponse
@@ -10,9 +10,9 @@ orchestrator = build_orchestrator_graph()
 
 
 def run_orchestrator(user_input: UserQueryInput) -> OrchestratorResponse:
-    """
+    
     Main entry point for the orchestrator.
-    """
+    
     # Initialize the state
     initial_state = OrchestratorState(
         user_id=user_input.user_id,
@@ -71,4 +71,83 @@ if __name__ == "__main__":
         print(f" Sector       : {result.sector_detected}")
         print(f" Intent       : {result.intent_detected}")
         if result.data_payload:
-            print(f" Data payload : {result.data_payload}")
+            print(f" Data payload : {result.data_payload}")"""
+
+# orchestrator/app/main.py
+from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
+from app.schemas.input_schema import UserQueryInput
+from app.graph.orchestrator import build_orchestrator_graph
+import shutil, uuid, json, os
+
+app = FastAPI(
+    title="Orchestrateur — Intelligent Analytics Platform",
+    version="1.0.0"
+)
+
+# Permettre à l'UI de l'appeler
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Construire le graph une seule fois au démarrage
+graph = build_orchestrator_graph()
+
+
+def run_orchestrator(input_data: UserQueryInput) -> dict:
+    """Lance le graph LangGraph et retourne le state final."""
+    initial_state = {
+        "user_id":    input_data.user_id,
+        "session_id": input_data.session_id,
+        "query_raw":  input_data.query_raw,
+        "csv_path":   input_data.csv_path or "",
+        "metadata":   input_data.metadata or {},
+    }
+    final_state = graph.invoke(initial_state)
+    return final_state
+
+
+@app.post("/analyze")
+async def analyze(
+    query_raw: str        = Form(...),
+    dataset:   UploadFile = File(None),   # CSV optionnel
+    metadata:  str        = Form("{}")
+):
+    # Sauvegarder le CSV uploadé dans /tmp
+    csv_path = None
+    if dataset and dataset.filename:
+        tmp_dir  = "/tmp/orchestrator"
+        os.makedirs(tmp_dir, exist_ok=True)
+        csv_path = f"{tmp_dir}/{uuid.uuid4()}_{dataset.filename}"
+        with open(csv_path, "wb") as f:
+            shutil.copyfileobj(dataset.file, f)
+
+    # Parser le metadata JSON
+    try:
+        metadata_dict = json.loads(metadata)
+    except json.JSONDecodeError:
+        metadata_dict = {}
+
+    # Lancer le graph
+    result = run_orchestrator(UserQueryInput(
+        user_id="demo_user",
+        session_id=str(uuid.uuid4()),
+        query_raw=query_raw,
+        csv_path=csv_path,
+        metadata=metadata_dict,
+    ))
+
+    # Nettoyer le fichier temporaire
+    if csv_path and os.path.exists(csv_path):
+        os.remove(csv_path)
+
+    return result
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "graph": "ready"}
