@@ -1,13 +1,3 @@
-"""
-Structures pour les anomalies détectées et le plan de nettoyage.
-
-FLUX :
-    quality_engine détecte les violations
-    → anomaly_engine crée les AnomalyItem avec actions proposées
-    → strategy_node (LLM) reformule + regroupe en CleaningPlan
-    → user valide chaque action
-    → cleaning_node exécute
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -99,8 +89,13 @@ class AnomalyItem:
     chosen_action: Optional[CleaningAction] = None
     user_params:   Optional[dict] = None
 
-    def to_dict(self) -> dict:
-        from models.quality_report import _to_native
+    def to_dict(self, apply_offsets: bool = True) -> dict:
+        from models.quality_report import ROW_DISPLAY_OFFSET, _to_native
+        
+        rows = self.affected_rows[:50]
+        if apply_offsets:
+            rows = [r + ROW_DISPLAY_OFFSET for r in rows]
+
         return _to_native({
             "anomaly_id":    self.anomaly_id,
             "column_name":   self.column_name,
@@ -108,7 +103,7 @@ class AnomalyItem:
             "anomaly_type":  self.anomaly_type.value,
             "anomaly_source": self.anomaly_source,
             "problem":       self.problem_description,
-            "affected_rows": [r + 2 for r in self.affected_rows[:50]],
+            "affected_rows": rows,
             "affected_count": self.affected_count,
             "affected_pct":  round(self.affected_pct, 2),
             "sample_invalid": [str(v) for v in self.sample_invalid_values[:5]],
@@ -160,7 +155,7 @@ class CleaningPlan:
         """True si toutes les anomalies ont une décision."""
         return all(a.user_decision is not None for a in self.anomalies)
 
-    def to_dict(self) -> dict:
+    def to_dict(self, apply_offsets: bool = True) -> dict:
         from models.quality_report import _to_native
         return _to_native({
             "plan_id":  self.plan_id,
@@ -169,6 +164,6 @@ class CleaningPlan:
             "status":   self.status,
             "llm_summary": self.llm_summary,
             "total_anomalies": len(self.anomalies),
-            "anomalies": [a.to_dict() for a in self.anomalies],
+            "anomalies": [a.to_dict(apply_offsets=apply_offsets) for a in self.anomalies],
             "llm_reformulations": self.llm_reformulations,
         })

@@ -1,22 +1,3 @@
-"""
-agent/nodes/strategy_node.py
-NODE 5 — Strategy (LLM)
-─────────────────────────────
-Appelle le LLM (GPT-4o-mini via OpenRouter) pour :
-
-    1. Produire un résumé global en français compréhensible
-       par un non-technicien
-
-    2. Reformuler chaque anomalie détectée de façon claire
-       et actionnable
-
-Le LLM NE DÉCIDE PAS des actions — celles-ci sont déjà
-proposées par anomaly_engine (3 choix par anomalie).
-Le LLM sert uniquement à rendre le plan lisible pour l'user.
-
-Après ce node, le graph s'interrompt (interrupt_before=["cleaning"])
-et attend la validation humaine via POST /jobs/{id}/validate.
-"""
 from __future__ import annotations
 
 import json

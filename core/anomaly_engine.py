@@ -1,20 +1,3 @@
-"""
-Moteur de détection des anomalies et proposition d'actions.
-
-DIFFÉRENCE AVEC quality_engine :
-    quality_engine  → MESURE les scores (%, chiffres)
-    anomaly_engine  → IDENTIFIE les lignes exactes + PROPOSE des actions
-
-POUR CHAQUE ANOMALIE, 3 ACTIONS PROPOSÉES :
-    action_1 → Conservative  (flag, imputer, conserver)
-    action_2 → Modérée       (remplacer par valeur proche)
-    action_3 → Agressive     (supprimer la ligne)
-
-LOGIQUE :
-    On lit le QualityReport (scores) pour savoir
-    quelles colonnes ont des problèmes.
-    Puis on crée un AnomalyItem pour chaque problème détecté.
-"""
 from __future__ import annotations
 
 import logging

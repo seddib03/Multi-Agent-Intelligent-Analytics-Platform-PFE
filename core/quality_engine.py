@@ -402,7 +402,7 @@ def compute_quality_report(
         report.row_duplication_detail = {
             "duplicate_row_count": int(dup_count),
             "total_rows": int(total_rows),
-            "duplicate_rows": dup_info["rows"][:500],
+            "duplicate_rows": [r for r in dup_info["rows"][:500]],
         }
     else:
         report.row_duplication_score = 100.0
@@ -415,7 +415,7 @@ def compute_quality_report(
             "test_type": tl_test_type,
             "dimension": tl_info.get("dimension", "consistency"),
             "count": int(tl_info.get("count", 0)),
-            "rows": tl_info.get("rows", [])[:500]
+            "rows": [r for r in tl_info.get("rows", [])][:500]
         })
 
     # ── Construire les ColumnQualityScore ──
@@ -483,7 +483,7 @@ def compute_quality_report(
             score.accuracy_detail = {
                 "out_of_range_count": int(range_c),
                 "total": int(total_rows),
-                "out_of_range_rows": f["range_errors"]["rows"][:500],
+                "out_of_range_rows":[r for r in f["range_errors"]["rows"][:500]],
                 "out_of_range_samples": f["range_errors"]["samples"][:5],
             }
 

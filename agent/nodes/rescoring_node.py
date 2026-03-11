@@ -49,6 +49,20 @@ def rescoring_node(state: AgentState) -> dict:
     metadata = _load_metadata(state["metadata"])
     business_rules = state.get("business_rules", [])
 
+    # ── Mettre à jour DuckDB avec les données nettoyées ───────────────────
+    import duckdb
+    with duckdb.connect(state["duckdb_path"]) as conn:
+        # Enregistrer le DataFrame Pandas en tant que table virtuelle DuckDB
+        # Cela permet à DuckDB d'accéder aux données du DataFrame Python
+        conn.register("clean_df_view", df)
+        
+        # Remplacer la table raw_data avec les données nettoyées
+        conn.execute("DROP TABLE IF EXISTS raw_data")
+        conn.execute("CREATE TABLE raw_data AS SELECT * FROM clean_df_view")
+        conn.unregister("clean_df_view")  # Déenregistrer la vue temporaire
+    
+    logger.info("DuckDB mis à jour avec clean_df (%d lignes) avant rescoring", len(df))
+
     quality_after = compute_quality_report(
         metadata=metadata,
         label="APRÈS",
@@ -77,4 +91,4 @@ def rescoring_node(state: AgentState) -> dict:
         quality_after.consistency_global,
         gain,
     )
-    return {"quality_after": quality_after.to_dict()}
+    return {"quality_after": quality_after.to_dict(apply_offsets=False)}

@@ -56,15 +56,16 @@ def ingestion_node(state: AgentState) -> dict:
     duckdb_dir.mkdir(parents=True, exist_ok=True)
     duckdb_path = str(duckdb_dir / "db.duckdb")
 
+    # Ajouter l'ID de ligne pour le tracking
+    df["__row_id"] = range(len(df))
+
     with duckdb.connect(duckdb_path) as conn:
-        # Créer la table raw_data avec le contenu de df + un ID de ligne
-        df_duck = df.copy()
-        df_duck["__row_id"] = range(len(df_duck))
-        conn.execute("CREATE TABLE raw_data AS SELECT * FROM df_duck")
+        # Créer la table raw_data avec le contenu de df
+        conn.execute("CREATE TABLE raw_data AS SELECT * FROM df")
     
     logger.info("Données ingérées dans DuckDB: %s", duckdb_path)
 
-    # Sérialiser le DataFrame pour le state LangGraph
+    # Sérialiser le DataFrame pour le state LangGraph (inclut __row_id)
     raw_df_dict = {
         "columns": df.columns.tolist(),
         "data":    df.where(pd.notnull(df), None).values.tolist(),

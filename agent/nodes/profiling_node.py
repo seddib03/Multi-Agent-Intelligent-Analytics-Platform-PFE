@@ -1,30 +1,3 @@
-"""
-agent/nodes/profiling_node.py
-NODE 2 — Profiling avec ydata-profiling 4.18.1
-────────────────────────────────────────────────
-Génère 3 outputs depuis un seul ProfileReport :
-
-    1. profiling_report.html  → MinIO Gold
-                                Rapport interactif pour l'humain
-                                Accessible via GET /jobs/{id}/profiling
-
-    2. profiling_report.json  → MinIO Gold
-                                Rapport complet machine-readable
-                                Exploitable par le Predictive Agent
-
-    3. profiling_summary      → AgentState
-                                Résumé compact transmis au LLM (strategy_node)
-                                pour contextualiser le plan de nettoyage
-
-INSTALLATION :
-    pip install ydata-profiling==4.18.1
-
-API utilisée (v4.18.1) :
-    profile = ProfileReport(df, title="...")
-    profile.to_file("report.html")     ← export HTML
-    profile.to_file("report.json")     ← export JSON
-    json_str = profile.to_json()       ← JSON en string
-"""
 from __future__ import annotations
 
 import json
@@ -38,6 +11,9 @@ from agent.state import AgentState
 from core.minio_client import MinioClient
 
 logger = logging.getLogger(__name__)
+
+# Supprimer les avertissements matplotlib répétitifs de ydata-profiling
+logging.getLogger("matplotlib.category").setLevel(logging.WARNING)
 
 
 def _load_df(df_dict: dict) -> pd.DataFrame:

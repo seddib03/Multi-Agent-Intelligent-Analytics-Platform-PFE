@@ -1,18 +1,3 @@
-"""
-agent/nodes/anomaly_node.py
-NODE 4 — Anomaly Detection
-─────────────────────────────
-Lit le QualityReport (NODE 3) pour identifier précisément
-les lignes et colonnes en anomalie.
-
-Pour chaque problème détecté, propose 3 actions :
-    action_1 → Conservative  (flag, imputer)
-    action_2 → Modérée       (remplacer, clipper)
-    action_3 → Agressive     (supprimer la ligne)
-
-Produit un CleaningPlan qui sera enrichi par le LLM (NODE 5)
-puis validé par l'utilisateur avant exécution (NODE 6).
-"""
 from __future__ import annotations
 
 import logging
