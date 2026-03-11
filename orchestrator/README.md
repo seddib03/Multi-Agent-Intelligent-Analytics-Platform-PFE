@@ -3,19 +3,21 @@
 Central coordinator of the Multi-Agent Intelligent Analytics Platform (PFE).
 Receives user queries, orchestrates the agent pipeline, and returns structured analytical responses.
 
+
 ## 📋 Table of Contents
 
--Overview
--Architecture
--Agent Pipeline
--Project Structure
--Installation
--Configuration
--Running the API
--API Reference
--Routing Logic
--Running Tests
--Integration with Other Agents
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Agent Pipeline](#agent-pipeline)
+- [Project Structure](#project-structure)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Running the API](#running-the-api)
+- [API Reference](#api-reference)
+- [Routing Logic](#routing-logic)
+- [Running Tests](#running-tests)
+- [Integration with Other Agents](#integration-with-other-agents)
+
 
 ## Overview
 The Orchestrator is the central brain of the platform. It receives a natural language query (optionally with a CSV dataset), runs it through a multi-step LangGraph pipeline, and dispatches it to the most appropriate specialized agent.
@@ -28,11 +30,13 @@ The Orchestrator is the central brain of the platform. It receives a natural lan
 -Route to the correct downstream agent (sector agent, Insight Agent, Generic ML Agent)
 -Return a structured response to the UI
 
-## External agents (microservices):
-Agent                                             Role                                                                Port
-Collègue 1 — NLQ + Context Agent        Sector detection + intent classification                                      8000
-Collègue 2 — Data Preparation Agent     Dataset cleaning + profiling                                                  8001
-Collègue 3 — Insight Agent              Dashboard generation + KPI analysis                                           TBD
+### External Agents (Microservices)
+
+| Agent | Role | Port |
+|------|------|------|
+| Collègue 1 — NLQ + Context Agent | Sector detection + intent classification | 8000 |
+| Collègue 2 — Data Preparation Agent | Dataset cleaning + profiling | 8001 |
+| Collègue 3 — Insight Agent | Dashboard generation + KPI analysis | TBD |
 
 ## Agent Pipeline
 The orchestrator runs a 5-node LangGraph pipeline on every request:
@@ -141,10 +145,12 @@ Swagger docs: http://localhost:8080/docs
 #### POST /analyze
 Main endpoint. Receives a user query and optional dataset, runs the full pipeline.
 #### Request — multipart/form-data:
-Field                     Type                 Required                Description 
-query_raw                 string                  ✅           Natural language question 
-dataset                   file (.csv)             ❌              Dataset to analyse
-metadata                  string (JSON)           ❌           Column descriptions for data prep
+| Field     | Type        | Required | Description               |
+| --------- | ----------- | -------- | ------------------------- |
+| query_raw | string      | ✅        | Natural language question |
+| dataset   | CSV file    | ❌        | Dataset                   |
+| metadata  | JSON string | ❌        | Column description        |
+
 
 ## Example metadata:
 json{
@@ -194,26 +200,29 @@ bashcurl -X POST http://localhost:8080/analyze \
 
 ## Routing Logic
 The routing_node applies 7 priority levels to decide the target agent:
-Level                                    Condition                                                        Route
-0                       routing_target from /detect-sector + confidence ≥ 80%                        Direct target
-0 bis                   requires_orchestrator=True from /chat + routing_target present               NLQ-directed target
-1                       Sector AND intent both unknown + low confidence                              Clarification
-2                       execution_type = insight                                                     Insight Agent
-3                       execution_type = prediction                                                  Sector agent or Generic ML
-4                       execution_type = sql                                                         Sector agent or Generic ML
-5                       Known intent (dashboard, kpi_chart, prediction, anomaly...)                  Intent-based target
-6                       Known sector ≥ threshold, unknown intent                                     Sector agent
-Default                 No rule matched                                                              Clarification
+| Level   | Condition                | Route               |
+| ------- | ------------------------ | ------------------- |
+| 0       | routing_target ≥ 80%     | Direct agent        |
+| 1       | Sector & intent unknown  | Clarification       |
+| 2       | execution_type = insight | Insight Agent       |
+| 3       | prediction               | Sector / Generic ML |
+| 4       | sql                      | Sector / Generic ML |
+| 5       | dashboard/comparison     | Insight Agent       |
+| 6       | Known sector             | Sector agent        |
+| Default | No rule                  | Clarification       |
+
 
 ## Routing targets:
-routing_target value              Agent
-transport_agent              Transport Sector Agent
-finance_agent                Finance Sector Agent
-retail_agent                 Retail Sector Agent
-manufacturing_agent          Manufacturing Sector Agent
-public_agent                 Public Sector Agent
-generic_predictive_agent     Generic ML Agent
-insight_agent                Insight Agent
+| routing_target           | Agent               |
+| ------------------------ | ------------------- |
+| transport_agent          | Transport Agent     |
+| finance_agent            | Finance Agent       |
+| retail_agent             | Retail Agent        |
+| manufacturing_agent      | Manufacturing Agent |
+| public_agent             | Public Agent        |
+| generic_predictive_agent | Generic ML Agent    |
+| insight_agent            | Insight Agent       |
+
 
 ## Running Tests
 # All tests
