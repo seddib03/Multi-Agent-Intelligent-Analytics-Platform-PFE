@@ -154,21 +154,55 @@ def compute_quality_report(
     job_id:   str,
     duckdb_path: str,
     business_rules: Optional[list[str]] = None,
-) -> QualityReport:
+    precomputed_br_tests: Optional[list] = None,
+) -> tuple[QualityReport, list]:
+    """
+    Calcule le QualityReport via dbt test.
+
+    Args:
+        metadata:             Colonnes de la table
+        label:                "AVANT" ou "APRES"
+        sector:               Secteur metier
+        job_id:               ID du job
+        duckdb_path:          Chemin de la base DuckDB
+        business_rules:       Regles metier (langage naturel) - declenche l'appel LLM
+        precomputed_br_tests: BusinessRuleTest deja generes (ex: rescoring) - evite le LLM
+    """
 
     settings = get_settings()
     dbt_dir = settings.dbt_project_dir
     models_dir = dbt_dir / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
 
-    # ── Nettoyage des anciens schemas ──
+    # -- Nettoyage des anciens schemas --
     for stale in glob.glob(str(models_dir / "_sources_*.yml")):
         Path(stale).unlink(missing_ok=True)
-        logger.debug("Ancien schema supprimé : %s", stale)
+        logger.debug("Ancien schema supprime : %s", stale)
 
-    # ── Traiter les business rules via LLM ──
+    # -- Traiter les business rules via LLM (seulement si pas de tests pre-calcules) --
     business_rule_tests = []
-    if business_rules:
+    if precomputed_br_tests is not None:
+        # Rescoring : reutiliser les BusinessRuleTest deja generes - pas de LLM
+        from core.business_rules_engine import BusinessRuleTest
+        for br_dict in precomputed_br_tests:
+            try:
+                business_rule_tests.append(BusinessRuleTest(
+                    rule_text=br_dict.get("rule_text", ""),
+                    dimension=br_dict.get("dimension", "validity"),
+                    test_type=br_dict.get("test_type", "existing"),
+                    macro_name=br_dict.get("macro_name", ""),
+                    schema_entry=br_dict.get("schema_entry"),
+                    target_column=br_dict.get("target_column"),
+                    is_table_level=br_dict.get("is_table_level", False),
+                    macro_sql=br_dict.get("macro_sql"),
+                ))
+            except Exception as e:
+                logger.warning("Impossible de reconstruire BusinessRuleTest : %s", e)
+        logger.info(
+            "Rescoring : %d business rule tests reutilises (pas d'appel LLM)",
+            len(business_rule_tests),
+        )
+    elif business_rules:
         try:
             from core.business_rules_engine import process_business_rules
             business_rule_tests = process_business_rules(
@@ -182,6 +216,7 @@ def compute_quality_report(
             )
         except Exception as e:
             logger.error("Erreur traitement business rules : %s", e)
+
 
     # ── Générer le schema dbt ──
     schema_path = str(models_dir / "_sources_current.yml")
@@ -579,4 +614,4 @@ def compute_quality_report(
 
     # Nettoyage du fichier schema temporaire
     Path(schema_path).unlink(missing_ok=True)
-    return report
+    return report, business_rule_tests
