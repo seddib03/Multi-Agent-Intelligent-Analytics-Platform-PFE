@@ -93,7 +93,7 @@ orchestrator/
 ├── .gitignore
 ├── pytest.ini
 └── requirements.txt
-
+```
 ## Installation
 Prerequisites: Python 3.11, pip
 ### 1. Clone the repository
@@ -260,4 +260,10 @@ Called when route = Insight_Agent. Integration in progress.
 Will receive: data_profile, sector, query_raw, kpi_mapping.
 
 ### Team
-RoleResponsibilityCollègue 1NLQ Agent + Context/Sector Agent (port 8000)Collègue 2Data Preparation Agent (port 8001)Collègue 3Insight Agent + Dashboard GeneratorOrchestratorLangGraph pipeline + routing + API
+| Role                   | Responsibility                     |
+| ---------------------- | ---------------------------------- |
+| Collègue 1             | NLQ + Context Agent                |
+| Collègue 2             | Data Preparation Agent             |
+| Collègue 3             | Insight Agent                      |
+| **You — Orchestrator** | LangGraph pipeline + routing + API |
+
