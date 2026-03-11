@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useAppStore } from "@/stores/appStore";
 import type { ChartStyle, AccentTheme, Density } from "@/types/app";
 import { ACCENT_THEMES } from "@/types/app";
-import { Check } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { ChartPreviews } from "./usecase/ChartPreviews";
 import type { Language } from "@/lib/i18n";
+import { createProject } from "@/lib/projectsApi";
 
 function getAnalysisTypes(lang: Language) {
   return [
@@ -40,20 +41,47 @@ export function StepUseCase() {
   const [types, setTypes] = useState<string[]>(onboarding.analysisTypes);
   const [horizon, setHorizon] = useState(onboarding.timeHorizon);
   const [touched, setTouched] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const ANALYSIS_TYPES = getAnalysisTypes(lang);
   const TIME_HORIZONS = getTimeHorizons(lang);
   const CHART_STYLES = getChartStyles(lang);
 
-  const toggleType = (tStr: string) => setTypes((prev) => (prev.includes(tStr) ? prev.filter((x) => x !== tStr) : [...prev, tStr]));
+  const toggleType = (tStr: string) =>
+    setTypes((prev) => (prev.includes(tStr) ? prev.filter((x) => x !== tStr) : [...prev, tStr]));
 
   const descTooShort = touched && desc.trim().length > 0 && desc.trim().length <= 10;
   const noTypes = touched && types.length === 0;
   const canProceed = desc.trim().length > 10 && types.length > 0;
 
-  const handleNext = () => {
-    updateOnboarding({ useCaseDescription: desc, analysisTypes: types, timeHorizon: horizon });
-    setOnboardingStep(2);
+  const handleNext = async () => {
+    if (!canProceed || saving) return;
+    setTouched(true);
+    setApiError(null);
+    setSaving(true);
+
+    try {
+      // Créer le projet dans le backend
+      const project = await createProject({
+        name: desc.trim().slice(0, 60) || "Sans titre",
+        use_case: desc.trim(),
+        description: types.join(", "),
+      });
+
+      // Stocker l'ID backend dans le store
+      useAppStore.setState({ currentProjectId: project.id });
+
+      // Mettre à jour le store local
+      updateOnboarding({ useCaseDescription: desc, analysisTypes: types, timeHorizon: horizon });
+
+      // Passer à l'étape suivante
+      setOnboardingStep(2);
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : "Erreur lors de la création du projet");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -234,14 +262,22 @@ export function StepUseCase() {
         </div>
       </div>
 
+      {/* Error */}
+      {apiError && (
+        <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+          {apiError}
+        </div>
+      )}
+
       {/* Next */}
       <div className="flex justify-end pt-4">
         <button
           onClick={handleNext}
-          disabled={!canProceed}
-          className="px-8 py-3 rounded-lg font-semibold text-primary-foreground bg-primary hover:opacity-90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled={!canProceed || saving}
+          className="px-8 py-3 rounded-lg font-semibold text-primary-foreground bg-primary hover:opacity-90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
         >
-          {t("next", lang)} →
+          {saving && <Loader2 size={16} className="animate-spin" />}
+          {saving ? "Création..." : `${t("next", lang)} →`}
         </button>
       </div>
     </div>
