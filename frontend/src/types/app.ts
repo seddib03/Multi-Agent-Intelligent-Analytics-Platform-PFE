@@ -2,7 +2,7 @@ export interface ColumnMetadata {
   originalName: string;
   businessName: string;
   semanticType: "target" | "date" | "numeric" | "category" | "identifier" | "ignore";
-  unit: string;
+  description?: string;
   missingPercent: number;
 }
 
