@@ -21,6 +21,8 @@ const EMPTY_PROJECT = {
     businessRules: "",
     detectedSector: "finance" as const,
     previewData: [],
+    sourceCsvFile: null,
+    sourceCsvPath: "",
   },
   modelResults: {
     algorithm: "XGBoost",

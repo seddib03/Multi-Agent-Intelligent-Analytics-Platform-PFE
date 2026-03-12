@@ -35,7 +35,13 @@ def data_prep_node(state: OrchestratorState) -> OrchestratorState:
         return state
 
     # ── Case 2: CSV provided → launch pipeline ───────────────────
-    state = asyncio.run(call_prepare(state))
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    state = loop.run_until_complete(call_prepare(state))
 
     # If connection error → continue without prepared data
     if state.data_prep_status == DataPrepStatusEnum.FAILED:
@@ -50,7 +56,7 @@ def data_prep_node(state: OrchestratorState) -> OrchestratorState:
     elapsed = 0
     while elapsed < MAX_WAIT_SECONDS:
 
-        status_result  = asyncio.run(
+        status_result  = loop.run_until_complete(
             call_get_status(state.data_prep_job_id)
         )
         current_status = status_result.get("status", "")
@@ -81,7 +87,7 @@ def data_prep_node(state: OrchestratorState) -> OrchestratorState:
 
     # ── Retrieve data_profile for NLQ Agent ───────────────
     if state.data_prep_status == DataPrepStatusEnum.COMPLETED:
-        state = asyncio.run(call_get_data_profile(state))
+        state = loop.run_until_complete(call_get_data_profile(state))
         state.processing_steps.append(
             f"data_prep_node → COMPLETED | "
             f"silver={state.data_prep_paths.get('silver', 'N/A')}"
