@@ -46,9 +46,21 @@ def profiling_node(state: AgentState) -> dict:
             len(df), len(df.columns),
         )
 
+        # ── Échantillonnage adaptatif pour les grands datasets ─────────────
+        total_rows = len(df)
+        if total_rows <= 10_000:
+            df_to_profile = df
+        else:
+            sample_size = min(5000, total_rows)
+            df_to_profile = df.sample(sample_size, random_state=42)
+            logger.info(
+                "Dataset volumineux (%d lignes) → profiling sur échantillon de %d lignes",
+                total_rows, sample_size,
+            )
+
         # ── Créer le ProfileReport ─────────────────────────────────────────
         profile = ProfileReport(
-            df,
+            df_to_profile,
             title=f"Data Profiling — {sector} | Job {job_id[:8]}",
             explorative=True,
             progress_bar=False,

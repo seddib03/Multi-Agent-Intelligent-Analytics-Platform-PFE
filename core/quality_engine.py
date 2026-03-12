@@ -11,6 +11,7 @@ Moteur de calcul des qualités dbt + DuckDB.
 from __future__ import annotations
 import glob
 import json
+import shutil
 import logging
 import os
 import subprocess
@@ -57,9 +58,10 @@ def generate_dbt_schema(
     """
     columns_yaml = []
     table_tests = []
-    
+    seen_table_tests = set()  # pour dédupliquer les tests table-level
     # ── Test de duplication de lignes (table-level, dim: uniqueness) ──
     table_tests.append("row_not_duplicate")
+    seen_table_tests.add("row_not_duplicate")
     
     for meta in metadata:
         tests = []
@@ -97,7 +99,14 @@ def generate_dbt_schema(
     if business_rule_tests:
         for br_test in business_rule_tests:
             if br_test.is_table_level:
-                # Test table-level
+                # Test table-level — dédupliquer par nom de macro
+                test_key = br_test.macro_name or str(br_test.schema_entry)
+                if test_key in seen_table_tests:
+                    logger.warning(
+                        "Test table-level dupliqué ignoré : '%s'", test_key
+                    )
+                    continue
+                seen_table_tests.add(test_key)
                 if isinstance(br_test.schema_entry, dict):
                     table_tests.append(br_test.schema_entry)
                 elif isinstance(br_test.schema_entry, str):
@@ -225,17 +234,33 @@ def compute_quality_report(
     # Environnement — injecter le chemin DuckDB pour profiles.yml
     env = os.environ.copy()
     env["DBT_DUCKDB_PATH"] = duckdb_path
+
+    # ── Nettoyer le répertoire target pour éviter les caches stales ──
+    # Le partial_parse.msgpack d'un run précédent (avec un autre DuckDB)
+    # peut amener dbt-duckdb à réutiliser une connexion obsolète
+    # et écrire les audit tables dans le mauvais fichier DuckDB.
+    target_dir = dbt_dir / "target"
+    if target_dir.exists():
+        shutil.rmtree(target_dir, ignore_errors=True)
+        logger.debug("Répertoire target nettoyé : %s", target_dir)
     
-    # dbt test --store-failures
+    # dbt test --store-failures --no-partial-parse
     logger.info("Lancement de dbt test pour le job %s...", job_id)
     cmd = [
         "dbt", "test",
         "--store-failures",
+        "--no-partial-parse",
         "--project-dir",  str(dbt_dir),
         "--profiles-dir", str(dbt_dir),
         "--select", "source:staging.raw_data",
     ]
-    subprocess.run(cmd, env=env, capture_output=True, text=True)
+    result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    if result.returncode != 0:
+        logger.warning("dbt test a retourné un code non-zéro (%d)", result.returncode)
+    if result.stderr:
+        logger.debug("dbt stderr:\n%s", result.stderr[-2000:])
+    if result.stdout:
+        logger.debug("dbt stdout:\n%s", result.stdout[-2000:])
 
     # Récupérer le nombre total de lignes
     with duckdb.connect(duckdb_path) as conn:
@@ -249,7 +274,7 @@ def compute_quality_report(
     if not (run_results_path.exists() and manifest_path.exists()):
         logger.warning("run_results.json ou manifest.json absent — QualityReport vide retourné")
         Path(schema_path).unlink(missing_ok=True)
-        return report
+        return report, business_rule_tests
 
     with open(run_results_path) as f:
         run_results = json.load(f)

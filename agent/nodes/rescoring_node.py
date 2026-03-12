@@ -48,31 +48,22 @@ def rescoring_node(state: AgentState) -> dict:
     df       = _load_df(state["clean_df"])
     metadata = _load_metadata(state["metadata"])
     business_rules = state.get("business_rules", [])
-    precomputed_br_tests = state.get("business_rule_tests")
 
     # ── Mettre à jour DuckDB avec les données nettoyées ───────────────────
     import duckdb
     with duckdb.connect(state["duckdb_path"]) as conn:
-        # Enregistrer le DataFrame Pandas en tant que table virtuelle DuckDB
-        # Cela permet à DuckDB d'accéder aux données du DataFrame Python
-        conn.register("clean_df_view", df)
-        
-        # Remplacer la table raw_data avec les données nettoyées
         conn.execute("DROP TABLE IF EXISTS raw_data")
-        conn.execute("CREATE TABLE raw_data AS SELECT * FROM clean_df_view")
-        conn.unregister("clean_df_view")  # Déenregistrer la vue temporaire
+        conn.execute("CREATE TABLE raw_data AS SELECT * FROM df")
     
-    logger.info("DuckDB mis à jour avec clean_df (%d lignes) avant rescoring", len(df))
+    logger.info("DuckDB mis à jour avec clean_df avant rescoring")
 
-    # On passe precomputed_br_tests pour éviter l'appel LLM
-    quality_after, _ = compute_quality_report(
+    quality_after = compute_quality_report(
         metadata=metadata,
         label="APRÈS",
         sector=state.get("sector", "unknown"),
         job_id=state["job_id"],
         duckdb_path=state["duckdb_path"],
         business_rules=business_rules,
-        precomputed_br_tests=precomputed_br_tests,
     )
 
     # Calculer le gain par rapport au score AVANT
@@ -94,4 +85,4 @@ def rescoring_node(state: AgentState) -> dict:
         quality_after.consistency_global,
         gain,
     )
-    return {"quality_after": quality_after.to_dict(apply_offsets=False)}
+    return {"quality_after": quality_after.to_dict()}

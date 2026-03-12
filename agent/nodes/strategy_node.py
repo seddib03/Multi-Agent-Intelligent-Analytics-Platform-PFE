@@ -7,7 +7,7 @@ from agent.state import AgentState
 from core.llm_client import LLMClient
 from prompts.anomaly_impact_prompt import (
     ANOMALY_IMPACT_SYSTEM_PROMPT,
-    build_anomaly_impact_user_prompt,
+    build_single_anomaly_impact_prompt,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,25 +86,45 @@ def strategy_node(state: AgentState) -> dict:
             for a in cleaning_plan.anomalies
         }
 
-    # ── Appel 2 : impact + action recommandée par anomalie ─────────────────
+    # ── Appel 2 : impact par anomalie — 1 appel LLM par anomalie ──────────
+    # Évite la troncature JSON quand il y a beaucoup d'anomalies
     if cleaning_plan.anomalies:
         if not profiling_summary or not profiling_summary.get("columns"):
             logger.warning(
-                "⚠ profiling_summary est VIDE — le LLM n'aura pas les stats "
-                "de profiling pour contextualiser l'impact. Vérifiez NODE 2."
+                "⚠ profiling_summary vide — LLM sans stats de profiling. "
+                "Vérifiez NODE 2."
             )
-        try:
-            impact_prompt = build_anomaly_impact_user_prompt(
-                anomalies_summary=anomalies_summary,
-                profiling_summary=profiling_summary,
-                sector=cleaning_plan.sector,
-            )
-            impact_result = client.call_structured(ANOMALY_IMPACT_SYSTEM_PROMPT, impact_prompt)
 
-            # Injecter impact + recommandation dans chaque AnomalyItem
-            enriched = 0
-            for anomaly in cleaning_plan.anomalies:
-                enrichment = impact_result.get(anomaly.anomaly_id, {})
+        enriched = 0
+        for anomaly in cleaning_plan.anomalies:
+            try:
+                # Construire le prompt pour UNE anomalie
+                anomaly_dict = {
+                    "id":       anomaly.anomaly_id,
+                    "colonne":  anomaly.column_name,
+                    "type":     anomaly.anomaly_type.value,
+                    "probleme": anomaly.problem_description,
+                    "lignes":   anomaly.affected_count,
+                    "pct":      round(anomaly.affected_pct, 1),
+                    "actions":  {
+                        "action_1": anomaly.action_1.value,
+                        "action_2": anomaly.action_2.value,
+                        "action_3": anomaly.action_3.value,
+                    },
+                }
+
+                impact_prompt = build_single_anomaly_impact_prompt(
+                    anomaly=anomaly_dict,
+                    profiling_summary=profiling_summary,
+                    sector=cleaning_plan.sector,
+                )
+
+                # ~400-600 tokens par appel — jamais de troncature
+                enrichment = client.call_structured(
+                    ANOMALY_IMPACT_SYSTEM_PROMPT,
+                    impact_prompt,
+                )
+
                 if enrichment:
                     anomaly.impact_1           = enrichment.get("action_1_impact")
                     anomaly.impact_2           = enrichment.get("action_2_impact")
@@ -113,10 +133,17 @@ def strategy_node(state: AgentState) -> dict:
                     anomaly.recommended_reason = enrichment.get("recommended_reason")
                     enriched += 1
 
-            logger.info("Impact LLM généré pour %d/%d anomalies", enriched, len(cleaning_plan.anomalies))
+            except Exception as e:
+                logger.warning(
+                    "Impact LLM échoué pour anomalie %s : %s",
+                    anomaly.anomaly_id, e
+                )
+                # Continuer — les autres anomalies ne sont pas affectées
 
-        except Exception as e:
-            logger.warning("LLM impact échoué — anomalies sans enrichissement : %s", e)
+        logger.info(
+            "Impact LLM généré pour %d/%d anomalies",
+            enriched, len(cleaning_plan.anomalies)
+        )
 
     # Injecter les reformulations dans le plan
     cleaning_plan.llm_summary        = llm_summary
