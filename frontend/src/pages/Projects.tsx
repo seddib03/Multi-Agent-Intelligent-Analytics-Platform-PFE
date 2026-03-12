@@ -71,10 +71,10 @@ export default function Projects() {
   };
 
   const handleContinueProject = (project: Project) => {
-    // Reprendre un projet ouvre directement son dashboard.
+    // Reprendre un projet affiche d'abord le dashboard, puis le chat si demandé.
     useAppStore.setState((state) => ({
       currentProjectId: project.id,
-      currentPhase: 3,
+      currentPhase: 2,  // dashboard
       onboardingStep: 4,
       onboarding: {
         ...state.onboarding,

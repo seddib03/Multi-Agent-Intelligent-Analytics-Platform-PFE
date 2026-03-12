@@ -25,12 +25,19 @@ export function StepConfirmation() {
   const targetCol   = dataset.columns.find((c) => c.semanticType === "target");
   const sectorContext = onboarding.sectorContext;
 
+  // when sectorContext is missing (e.g. after navigating back to settings)
+  // fall back to the dataset value so that the launch animation still shows
+  // a valid sector instead of "Unknown".
+  const displaySector = sectorContext?.sector || dataset.detectedSector || "Unknown";
+  const displayConfidence = sectorContext?.confidence ?? 0;
+  const displayDashboardFocus = sectorContext?.dashboard_focus;
+
   const LAUNCH_STEPS: LaunchStep[] = [
     { 
       label: "Sector Detection Agent", 
       agent: lang === "fr" ? "Détection du secteur ·" : "Sector detection ·", 
-      detail: sectorContext?.sector || "Unknown", 
-      result: `✅ ${sectorContext?.sector || "N/A"} - ${(sectorContext?.confidence || 0 * 100).toFixed(1)}%` 
+      detail: displaySector, 
+      result: `✅ ${displaySector} - ${ (displayConfidence * 100).toFixed(1) }%` 
     },
     { 
       label: "Orchestrator", 
@@ -39,8 +46,8 @@ export function StepConfirmation() {
       result: "✅ Orchestrator ready" 
     },
     { 
-      label: "Insight Agent", 
-      agent: lang === "fr" ? "Génération des métriques ·" : "Metrics generation ·", 
+      label: "Dashboard Generation", 
+      agent: lang === "fr" ? "Création du dashboard ·" : "Dashboard creation ·", 
       detail: "Feature importance & Analysis", 
       result: `✅ ${t("insightsGenerated", lang)}` 
     },
@@ -66,6 +73,7 @@ export function StepConfirmation() {
         const kpis = SECTOR_KPIS[safeSector] ?? [];
         updatePreferences({ visibleKPIs: kpis.map((k) => k.key) });
         setDone(true);
+        // after launch sequence complete move to dashboard (phase 2)
         setTimeout(() => setPhase(2), 1500);
       }
     }, 1800);
