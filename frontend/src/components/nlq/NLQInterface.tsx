@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useAppStore } from "@/stores/appStore";
-import { SECTOR_LABELS, getSuggestedQuestions, generateMockResponse } from "@/lib/mockData";
+import { SECTOR_LABELS, getSuggestedQuestions } from "@/lib/mockData";
 import { DXC_CHART_COLORS } from "@/types/app";
 import { Send, Download, BarChart3, Pin, Plus, MessageSquare, Lightbulb, History, Menu, X, User, Settings } from "lucide-react";
 import { ChatHistoryDrawer } from "@/components/chat/ChatHistoryDrawer";
@@ -12,6 +12,7 @@ import { t } from "@/lib/i18n";
 import { toast } from "sonner";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { analyzeOrchestrator, type AnalyzeResponse, type InsightChart } from "@/lib/orchestratorApi";
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -92,6 +93,7 @@ export function NLQInterface() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [analysisFile, setAnalysisFile] = useState<File | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   useDarkMode();
@@ -110,27 +112,120 @@ export function NLQInterface() {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  const handleSend = (text: string) => {
+  const buildMetadataPayload = () => ({
+    columns: dataset.columns.map((c) => ({
+      column_name: c.originalName,
+      business_name: c.businessName,
+      type: c.semanticType,
+      description: c.description ?? "",
+      nullable: c.missingPercent > 0,
+    })),
+  });
+
+  const toChartData = (chart: InsightChart): ChartData | null => {
+    const rawType = (chart.type || "bar").toLowerCase();
+    const type: ChartData["type"] =
+      rawType === "line" || rawType === "pie" || rawType === "area" ? rawType : "bar";
+
+    const xKey = chart.x || "name";
+    const yKey = chart.y || "value";
+    const rows = Array.isArray(chart.data) ? chart.data : [];
+
+    if (!rows.length) {
+      return null;
+    }
+
+    const normalized = rows.map((row) => ({
+      name: String(row[xKey] ?? ""),
+      [yKey]: Number(row[yKey] ?? 0),
+    }));
+
+    return {
+      type,
+      title: chart.title || `${type.toUpperCase()} chart`,
+      data: normalized,
+      dataKeys: [yKey],
+    };
+  };
+
+  const buildAssistantMessage = (result: AnalyzeResponse): { content: string; charts?: ChartData[] } => {
+    if (result.needs_clarification) {
+      return {
+        content: result.clarification_question || result.final_response || "Pouvez-vous préciser votre demande ?",
+      };
+    }
+
+    const format = (result.response_format || "text").toLowerCase();
+    const payload = result.agent_response || {};
+    const insights = Array.isArray(payload.insights) ? payload.insights : [];
+    const kpis = Array.isArray(payload.kpis) ? payload.kpis : [];
+    const charts = (Array.isArray(payload.charts) ? payload.charts : [])
+      .map(toChartData)
+      .filter((chart): chart is ChartData => chart !== null);
+
+    if (format === "kpi") {
+      const kpiLines = kpis.length
+        ? kpis.map((k) => `- ${k.name}: ${k.value ?? "N/A"}`).join("\n")
+        : "- Aucun KPI retourné";
+      const insightLines = insights.length
+        ? insights.map((insight) => `- ${insight}`).join("\n")
+        : "- Aucun insight retourné";
+
+      return {
+        content: `Dashboard généré.\n\nKPIs\n${kpiLines}\n\nInsights\n${insightLines}`,
+        charts,
+      };
+    }
+
+    if (format === "chart") {
+      return {
+        content: result.final_response || "Graphique généré.",
+        charts,
+      };
+    }
+
+    return {
+      content: result.final_response || "Réponse reçue.",
+      charts: charts.length ? charts : undefined,
+    };
+  };
+
+  const handleSend = async (text: string) => {
     if (!text.trim()) return;
     const userMsg: Message = { id: `u-${Date.now()}`, role: "user", content: text, timestamp: new Date() };
     addMessage(userMsg);
     setInput("");
     setProcessing(true);
-    setTimeout(() => {
-      if (!safeSector) {
-        addMessage({
-          id: `s-${Date.now()}`,
-          role: "system",
-          content: "Le secteur n'a pas encore ete detecte. Veuillez revenir a l'etape 1.",
-          timestamp: new Date(),
-        });
-        setProcessing(false);
-        return;
-      }
-      const { text: responseText, charts, predictions } = generateMockResponse(text, safeSector);
-      addMessage({ id: `s-${Date.now()}`, role: "system", content: responseText, charts, predictions, timestamp: new Date() });
+
+    try {
+      const result = await analyzeOrchestrator({
+        queryRaw: text,
+        datasetFile: analysisFile,
+        metadata: buildMetadataPayload(),
+      });
+
+      const assistant = buildAssistantMessage(result);
+      addMessage({
+        id: `s-${Date.now()}`,
+        role: "system",
+        content: assistant.content,
+        charts: assistant.charts,
+        timestamp: new Date(),
+      });
+
+      setAnalysisFile(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erreur lors de l'analyse.";
+      addMessage({
+        id: `s-${Date.now()}`,
+        role: "system",
+        content: `Erreur API /analyze: ${message}`,
+        timestamp: new Date(),
+      });
+      toast.error("Echec de l'appel /analyze");
+    } finally {
       setProcessing(false);
-    }, 2000);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -301,6 +396,18 @@ export function NLQInterface() {
 
         <div className="bg-card border-t border-border p-4">
           <div className="max-w-3xl mx-auto flex gap-3">
+            <label className="flex items-center justify-center w-11 h-11 rounded-full border border-border bg-muted hover:bg-muted/80 cursor-pointer shrink-0 self-center min-w-[44px] min-h-[44px]" aria-label="Uploader un CSV">
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  setAnalysisFile(file);
+                }}
+              />
+              <Plus size={16} />
+            </label>
             <input
               value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown}
               placeholder={t("askQuestion", lang)}
@@ -311,6 +418,11 @@ export function NLQInterface() {
               <Send size={16} />
             </button>
           </div>
+          {analysisFile && (
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              CSV sélectionné: {analysisFile.name}
+            </p>
+          )}
           <p className="text-xs text-muted-foreground text-center mt-1">
             {isMobile ? t("enterToSend", lang) : t("ctrlEnterSend", lang)}
           </p>

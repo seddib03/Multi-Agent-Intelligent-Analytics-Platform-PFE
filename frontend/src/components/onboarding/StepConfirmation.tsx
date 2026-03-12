@@ -4,6 +4,9 @@ import { SECTOR_LABELS, generateFeatureImportance, generateEntities, SECTOR_KPIS
 import { ACCENT_THEMES } from "@/types/app";
 import { Rocket } from "lucide-react";
 import { t } from "@/lib/i18n";
+import { toast } from "sonner";
+import { analyzeOrchestrator, type AnalyzeResponse, type InsightChart } from "@/lib/orchestratorApi";
+import type { ChartData } from "@/types/app";
 
 interface LaunchStep {
   label: string;
@@ -13,7 +16,7 @@ interface LaunchStep {
 }
 
 export function StepConfirmation() {
-  const { onboarding, dataset, userPreferences, setOnboardingStep, setPhase, updateModelResults, updatePreferences } = useAppStore();
+  const { onboarding, dataset, userPreferences, setOnboardingStep, setPhase, updateModelResults, updatePreferences, clearMessages, addMessage } = useAppStore();
   const lang = userPreferences.language;
   const [launching, setLaunching] = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);
@@ -24,6 +27,97 @@ export function StepConfirmation() {
   const accentTheme = ACCENT_THEMES[userPreferences.accentTheme];
   const targetCol   = dataset.columns.find((c) => c.semanticType === "target");
   const sectorContext = onboarding.sectorContext;
+
+  const toChartData = (chart: InsightChart): ChartData | null => {
+    const rawType = (chart.type || "bar").toLowerCase();
+    const type: ChartData["type"] = rawType === "line" || rawType === "pie" || rawType === "area" ? rawType : "bar";
+    const xKey = chart.x || "name";
+    const yKey = chart.y || "value";
+    const rows = Array.isArray(chart.data) ? chart.data : [];
+    if (!rows.length) return null;
+
+    return {
+      type,
+      title: chart.title || "Chart",
+      data: rows.map((row) => ({
+        name: String(row[xKey] ?? ""),
+        [yKey]: Number(row[yKey] ?? 0),
+      })),
+      dataKeys: [yKey],
+    };
+  };
+
+  const buildMetadataPayload = () => ({
+    columns: dataset.columns.map((c) => ({
+      column_name: c.originalName,
+      business_name: c.businessName,
+      type: c.semanticType,
+      description: c.description ?? "",
+      nullable: c.missingPercent > 0,
+    })),
+  });
+
+  const buildAssistantMessage = (result: AnalyzeResponse): { content: string; charts?: ChartData[] } => {
+    if (result.needs_clarification) {
+      return {
+        content: result.clarification_question || result.final_response || "Pouvez-vous préciser votre demande ?",
+      };
+    }
+
+    const format = (result.response_format || "text").toLowerCase();
+    const payload = result.agent_response || {};
+    const charts = (Array.isArray(payload.charts) ? payload.charts : [])
+      .map(toChartData)
+      .filter((chart): chart is ChartData => chart !== null);
+
+    if (format === "kpi") {
+      const kpiLines = (payload.kpis || []).map((kpi) => `- ${kpi.name}: ${kpi.value ?? "N/A"}`).join("\n");
+      const insightLines = (payload.insights || []).map((insight) => `- ${insight}`).join("\n");
+      return {
+        content: `Dashboard généré.\n\nKPIs\n${kpiLines || "- Aucun KPI"}\n\nInsights\n${insightLines || "- Aucun insight"}`,
+        charts,
+      };
+    }
+
+    if (format === "chart") {
+      return {
+        content: result.final_response || "Graphique généré.",
+        charts,
+      };
+    }
+
+    return {
+      content: result.final_response || "Réponse reçue.",
+      charts: charts.length ? charts : undefined,
+    };
+  };
+
+  const runInitialAnalyze = async () => {
+    const queryRaw = onboarding.useCaseDescription?.trim() || "Generate dashboard insights";
+
+    const result = await analyzeOrchestrator({
+      queryRaw,
+      datasetFile: dataset.sourceCsvFile ?? null,
+      metadata: buildMetadataPayload(),
+    });
+
+    const assistant = buildAssistantMessage(result);
+
+    clearMessages();
+    addMessage({
+      id: `u-${Date.now()}`,
+      role: "user",
+      content: queryRaw,
+      timestamp: new Date(),
+    });
+    addMessage({
+      id: `s-${Date.now()}`,
+      role: "system",
+      content: assistant.content,
+      charts: assistant.charts,
+      timestamp: new Date(),
+    });
+  };
 
   const LAUNCH_STEPS: LaunchStep[] = [
     { 
@@ -60,13 +154,23 @@ export function StepConfirmation() {
       if (currentStep < LAUNCH_STEPS.length - 1) {
         setCurrentStep(currentStep + 1);
       } else {
-        const fi       = generateFeatureImportance(dataset.columns);
-        const entities = generateEntities(safeSector);
-        updateModelResults({ featureImportance: fi, topRiskyEntities: entities });
-        const kpis = SECTOR_KPIS[safeSector] ?? [];
-        updatePreferences({ visibleKPIs: kpis.map((k) => k.key) });
-        setDone(true);
-        setTimeout(() => setPhase(2), 1500);
+        void (async () => {
+          try {
+            const fi       = generateFeatureImportance(dataset.columns);
+            const entities = generateEntities(safeSector);
+            updateModelResults({ featureImportance: fi, topRiskyEntities: entities });
+            const kpis = SECTOR_KPIS[safeSector] ?? [];
+            updatePreferences({ visibleKPIs: kpis.map((k) => k.key) });
+            await runInitialAnalyze();
+            setDone(true);
+            setTimeout(() => setPhase(2), 1200);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Erreur inconnue";
+            toast.error(`Echec du lancement: ${message}`);
+            setLaunching(false);
+            setCurrentStep(-1);
+          }
+        })();
       }
     }, 1800);
     return () => clearTimeout(timer);
