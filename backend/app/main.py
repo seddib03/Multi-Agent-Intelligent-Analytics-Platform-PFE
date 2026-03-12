@@ -3,8 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import init_db_schema
-from app.routers import auth, users, projects, datasets
-from backend.app.routers import sector as sector
+from app.routers import auth, users, projects, datasets, sector
 
 
 # ─── Lifespan ───────────────────────────────────────────────────────────────
