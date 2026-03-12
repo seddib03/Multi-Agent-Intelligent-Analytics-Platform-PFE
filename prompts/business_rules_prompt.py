@@ -101,7 +101,9 @@ Règle: "Le total des montants par catégorie ne doit pas dépasser le budget"
   macro_sql: "{{% test budget_check(model) %}}\\nSELECT * FROM {{{{ model }}}} WHERE montant > budget\\n{{% endtest %}}"
 
 TRÈS IMPORTANT POUR test_type="custom" :
-- Tu DOIS envelopper le SQL dans `{{% test nom_de_la_macro(model) %}}` (table-level) ou `{{% test nom_de_la_macro(model, column_name) %}}` (column-level).
+- Tu DOIS envelopper le SQL dans `{{% test nom_macro(model) %}}` (table-level) ou `{{% test nom_macro(model, column_name) %}}` (column-level).
+- ATTENTION : Dans la signature `test nom_macro(model, column_name)`, le mot `column_name` DOIT être écrit tel quel. Ne mets JAMAIS le vrai nom de la colonne (ex: 'delay_minutes') dans les parenthèses de la signature du test.
+- Dans le SQL du test, utilise `{{{{ column_name }}}}` pour te référer à la colonne testée.
 - Tu DOIS utiliser `{{{{ model }}}}` dans le `FROM` (et JAMAIS utiliser `ref()` car on teste une source).
 - Le SQL DOIT sélectionner les lignes en ERREUR (celles qui violent la règle).
 - ATTENTION AUX TYPES : Dans DuckDB, toutes les données brutes sont initialement en VARCHAR (texte). 
