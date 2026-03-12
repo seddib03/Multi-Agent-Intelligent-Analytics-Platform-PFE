@@ -130,6 +130,19 @@ services:
     networks:
       - nexora_net
 
+  # ─── NLQ Context API (Sprint 1) ───────────────────────
+  nlq_context_api:
+    build:
+      context: ./nlq_context_agent/sprint1
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./nlq_context_agent/sprint1/.env
+    ports:
+      - "8002:8000"
+    networks:
+      - nexora_net
+
   # ─── Frontend (Vite Dev) ─────────────────────────────
   frontend:
     build:
