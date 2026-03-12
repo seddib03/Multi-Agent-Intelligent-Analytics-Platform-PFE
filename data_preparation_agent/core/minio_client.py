@@ -111,9 +111,9 @@ class MinioClient:
         clean_df: pd.DataFrame,
     ) -> str:
         """
-        Upload le DataFrame nettoyé en Parquet dans Silver.
+        Upload le DataFrame nettoyé en CSV dans Silver.
 
-        Parquet = format colonnaire compressé, idéal pour l'analyse.
+        CSV = format tabulaire texte, lisible et facilement exportable.
         On le sérialise en bytes en mémoire (pas de fichier temporaire).
 
         Args:
@@ -122,13 +122,13 @@ class MinioClient:
             clean_df: DataFrame Pandas nettoyé
 
         Returns:
-            Chemin MinIO du Parquet.
+            Chemin MinIO du CSV.
         """
-        object_name = f"{sector}/{job_id}/clean.parquet"
+        object_name = f"{sector}/{job_id}/clean.csv"
 
-        # Sérialiser en Parquet en mémoire (buffer bytes)
+        # Sérialiser en CSV en mémoire (buffer bytes)
         buffer = io.BytesIO()
-        clean_df.to_parquet(buffer, index=False, engine="pyarrow")
+        clean_df.to_csv(buffer, index=False, encoding="utf-8")
         buffer.seek(0)  # Revenir au début du buffer
 
         self._client.put_object(
@@ -206,13 +206,13 @@ class MinioClient:
             sector: Secteur
 
         Returns:
-            DataFrame Pandas lu depuis le Parquet Silver.
+            DataFrame Pandas lu depuis le CSV Silver.
         """
-        object_name = f"{sector}/{job_id}/clean.parquet"
+        object_name = f"{sector}/{job_id}/clean.csv"
 
         response = self._client.get_object(self._silver, object_name)
         buffer   = io.BytesIO(response.read())
-        return pd.read_parquet(buffer, engine="pyarrow")
+        return pd.read_csv(buffer, encoding="utf-8")
 
     def list_jobs(self, sector: str, bucket: str = "gold") -> list[dict]:
         """

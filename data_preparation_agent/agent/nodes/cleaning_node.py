@@ -1,23 +1,3 @@
-"""
-agent/nodes/cleaning_node.py
-NODE 6 — Cleaning
-─────────────────────────────
-Exécute le plan de nettoyage validé par l'utilisateur.
-
-Pour chaque anomalie approuvée :
-    - Récupère l'action choisie par l'user (action_1, 2 ou 3)
-    - Exécute la transformation Pandas correspondante
-    - Log l'opération (rows_before / rows_after / action)
-
-ORDRE D'EXÉCUTION :
-    1. DROP_ROWS et DROP_DUPLICATES en premier
-       (réduire le dataset avant les imputations)
-    2. Imputations (IMPUTE_MEDIAN, IMPUTE_MODE)
-    3. Transformations (CAST_TYPE, PARSE_DATE, CLIP_RANGE)
-    4. FLAG_ONLY : log uniquement, aucune modification
-
-Le résultat est sérialisé en dict pour le state LangGraph.
-"""
 from __future__ import annotations
 
 import logging
@@ -88,24 +68,29 @@ def cleaning_node(state: AgentState) -> dict:
         try:
             # ── Suppressions ─────────────────────────────────────────────
             if action == CleaningAction.DROP_ROWS:
-                df = df.drop(index=rows, errors="ignore").reset_index(drop=True)
+                logger.info("  - Suppression de %d ligne(s) pour '%s'", len(rows), col)
+                df = df.drop(index=rows, errors="ignore")
 
             elif action == CleaningAction.DROP_DUPLICATES:
-                df = df.drop_duplicates(subset=[col], keep="first").reset_index(drop=True)
+                logger.info("  - Suppression des doublons pour '%s'", col)
+                df = df.drop_duplicates(subset=[col], keep="first")
 
             # ── Imputations numériques ────────────────────────────────────
             elif action == CleaningAction.IMPUTE_MEDIAN:
                 numeric = pd.to_numeric(df[col], errors="coerce")
                 median  = numeric.median()
+                logger.info("  - Imputation médiane pour '%s' : %s", col, median)
                 df.loc[df[col].isna(), col] = str(median)
 
             elif action == CleaningAction.IMPUTE_MODE:
                 mode_val = df[col].mode()
                 if not mode_val.empty:
+                    logger.info("  - Imputation mode pour '%s' : %s", col, mode_val[0])
                     df[col] = df[col].fillna(mode_val[0])
 
             elif action == CleaningAction.IMPUTE_CONSTANT:
                 constant = (anomaly.user_params or anomaly.params or {}).get("value", "")
+                logger.info("  - Imputation constante pour '%s' : %s", col, constant)
                 df[col]  = df[col].fillna(str(constant))
 
             # ── Transformations de type ───────────────────────────────────
@@ -115,14 +100,17 @@ def cleaning_node(state: AgentState) -> dict:
             elif action == CleaningAction.PARSE_DATE:
                 fmt = (anomaly.params or {}).get("expected_format")
                 if fmt:
+                    logger.info("  - Parsing date pour '%s' avec format: %s", col, fmt)
                     df[col] = pd.to_datetime(df[col], format=fmt, errors="coerce")
                 else:
+                    logger.info("  - Parsing date pour '%s' (auto-detect)", col)
                     df[col] = pd.to_datetime(df[col], infer_datetime_format=True, errors="coerce")
 
             # ── Clipping range ────────────────────────────────────────────
             elif action == CleaningAction.CLIP_RANGE:
                 params  = anomaly.user_params or anomaly.params or {}
                 numeric = pd.to_numeric(df[col], errors="coerce")
+                logger.info("  - Clipping range pour '%s' : [%s, %s]", col, params.get("min"), params.get("max"))
                 clipped = numeric.clip(
                     lower=params.get("min"),
                     upper=params.get("max"),
@@ -165,6 +153,12 @@ def cleaning_node(state: AgentState) -> dict:
         "NODE 6 terminé — %d lignes restantes (était %d)",
         len(df), len(_load_df(state["raw_df"])),
     )
+    # Reset index une seule fois à la fin pour le rescoring_node
+    # On recalcule __row_id pour que le rapport "APRÈS" utilise les nouveaux index
+    df = df.reset_index(drop=True)
+    if "__row_id" in df.columns:
+        df["__row_id"] = range(len(df))
+    
     return {
         "clean_df": {
             "columns": df.columns.tolist(),

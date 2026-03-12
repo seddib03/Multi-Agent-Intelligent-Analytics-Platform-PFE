@@ -11,6 +11,7 @@ Moteur de calcul des qualités dbt + DuckDB.
 from __future__ import annotations
 import glob
 import json
+import shutil
 import logging
 import os
 import subprocess
@@ -57,9 +58,10 @@ def generate_dbt_schema(
     """
     columns_yaml = []
     table_tests = []
-    
+    seen_table_tests = set()  # pour dédupliquer les tests table-level
     # ── Test de duplication de lignes (table-level, dim: uniqueness) ──
     table_tests.append("row_not_duplicate")
+    seen_table_tests.add("row_not_duplicate")
     
     for meta in metadata:
         tests = []
@@ -97,7 +99,14 @@ def generate_dbt_schema(
     if business_rule_tests:
         for br_test in business_rule_tests:
             if br_test.is_table_level:
-                # Test table-level
+                # Test table-level — dédupliquer par nom de macro
+                test_key = br_test.macro_name or str(br_test.schema_entry)
+                if test_key in seen_table_tests:
+                    logger.warning(
+                        "Test table-level dupliqué ignoré : '%s'", test_key
+                    )
+                    continue
+                seen_table_tests.add(test_key)
                 if isinstance(br_test.schema_entry, dict):
                     table_tests.append(br_test.schema_entry)
                 elif isinstance(br_test.schema_entry, str):
@@ -154,21 +163,55 @@ def compute_quality_report(
     job_id:   str,
     duckdb_path: str,
     business_rules: Optional[list[str]] = None,
-) -> QualityReport:
+    precomputed_br_tests: Optional[list] = None,
+) -> tuple[QualityReport, list]:
+    """
+    Calcule le QualityReport via dbt test.
+
+    Args:
+        metadata:             Colonnes de la table
+        label:                "AVANT" ou "APRES"
+        sector:               Secteur metier
+        job_id:               ID du job
+        duckdb_path:          Chemin de la base DuckDB
+        business_rules:       Regles metier (langage naturel) - declenche l'appel LLM
+        precomputed_br_tests: BusinessRuleTest deja generes (ex: rescoring) - evite le LLM
+    """
 
     settings = get_settings()
     dbt_dir = settings.dbt_project_dir
     models_dir = dbt_dir / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
 
-    # ── Nettoyage des anciens schemas ──
+    # -- Nettoyage des anciens schemas --
     for stale in glob.glob(str(models_dir / "_sources_*.yml")):
         Path(stale).unlink(missing_ok=True)
-        logger.debug("Ancien schema supprimé : %s", stale)
+        logger.debug("Ancien schema supprime : %s", stale)
 
-    # ── Traiter les business rules via LLM ──
+    # -- Traiter les business rules via LLM (seulement si pas de tests pre-calcules) --
     business_rule_tests = []
-    if business_rules:
+    if precomputed_br_tests is not None:
+        # Rescoring : reutiliser les BusinessRuleTest deja generes - pas de LLM
+        from core.business_rules_engine import BusinessRuleTest
+        for br_dict in precomputed_br_tests:
+            try:
+                business_rule_tests.append(BusinessRuleTest(
+                    rule_text=br_dict.get("rule_text", ""),
+                    dimension=br_dict.get("dimension", "validity"),
+                    test_type=br_dict.get("test_type", "existing"),
+                    macro_name=br_dict.get("macro_name", ""),
+                    schema_entry=br_dict.get("schema_entry"),
+                    target_column=br_dict.get("target_column"),
+                    is_table_level=br_dict.get("is_table_level", False),
+                    macro_sql=br_dict.get("macro_sql"),
+                ))
+            except Exception as e:
+                logger.warning("Impossible de reconstruire BusinessRuleTest : %s", e)
+        logger.info(
+            "Rescoring : %d business rule tests reutilises (pas d'appel LLM)",
+            len(business_rule_tests),
+        )
+    elif business_rules:
         try:
             from core.business_rules_engine import process_business_rules
             business_rule_tests = process_business_rules(
@@ -183,6 +226,7 @@ def compute_quality_report(
         except Exception as e:
             logger.error("Erreur traitement business rules : %s", e)
 
+
     # ── Générer le schema dbt ──
     schema_path = str(models_dir / "_sources_current.yml")
     generate_dbt_schema(metadata, schema_path, business_rule_tests)
@@ -190,17 +234,33 @@ def compute_quality_report(
     # Environnement — injecter le chemin DuckDB pour profiles.yml
     env = os.environ.copy()
     env["DBT_DUCKDB_PATH"] = duckdb_path
+
+    # ── Nettoyer le répertoire target pour éviter les caches stales ──
+    # Le partial_parse.msgpack d'un run précédent (avec un autre DuckDB)
+    # peut amener dbt-duckdb à réutiliser une connexion obsolète
+    # et écrire les audit tables dans le mauvais fichier DuckDB.
+    target_dir = dbt_dir / "target"
+    if target_dir.exists():
+        shutil.rmtree(target_dir, ignore_errors=True)
+        logger.debug("Répertoire target nettoyé : %s", target_dir)
     
-    # dbt test --store-failures
+    # dbt test --store-failures --no-partial-parse
     logger.info("Lancement de dbt test pour le job %s...", job_id)
     cmd = [
         "dbt", "test",
         "--store-failures",
+        "--no-partial-parse",
         "--project-dir",  str(dbt_dir),
         "--profiles-dir", str(dbt_dir),
         "--select", "source:staging.raw_data",
     ]
-    subprocess.run(cmd, env=env, capture_output=True, text=True)
+    result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    if result.returncode != 0:
+        logger.warning("dbt test a retourné un code non-zéro (%d)", result.returncode)
+    if result.stderr:
+        logger.debug("dbt stderr:\n%s", result.stderr[-2000:])
+    if result.stdout:
+        logger.debug("dbt stdout:\n%s", result.stdout[-2000:])
 
     # Récupérer le nombre total de lignes
     with duckdb.connect(duckdb_path) as conn:
@@ -214,7 +274,7 @@ def compute_quality_report(
     if not (run_results_path.exists() and manifest_path.exists()):
         logger.warning("run_results.json ou manifest.json absent — QualityReport vide retourné")
         Path(schema_path).unlink(missing_ok=True)
-        return report
+        return report, business_rule_tests
 
     with open(run_results_path) as f:
         run_results = json.load(f)
@@ -289,30 +349,52 @@ def compute_quality_report(
 
                         has_row_id = "__row_id" in avail_cols
                         has_col = col_name and col_name.lower() in avail_cols
+                        
+                        # dbt aliases techniques pour tests natifs
+                        dbt_aliases = ["value_field", "unique_field"]
+                        found_alias = next((a for a in dbt_aliases if a in avail_cols), None)
 
-                        if has_row_id and has_col:
-                            res = conn.execute(
-                                f'SELECT __row_id, "{col_name}" FROM {qualified_name} LIMIT 2000'
-                            ).fetchall()
-                            failed_rows    = [int(r[0]) for r in res]
-                            sample_invalid = [r[1] for r in res[:5] if r[1] is not None]
-                        elif has_row_id:
-                            res = conn.execute(
-                                f'SELECT __row_id FROM {qualified_name} LIMIT 2000'
-                            ).fetchall()
-                            failed_rows = [int(r[0]) for r in res]
-                        elif has_col:
-                            # Tests natifs dbt (accepted_values, unique) — pas de __row_id
-                            res = conn.execute(
-                                f'SELECT "{col_name}" FROM {qualified_name} LIMIT 50'
-                            ).fetchall()
-                            sample_invalid = [r[0] for r in res if r[0] is not None]
-                            logger.debug(
-                                "Table %s sans __row_id — %d valeurs échantillonnées",
-                                qualified_name, len(sample_invalid),
-                            )
+                        if has_row_id:
+                            # Cas standard : on a l'ID de ligne (soit dbt-native on_fail, soit macro custom)
+                            if has_col:
+                                res = conn.execute(
+                                    f'SELECT __row_id, "{col_name}" FROM {qualified_name} LIMIT 2000'
+                                ).fetchall()
+                                failed_rows    = [int(r[0]) for r in res]
+                                sample_invalid = [r[1] for r in res[:5] if r[1] is not None]
+                            elif found_alias:
+                                res = conn.execute(
+                                    f'SELECT __row_id, "{found_alias}" FROM {qualified_name} LIMIT 2000'
+                                ).fetchall()
+                                failed_rows    = [int(r[0]) for r in res]
+                                sample_invalid = [r[1] for r in res[:5] if r[1] is not None]
+                            else:
+                                res = conn.execute(
+                                    f'SELECT __row_id FROM {qualified_name} LIMIT 2000'
+                                ).fetchall()
+                                failed_rows = [int(r[0]) for r in res]
+                        elif has_col or found_alias:
+                            # Fallback pour tests natifs dbt (unique, accepted_values) qui n'ont pas __row_id
+                            # On joint avec raw_data pour retrouver les IDs originaux
+                            effective_col = col_name if has_col else found_alias
+                            logger.info("Récupération des __row_id par join pour %s (via %s)", col_name, effective_col)
+                            try:
+                                res = conn.execute(
+                                    f'SELECT __row_id, "{col_name}" FROM raw_data '
+                                    f'WHERE "{col_name}" IN (SELECT "{effective_col}" FROM {qualified_name}) '
+                                    f'LIMIT 2000'
+                                ).fetchall()
+                                failed_rows    = [int(r[0]) for r in res]
+                                sample_invalid = [r[1] for r in res[:5] if r[1] is not None]
+                            except Exception as e:
+                                logger.warning("Echec du join pour retrouver les IDs (%s): %s", effective_col, e)
+                                # Dernier recours : juste les valeurs
+                                res = conn.execute(
+                                    f'SELECT "{effective_col}" FROM {qualified_name} LIMIT 50'
+                                ).fetchall()
+                                sample_invalid = [r[0] for r in res if r[0] is not None]
                         else:
-                            # Table avec colonnes inconnues (ex: n_records, value_field)
+                            # Table avec colonnes inconnues
                             logger.debug(
                                 "Table %s — colonnes: %s (pas de __row_id ni %s)",
                                 qualified_name, avail_cols, col_name,
@@ -402,7 +484,7 @@ def compute_quality_report(
         report.row_duplication_detail = {
             "duplicate_row_count": int(dup_count),
             "total_rows": int(total_rows),
-            "duplicate_rows": dup_info["rows"][:500],
+            "duplicate_rows": [r for r in dup_info["rows"][:500]],
         }
     else:
         report.row_duplication_score = 100.0
@@ -415,7 +497,7 @@ def compute_quality_report(
             "test_type": tl_test_type,
             "dimension": tl_info.get("dimension", "consistency"),
             "count": int(tl_info.get("count", 0)),
-            "rows": tl_info.get("rows", [])[:500]
+            "rows": [r for r in tl_info.get("rows", [])][:500]
         })
 
     # ── Construire les ColumnQualityScore ──
@@ -483,7 +565,7 @@ def compute_quality_report(
             score.accuracy_detail = {
                 "out_of_range_count": int(range_c),
                 "total": int(total_rows),
-                "out_of_range_rows": f["range_errors"]["rows"][:500],
+                "out_of_range_rows":[r for r in f["range_errors"]["rows"][:500]],
                 "out_of_range_samples": f["range_errors"]["samples"][:5],
             }
 
@@ -557,4 +639,4 @@ def compute_quality_report(
 
     # Nettoyage du fichier schema temporaire
     Path(schema_path).unlink(missing_ok=True)
-    return report
+    return report, business_rule_tests

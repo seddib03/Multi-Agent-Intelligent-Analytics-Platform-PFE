@@ -1,23 +1,3 @@
-"""
-Structures pour les scores de qualité par colonne et par dimension.
-
-5 DIMENSIONS :
-    Completeness → % valeurs non-nulles sur colonnes nullable=false
-    Validity     → % valeurs respectant les règles metadata (type, enum, pattern, format)
-    Uniqueness   → % unicité sur colonnes identifier=true + duplication de lignes
-    Accuracy     → % valeurs dans les plages attendues (in_range)
-    Consistency  → % respect des règles de cohérence (business rules inter-colonnes)
-
-SCORE PAR COLONNE :
-    Chaque colonne a son propre score par dimension applicable.
-    Si une dimension ne s'applique pas à une colonne
-    (ex: Uniqueness sur colonne identifier=false),
-    elle est None (pas calculée, pas comptée).
-
-SCORE GLOBAL :
-    Moyenne pondérée des dimensions applicables.
-    Poids configurables dans settings.py.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -44,8 +24,17 @@ def _to_native(obj: Any) -> Any:
             val = _to_native(v)
             if val is not None:
                 # Keep if not an empty collection
+                # EXCEPT for critical keys we want to see even if empty (like affected_rows)
                 if isinstance(val, (dict, list)) and len(val) == 0:
-                    continue
+                    exempt_keys = (
+                        "affected_rows", "rows", "null_rows", "duplicate_rows", 
+                        "invalid_rows", "range_errors", "enum_errors", 
+                        "pattern_errors", "date_errors", "type_errors",
+                        "out_of_range_rows", "inconsistent_rows",
+                        "br_accuracy_rows", "br_validity_rows"
+                    )
+                    if k not in exempt_keys:
+                        continue
                 cleaned[k] = val
         return cleaned
 
@@ -71,7 +60,13 @@ def _offset_detail(detail: dict) -> dict:
     """Convertit les indices Pandas (0-based) en numéros de ligne CSV/Excel."""
     result = {}
     # Clés contenant des listes d'indices de lignes
-    ROW_KEYS = {"null_rows", "duplicate_rows", "invalid_rows"}
+    ROW_KEYS = {
+        "null_rows", "duplicate_rows", "invalid_rows", 
+        "range_errors", "enum_errors", "pattern_errors", "date_errors",
+        "type_errors", "out_of_range_rows", "inconsistent_rows",
+        "br_accuracy_rows", "br_validity_rows", "br_completeness_rows", 
+        "br_uniqueness_rows", "failed_rows", "rows"
+    }
     for k, v in detail.items():
         if k in ROW_KEYS and isinstance(v, list):
             result[k] = [r + ROW_DISPLAY_OFFSET for r in v]
@@ -122,7 +117,17 @@ class ColumnQualityScore:
             return None
         return round(sum(scores) / len(scores), 1)
 
-    def to_dict(self) -> dict:
+    def to_dict(self, apply_offsets: bool = True) -> dict:
+        details = {
+            "completeness": self.completeness_detail,
+            "validity":     self.validity_detail,
+            "uniqueness":   self.uniqueness_detail,
+            "accuracy":     self.accuracy_detail,
+            "consistency":  self.consistency_detail,
+        }
+        if apply_offsets:
+            details = {k: _offset_detail(v) for k, v in details.items()}
+
         return _to_native({
             "column_name":   self.column_name,
             "business_name": self.business_name,
@@ -134,13 +139,7 @@ class ColumnQualityScore:
                 "consistency":  self.consistency,
                 "global":       self.global_score,
             },
-            "details": {
-                "completeness": _offset_detail(self.completeness_detail),
-                "validity":     _offset_detail(self.validity_detail),
-                "uniqueness":   _offset_detail(self.uniqueness_detail),
-                "accuracy":     _offset_detail(self.accuracy_detail),
-                "consistency":  _offset_detail(self.consistency_detail),
-            },
+            "details": details,
         })
 
     @classmethod
@@ -234,7 +233,14 @@ class QualityReport:
             1,
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self, apply_offsets: bool = True) -> dict:
+        row_dup_detail = self.row_duplication_detail
+        table_br = self.table_level_business_rules
+        
+        if apply_offsets:
+            row_dup_detail = _offset_detail(row_dup_detail)
+            table_br = [_offset_detail(br) for br in table_br]
+
         return _to_native({
             "label":      self.label,
             "sector":     self.sector,
@@ -250,10 +256,10 @@ class QualityReport:
             },
             "row_duplication": {
                 "score": self.row_duplication_score,
-                "detail": self.row_duplication_detail,
+                "detail": row_dup_detail,
             },
-            "table_level_business_rules": self.table_level_business_rules,
-            "columns": [c.to_dict() for c in self.columns],
+            "table_level_business_rules": table_br,
+            "columns": [c.to_dict(apply_offsets=apply_offsets) for c in self.columns],
         })
 
     @classmethod

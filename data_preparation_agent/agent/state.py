@@ -40,6 +40,7 @@ class AgentState(TypedDict, total=False):
 
     # NODE 3 : quality_scoring
     quality_before: Optional[dict]
+    business_rule_tests: Optional[list]  # BusinessRuleTest sérialisés — réutilisés par rescoring
 
     # NODE 4 : anomaly_detection
     cleaning_plan: Optional[CleaningPlan]
@@ -82,6 +83,7 @@ def build_initial_state(
         profiling_html_path=None,
         profiling_json_path=None,
         quality_before=None,
+        business_rule_tests=None,
         cleaning_plan=None,
         llm_summary=None, llm_reformulations=None,
         clean_df=None, cleaning_log=[],

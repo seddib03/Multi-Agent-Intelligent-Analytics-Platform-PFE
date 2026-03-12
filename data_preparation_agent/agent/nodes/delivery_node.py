@@ -8,7 +8,7 @@ Dernière étape du pipeline.
        _sector, _job_id, _ingestion_ts, _agent_version, _quality_score
 
 2. Upload Silver dans MinIO :
-       bucket silver / {sector}/{job_id}/clean.parquet
+       bucket silver / {sector}/{job_id}/clean.csv
 
 3. Upload Gold dans MinIO :
        bucket gold / {sector}/{job_id}/quality_report.json

@@ -49,6 +49,14 @@ def rescoring_node(state: AgentState) -> dict:
     metadata = _load_metadata(state["metadata"])
     business_rules = state.get("business_rules", [])
 
+    # ── Mettre à jour DuckDB avec les données nettoyées ───────────────────
+    import duckdb
+    with duckdb.connect(state["duckdb_path"]) as conn:
+        conn.execute("DROP TABLE IF EXISTS raw_data")
+        conn.execute("CREATE TABLE raw_data AS SELECT * FROM df")
+    
+    logger.info("DuckDB mis à jour avec clean_df avant rescoring")
+
     quality_after = compute_quality_report(
         metadata=metadata,
         label="APRÈS",
