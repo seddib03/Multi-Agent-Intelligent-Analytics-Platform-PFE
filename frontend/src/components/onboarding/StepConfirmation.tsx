@@ -23,10 +23,33 @@ export function StepConfirmation() {
   const safeSector  = dataset.detectedSector in SECTOR_LABELS ? dataset.detectedSector : "finance";
   const accentTheme = ACCENT_THEMES[userPreferences.accentTheme];
   const targetCol   = dataset.columns.find((c) => c.semanticType === "target");
+  const sectorContext = onboarding.sectorContext;
 
   const LAUNCH_STEPS: LaunchStep[] = [
-    { label: "Generic Predictive Agent (AutoML)", agent: "Test XGBoost · LightGBM ·", detail: "Logistic Regression", result: "XGBoost — AUC: 0.871 · F1: 0.83" },
-    { label: "Insight Agent", agent: lang === "fr" ? "Génération des métriques ·" : "Metrics generation ·", detail: "Feature importance", result: `8 ${t("insightsGenerated", lang)}` },
+    { 
+      label: "Sector Detection Agent", 
+      agent: lang === "fr" ? "Détection du secteur ·" : "Sector detection ·", 
+      detail: sectorContext?.sector || "Unknown", 
+      result: `✅ ${sectorContext?.sector || "N/A"} - ${(sectorContext?.confidence || 0 * 100).toFixed(1)}%` 
+    },
+    { 
+      label: "Orchestrator", 
+      agent: lang === "fr" ? "Initialisation de l'orchestrateur ·" : "Orchestrator initialization ·", 
+      detail: "Coordination des agents", 
+      result: "✅ Orchestrator ready" 
+    },
+    { 
+      label: "Insight Agent", 
+      agent: lang === "fr" ? "Génération des métriques ·" : "Metrics generation ·", 
+      detail: "Feature importance & Analysis", 
+      result: `✅ ${t("insightsGenerated", lang)}` 
+    },
+    { 
+      label: "Chatbot / NLQ Interface", 
+      agent: lang === "fr" ? "Initialisation du chatbot ·" : "Chatbot initialization ·", 
+      detail: "Natural Language Queries", 
+      result: "✅ NLQ Interface ready" 
+    },
   ];
 
   const handleLaunch = () => { setLaunching(true); setCurrentStep(0); };
@@ -90,10 +113,13 @@ export function StepConfirmation() {
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("useCase", lang)}</h3>
           <p className="text-sm text-foreground line-clamp-2">{onboarding.useCaseDescription}</p>
           <div className="flex gap-2 mt-2 flex-wrap">
-            <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded font-medium">{sectorInfo.icon} {sectorInfo.label}</span>
-            {onboarding.analysisTypes.map((tStr) => (
-              <span key={tStr} className="text-xs bg-dxc-melon text-white px-2 py-0.5 rounded font-medium">{tStr}</span>
-            ))}
+            <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded font-medium">{sectorInfo.icon} {onboarding.sectorContext?.sector || sectorInfo.label}</span>
+            {onboarding.sectorContext && (
+              <>
+                <span className="text-xs bg-dxc-sky text-white px-2 py-0.5 rounded font-medium">📊 Confidence: {(onboarding.sectorContext.confidence * 100).toFixed(1)}%</span>
+                <span className="text-xs bg-dxc-peach text-white px-2 py-0.5 rounded font-medium">🎯 {onboarding.sectorContext.dashboard_focus}</span>
+              </>
+            )}
           </div>
         </div>
 

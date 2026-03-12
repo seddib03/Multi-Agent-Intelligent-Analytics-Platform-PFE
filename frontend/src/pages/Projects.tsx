@@ -24,6 +24,15 @@ import {
   type Project,
 } from "@/lib/projectsApi";
 
+const SUPPORTED_SECTORS = ["finance", "transport", "retail", "manufacturing", "public"] as const;
+
+function normalizeSector(value: string | null | undefined): (typeof SUPPORTED_SECTORS)[number] {
+  if (value && (SUPPORTED_SECTORS as readonly string[]).includes(value)) {
+    return value as (typeof SUPPORTED_SECTORS)[number];
+  }
+  return "public";
+}
+
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   CREATED:             { label: "Créé",            color: "bg-accent/20 text-accent-foreground" },
   DATA_UPLOADED:       { label: "Données chargées", color: "bg-blue-100 text-blue-700" },
@@ -61,9 +70,22 @@ export default function Projects() {
     navigate("/app");
   };
 
-  const handleContinueProject = (projectId: string) => {
-    // Stocker l'ID du projet backend dans le store avant de naviguer
-    useAppStore.setState({ currentProjectId: projectId });
+  const handleContinueProject = (project: Project) => {
+    // Reprendre un projet ouvre directement son dashboard.
+    useAppStore.setState((state) => ({
+      currentProjectId: project.id,
+      currentPhase: 3,
+      onboardingStep: 4,
+      onboarding: {
+        ...state.onboarding,
+        useCaseDescription: project.use_case ?? state.onboarding.useCaseDescription,
+      },
+      dataset: {
+        ...state.dataset,
+        detectedSector: normalizeSector(project.detected_sector),
+        businessRules: project.business_rules ?? state.dataset.businessRules,
+      },
+    }));
     navigate("/app");
   };
 
@@ -180,7 +202,7 @@ export default function Projects() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleContinueProject(project.id)}
+                        onClick={() => handleContinueProject(project)}
                       >
                         <Play size={14} className="mr-1" />
                         {t("resume", lang)}

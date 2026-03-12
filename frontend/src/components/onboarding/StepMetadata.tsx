@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { SECTOR_LABELS } from "@/lib/mockData";
@@ -28,6 +28,11 @@ export function StepMetadata() {
 
   const [activeDsIdx, setActiveDsIdx] = useState(0);
   const [localDatasets, setLocalDatasets] = useState(uploadedDatasets);
+
+  useEffect(() => {
+    setLocalDatasets(uploadedDatasets);
+    setActiveDsIdx((idx) => Math.min(idx, Math.max(0, uploadedDatasets.length - 1)));
+  }, [uploadedDatasets]);
 
   const sectorInfo = SECTOR_LABELS[detectedSector] ?? { icon: "📊", label: detectedSector ?? "Général" };
   const activeDs   = localDatasets[activeDsIdx] ?? { fileName: "", columns: [] };
@@ -173,14 +178,11 @@ export function StepMetadata() {
               {localDatasets.length > 1 && (
                 <p className="text-dxc-sky">📊 {localDatasets.length} sources de données</p>
               )}
-              <p className="text-dxc-sky">💡 {t("mlTask", lang)}</p>
-              <p className="text-dxc-sky">💡 {t("candidateModels", lang)}</p>
-              <p className="text-dxc-peach">⏱ {t("estimatedDuration", lang)}</p>
             </div>
 
             <div className="mt-4 pt-4 border-t border-dxc-royal/30 text-center space-y-1">
               <div className="inline-block bg-dxc-royal text-white px-4 py-2 rounded-lg font-semibold text-sm">
-                {sectorInfo.icon} {t("detectedSector", lang)} : {sectorInfo.label}
+                {sectorInfo.icon} {t("detectedSector", lang)} : {sectorContext?.sector || sectorInfo.label}
               </div>
               <p className="text-dxc-sky text-xs">{t("autoDetectedNoEdit", lang)}</p>
             </div>
@@ -191,20 +193,9 @@ export function StepMetadata() {
                 <p className="text-white text-xs">
                   Confidence: {(sectorContext.confidence * 100).toFixed(1)}%
                 </p>
-                <p className="text-white text-xs">
-                  Routing target: {sectorContext.routing_target}
-                </p>
                 <p className="text-dxc-sky text-xs">
                   Focus: {sectorContext.dashboard_focus}
                 </p>
-                {sectorContext.kpis.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-dxc-peach text-xs">Top KPIs:</p>
-                    {sectorContext.kpis.slice(0, 3).map((kpi) => (
-                      <p key={kpi.name} className="text-white text-xs">• {kpi.name} ({kpi.unit})</p>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
           </div>

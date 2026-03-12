@@ -26,12 +26,37 @@ function toSemanticType(detected: string): SemanticType {
 }
 
 export function StepUpload() {
-  const { updateDataset, setOnboardingStep, userPreferences } = useAppStore();
+  const { dataset, updateDataset, setOnboardingStep, userPreferences } = useAppStore();
   const lang = userPreferences.language;
+
+  const restoredUploadedDatasets: { fileName: string; columns: ColumnMetadata[] }[] =
+    (dataset as never as { uploadedDatasets?: { fileName: string; columns: ColumnMetadata[] }[] })
+      .uploadedDatasets ?? [];
+
+  const restoredFiles: UploadedFile[] = restoredUploadedDatasets.map((ds, idx) => ({
+    name: ds.fileName,
+    datasetId: `restored-${idx}`,
+    rowCount: idx === 0 ? dataset.rowCount : 0,
+    columnCount: ds.columns.length,
+    preview: idx === 0 ? dataset.previewData : [],
+    columns: ds.columns.map((col) => ({
+      ...(col as never as {
+        detectedType?: string;
+        uniqueCount?: number;
+        sampleValues?: unknown[];
+      }),
+      original_name: col.originalName,
+      detected_type: (col as never as { detectedType?: string }).detectedType ?? "unknown",
+      null_percent: col.missingPercent,
+      unique_count: (col as never as { uniqueCount?: number }).uniqueCount ?? 0,
+      sample_values: (col as never as { sampleValues?: unknown[] }).sampleValues ?? [],
+    })),
+    mappedColumns: ds.columns,
+  }));
 
   const [uploading, setUploading]         = useState(false);
   const [progress, setProgress]           = useState(0);
-  const [files, setFiles]                 = useState<UploadedFile[]>([]);
+  const [files, setFiles]                 = useState<UploadedFile[]>(restoredFiles);
   const [activeFileIdx, setActiveFileIdx] = useState(0);
   const [error, setError]                 = useState<string | null>(null);
 
@@ -83,11 +108,15 @@ export function StepUpload() {
         const totalCols  = next.reduce((s, f) => s + f.columnCount, 0);
         const newIdx     = next.length - 1;
 
+        const normalizedSector = (["finance", "transport", "retail", "manufacturing", "public"].includes(result.detected_sector ?? "")
+          ? result.detected_sector
+          : "public") as "finance" | "transport" | "retail" | "manufacturing" | "public";
+
         updateDataset({
           fileName:         next.map((f) => f.name).join(", "),
           rowCount:         totalRows,
           columnCount:      totalCols,
-          detectedSector:   (result.detected_sector as never) ?? "general",
+          detectedSector:   normalizedSector,
           previewData:      result.preview,
           columns:          next[0].mappedColumns,
           uploadedDatasets: next.map((f) => ({ fileName: f.name, columns: f.mappedColumns })),
