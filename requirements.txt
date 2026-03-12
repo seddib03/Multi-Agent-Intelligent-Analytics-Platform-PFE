@@ -6,6 +6,8 @@ python-multipart
 # Agent Orchestration
 langgraph
 langchain-core
+langgraph-checkpoint-postgres[psycopg2]
+psycopg-binary
 
 # LLM (préparé pour après MVP)
 langchain-openai

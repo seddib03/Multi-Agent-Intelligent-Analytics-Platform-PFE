@@ -130,6 +130,16 @@ class Settings(BaseSettings):
         description="Niveau de log (DEBUG, INFO, WARNING, ERROR)",
     )
 
+    # ── LangGraph Checkpointing (PostgreSQL) ──────────────────────────────────
+    database_url: str = Field(
+        default="postgresql://agent_user:agent_pass@localhost:5432/intelligent_analytics",
+        description="URL de connexion PostgreSQL pour le saver LangGraph",
+    )
+    agent_schema: str = Field(
+        default="agent_data_prep",
+        description="Schéma PostgreSQL utilisé par le saver LangGraph",
+    )
+
     # ── LangGraph ─────────────────────────────────────────────────────────────
     # Délai maximum (secondes) pour attendre la validation humaine
     # Après ce délai, le graph expire et retourne un timeout
