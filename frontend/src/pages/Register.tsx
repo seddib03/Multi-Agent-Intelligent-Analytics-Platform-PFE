@@ -42,6 +42,8 @@ const Register = () => {
       toast.error(error.message);
     } else {
       toast.success(t("accountCreated", lang));
+      // new user lands on dashboard immediately
+      useAppStore.setState({ currentPhase: 2 });
       navigate("/app");
     }
   };

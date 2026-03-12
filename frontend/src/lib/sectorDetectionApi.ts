@@ -26,22 +26,40 @@ function url(path: string): string {
 }
 
 export async function detectSector(userQuery: string): Promise<DetectSectorResponse> {
-  const res = await fetch(url("/detect-sector"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_query: userQuery }),
-  });
+  // the frontend may call a dedicated sector microservice (port 8002 by default)
+  // but in development we often only have the main backend running on 8000.
+  // try the primary URL first, and fall back to the backend endpoint if it fails.
+  // by default the frontend talks to the backend directly; override with VITE_SECTOR_API_URL if you
+  // really have a separate service running on 8002 or elsewhere.  if the env variable is not set or
+  // points to a non‑existent host the fetch will simply be retried once against the backend
+  // without spamming the console.
+  const primary = url("/detect-sector");
+  const fallback = "http://localhost:8000/api/sector/detect-sector";
 
-  if (!res.ok) {
-    let message = "Erreur lors de la détection du secteur";
-    try {
-      const data = (await res.json()) as { detail?: string };
-      if (data?.detail) message = data.detail;
-    } catch {
-      // Keep fallback message if response is not JSON.
+  async function post(urlToCall: string) {
+    const response = await fetch(urlToCall, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_query: userQuery }),
+    });
+    if (!response.ok) {
+      const data = await response.text();
+      let message = `Erreur ${response.status} lors de la détection du secteur`;
+      try {
+        const json = JSON.parse(data);
+        if (json?.detail) message = json.detail;
+      } catch {
+        // ignore
+      }
+      throw new Error(message);
     }
-    throw new Error(message);
+    return response.json() as Promise<DetectSectorResponse>;
   }
 
-  return res.json() as Promise<DetectSectorResponse>;
+  try {
+    return await post(primary);
+  } catch (e) {
+    // don't log 404/connection errors when primary API is missing; just use backend silently
+    return await post(fallback);
+  }
 }
