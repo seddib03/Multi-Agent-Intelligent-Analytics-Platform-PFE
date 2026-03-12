@@ -2,7 +2,7 @@ import { ensureValidSession } from "./mockAuth";
 
 const API_BASE_URL =
   (import.meta.env.VITE_BACKEND_API_URL as string | undefined)?.replace(/\/$/, "") ||
-  "http://localhost:8000";
+  "http://localhost:8005";
 
 function url(path: string) {
   return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
