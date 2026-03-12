@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio  import AsyncSession
 
 from app.core.database       import get_db
 from app.dependencies        import get_current_user
+from app.models.user         import User
 from app.schemas.auth        import (
     RegisterRequest, LoginRequest,
     RefreshRequest, UserUpdate, PreferencesUpdate,
@@ -47,9 +48,9 @@ async def logout(body: RefreshRequest):
 @router.get("/users/me")
 async def get_me(
     db:   AsyncSession = Depends(get_db),
-    user: dict         = Depends(get_current_user),
+    user: User         = Depends(get_current_user),
 ):
-    return await AuthService.get_me(db, user["user_id"])
+    return await AuthService.get_me(db, user.id)
 
 
 # ── PUT /api/auth/users/me ───────────────────────────────────
@@ -57,10 +58,10 @@ async def get_me(
 async def update_me(
     body: UserUpdate,
     db:   AsyncSession = Depends(get_db),
-    user: dict         = Depends(get_current_user),
+    user: User         = Depends(get_current_user),
 ):
     from app.services.user_service import UserService
-    return await UserService.update_me(db, user["user_id"], body)
+    return await UserService.update_me(db, user.id, body)
 
 
 # ── PUT /api/auth/users/me/preferences ──────────────────────
@@ -68,10 +69,10 @@ async def update_me(
 async def update_preferences(
     body: PreferencesUpdate,
     db:   AsyncSession = Depends(get_db),
-    user: dict         = Depends(get_current_user),
+    user: User         = Depends(get_current_user),
 ):
     return await AuthService.update_preferences(
-        db, user["user_id"], body
+        db, user.id, body
     )
 
 
@@ -79,6 +80,6 @@ async def update_preferences(
 @router.delete("/users/me", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_me(
     db:   AsyncSession = Depends(get_db),
-    user: dict         = Depends(get_current_user),
+    user: User         = Depends(get_current_user),
 ):
-    await AuthService.delete_me(db, user["user_id"])
+    await AuthService.delete_me(db, user.id)
