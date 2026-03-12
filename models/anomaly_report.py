@@ -84,6 +84,18 @@ class AnomalyItem:
     # Paramètres additionnels (ex: valeur de remplacement)
     params: dict = field(default_factory=dict)
 
+    # ── Enrichissement LLM ──────────────────────────────────────────────────
+    # Impact si l'user choisit action_1 / action_2 / action_3
+    impact_1: Optional[str] = None
+    impact_2: Optional[str] = None
+    impact_3: Optional[str] = None
+
+    # Action la plus recommandée par le LLM : "action_1" | "action_2" | "action_3"
+    recommended_action: Optional[str] = None
+
+    # Explication contextuelle de la recommandation
+    recommended_reason: Optional[str] = None
+
     # Décision de l'user (remplie après validation)
     user_decision: Optional[UserDecision] = None
     chosen_action: Optional[CleaningAction] = None
@@ -107,18 +119,25 @@ class AnomalyItem:
             "affected_count": self.affected_count,
             "affected_pct":  round(self.affected_pct, 2),
             "sample_invalid": [str(v) for v in self.sample_invalid_values[:5]],
+            # ── Enrichissement LLM ──────────────────────────────────
+            "recommended_action":  self.recommended_action,
+            "recommended_reason":  self.recommended_reason,
+            # ── Actions proposées ────────────────────────────────────
             "proposed_actions": {
                 "action_1": {
                     "action":        self.action_1.value,
                     "justification": self.justification_1,
+                    "impact":        self.impact_1,
                 },
                 "action_2": {
                     "action":        self.action_2.value,
                     "justification": self.justification_2,
+                    "impact":        self.impact_2,
                 },
                 "action_3": {
                     "action":        self.action_3.value,
                     "justification": self.justification_3,
+                    "impact":        self.impact_3,
                 },
             },
             "user_decision":  self.user_decision.value if self.user_decision else None,
