@@ -19,7 +19,7 @@ export interface DetectSectorResponse {
 
 const SECTOR_API_BASE_URL =
   (import.meta.env.VITE_SECTOR_API_URL as string | undefined)?.replace(/\/$/, "") ||
-  "http://localhost:8002";
+  "http://localhost:8000";
 
 function url(path: string): string {
   return `${SECTOR_API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;

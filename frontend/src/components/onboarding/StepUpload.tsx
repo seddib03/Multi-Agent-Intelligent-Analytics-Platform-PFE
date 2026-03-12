@@ -119,6 +119,8 @@ export function StepUpload() {
           detectedSector:   normalizedSector,
           previewData:      result.preview,
           columns:          next[0].mappedColumns,
+          sourceCsvFile:    file,
+          sourceCsvPath:    "",
           uploadedDatasets: next.map((f) => ({ fileName: f.name, columns: f.mappedColumns })),
         } as never);
 
@@ -154,7 +156,7 @@ export function StepUpload() {
   const removeFile = (idx: number) => {
     const next = files.filter((_, i) => i !== idx);
     if (next.length === 0) {
-      updateDataset({ fileName: "", rowCount: 0, columnCount: 0, previewData: [], columns: [], uploadedDatasets: [] } as never);
+      updateDataset({ fileName: "", rowCount: 0, columnCount: 0, previewData: [], columns: [], sourceCsvFile: null, sourceCsvPath: "", uploadedDatasets: [] } as never);
       setActiveFileIdx(0);
     } else {
       const newIdx    = Math.min(activeFileIdx, next.length - 1);
@@ -165,6 +167,8 @@ export function StepUpload() {
         rowCount: totalRows, columnCount: totalCols,
         previewData: next[newIdx].preview,
         columns: next[0].mappedColumns,
+        sourceCsvFile: null,
+        sourceCsvPath: "",
         uploadedDatasets: next.map((f) => ({ fileName: f.name, columns: f.mappedColumns })),
       } as never);
       setActiveFileIdx(newIdx);

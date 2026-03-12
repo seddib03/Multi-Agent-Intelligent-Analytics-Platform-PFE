@@ -59,7 +59,7 @@ interface BackendAuthResponse {
 const SESSION_STORAGE_KEY = "app-auth-session";
 export const AUTH_STATE_EVENT = "app-auth-state-changed";
 
-const API_BASE_URL = (import.meta.env.VITE_BACKEND_API_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:8000";
+const API_BASE_URL = (import.meta.env.VITE_BACKEND_API_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:8005";
 
 function getAuthUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`;
