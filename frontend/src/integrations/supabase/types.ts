@@ -1,10 +1,12 @@
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[]
+/**
+ * @deprecated Supabase types are no longer used.
+ * Authentication is now handled by the backend API.
+ * See frontend/src/lib/mockAuth.ts for current auth implementation.
+ */
+
+export type Json = never;
+export type Database = never;
+
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options

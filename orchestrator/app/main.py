@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form
+﻿from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from app.schemas.input_schema import UserQueryInput
 from app.graph.orchestrator import build_orchestrator_graph
@@ -27,7 +27,7 @@ def run_orchestrator(input_data: UserQueryInput) -> dict:
     initial_state = {
         "user_id":    input_data.user_id,
         "session_id": input_data.session_id,
-        "query_raw":  input_data.query_raw,
+        "query_raw":  input_data.query,
         "csv_path":   input_data.csv_path or "",
         "metadata":   input_data.metadata or {},
     }
@@ -41,7 +41,16 @@ async def analyze(
     dataset:   UploadFile = File(None),
     metadata:  str        = Form("{}")
 ):
-    # ✅ Compatible Windows ET Linux (tempfile.gettempdir())
+    """
+    Analyze endpoint.
+    
+    Accepts multipart/form-data:
+    - query_raw (str, required): The natural language question
+    - dataset (file, optional): CSV file to process
+    - metadata (str, optional): JSON string with additional metadata
+    
+    Returns: the orchestrator graph result
+    """
     csv_path = None
     if dataset and dataset.filename:
         tmp_dir = os.path.join(tempfile.gettempdir(), "orchestrator")
@@ -58,7 +67,7 @@ async def analyze(
     result = run_orchestrator(UserQueryInput(
         user_id="demo_user",
         session_id=str(uuid.uuid4()),
-        query_raw=query_raw,
+        query=query_raw,
         csv_path=csv_path,
         metadata=metadata_dict,
     ))
@@ -71,5 +80,6 @@ async def analyze(
 
 @app.get("/health")
 def health():
+    """Health check endpoint."""
     return {"status": "ok", "graph": "ready"}
 
