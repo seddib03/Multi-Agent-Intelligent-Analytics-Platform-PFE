@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from app.graph.state import OrchestratorState
 
 load_dotenv()
-INSIGHT_API_URL = os.getenv("INSIGHT_API_URL", "http://127.0.0.1:8000")
+INSIGHT_API_URL = os.getenv("INSIGHT_API_URL", "http://127.0.0.1:8002")
 
 
 def _build_sector_context(state: OrchestratorState) -> dict:

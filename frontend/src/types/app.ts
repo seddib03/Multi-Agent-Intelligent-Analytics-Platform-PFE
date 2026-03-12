@@ -101,6 +101,8 @@ export interface AppState {
     businessRules: string;
     detectedSector: Sector;
     previewData: Record<string, unknown>[];
+    sourceCsvFile?: File | null;
+    sourceCsvPath?: string;
   };
   modelResults: {
     algorithm: string;
