@@ -100,7 +100,7 @@ export function Dashboard() {
           <p className="text-white/80 text-xs mt-0.5">{sectorInfo.icon} {detectedSectorLabel} {sectorContext && `· 📊 ${(sectorContext.confidence * 100).toFixed(1)}% · 🎯 ${sectorContext.dashboard_focus}`} · {t("updatedAt", language)} {timeStr}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button onClick={() => setPhase(2)} className="text-xs border border-dxc-sky text-dxc-sky px-3 py-1.5 rounded-lg hover:bg-dxc-sky/10 transition-colors flex items-center gap-1"><MessageSquare size={12} /> {t("chat", language)}</button>
+          <button onClick={() => setPhase(3)} className="text-xs border border-dxc-sky text-dxc-sky px-3 py-1.5 rounded-lg hover:bg-dxc-sky/10 transition-colors flex items-center gap-1"><MessageSquare size={12} /> {t("chat", language)}</button>
           <button className="text-xs border border-dxc-sky text-dxc-sky px-3 py-1.5 rounded-lg hover:bg-dxc-sky/10 transition-colors flex items-center gap-1"><RefreshCw size={12} /> {t("refresh", language)}</button>
           <button className="text-xs border border-dxc-peach text-dxc-peach px-3 py-1.5 rounded-lg hover:bg-dxc-peach/10 transition-colors flex items-center gap-1"><Download size={12} /> {t("export", language)}</button>
           <button onClick={() => setDrawerOpen(true)} className="text-xs bg-dxc-melon text-white px-3 py-1.5 rounded-lg hover:bg-dxc-red transition-colors flex items-center gap-1"><Settings size={12} /> {t("customize", language)}</button>

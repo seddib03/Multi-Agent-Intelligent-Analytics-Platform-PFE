@@ -37,6 +37,9 @@ function getPreferencesSignature(prefs: ReturnType<typeof useAppStore.getState>[
   });
 }
 
+const SUPPORTED_SECTORS = ["finance", "transport", "retail", "manufacturing", "public"] as const;
+type SupportedSector = typeof SUPPORTED_SECTORS[number];
+
 export function StepUseCase() {
   const { currentProjectId, onboarding, updateOnboarding, updateDataset, userPreferences, updatePreferences, setOnboardingStep } = useAppStore();
   const lang = userPreferences.language;
@@ -67,16 +70,15 @@ export function StepUseCase() {
 
     const currentDesc = desc.trim();
     const hasChanges = Boolean(
-      initialSnapshotRef.current
-      && (
-        initialSnapshotRef.current.desc !== currentDesc
-        || initialSnapshotRef.current.preferencesSig !== getPreferencesSignature(userPreferences)
+      initialSnapshotRef.current &&
+      (
+        initialSnapshotRef.current.desc !== currentDesc ||
+        initialSnapshotRef.current.preferencesSig !== getPreferencesSignature(userPreferences)
       )
     );
 
     const canUpdateExisting = Boolean(currentProjectId && isUuid(currentProjectId));
 
-    // Si on revient modifier les paramètres sans rien changer, on passe directement à l'étape suivante.
     if (canUpdateExisting && !hasChanges) {
       updateOnboarding({ useCaseDescription: desc });
       setOnboardingStep(2);
@@ -103,30 +105,28 @@ export function StepUseCase() {
         },
       };
 
-      // Si un projet existe déjà, on le met à jour; sinon on le crée.
       const project = canUpdateExisting
         ? await updateProject(currentProjectId as string, projectPayload)
         : await createProject(projectPayload);
 
-      const sectorCtx = await detectSector(desc.trim());
+      // ── Détection de secteur — optionnelle, fallback silencieux ──────────
+      let normalizedSector: SupportedSector = "finance";
+      try {
+        const sectorCtx = await detectSector(desc.trim());
+        updateOnboarding({ useCaseDescription: desc, sectorContext: sectorCtx });
+        normalizedSector = (SUPPORTED_SECTORS.includes(sectorCtx.sector as SupportedSector)
+          ? sectorCtx.sector
+          : "finance") as SupportedSector;
+      } catch {
+        // Service de détection indisponible → on continue avec le secteur par défaut
+        console.warn("Sector detection service unavailable, using default sector.");
+        updateOnboarding({ useCaseDescription: desc });
+      }
 
-      // Stocker l'ID backend dans le store
-      useAppStore.setState({ currentProjectId: project.id });
-
-      // Mettre à jour le store local
-      updateOnboarding({
-        useCaseDescription: desc,
-        sectorContext: sectorCtx,
-      });
-
-      // Mapper le secteur détecté vers les secteurs supportés par l'UI.
-      const normalizedSector = (["finance", "transport", "retail", "manufacturing", "public"].includes(sectorCtx.sector)
-        ? sectorCtx.sector
-        : "public") as "finance" | "transport" | "retail" | "manufacturing" | "public";
       updateDataset({ detectedSector: normalizedSector });
-
-      // Passer à l'étape suivante
+      useAppStore.setState({ currentProjectId: project.id });
       setOnboardingStep(2);
+
     } catch (err) {
       setApiError(err instanceof Error ? err.message : "Erreur lors de la création du projet");
     } finally {
@@ -151,10 +151,8 @@ export function StepUseCase() {
           <p className="text-xs text-destructive font-medium">{t("useCaseTooShort", lang)}</p>
         )}
         <p className="text-xs italic text-muted-foreground">{t("sectorAutoDetect", lang)}</p>
-
       </div>
 
-      {/* Divider */}
       <div className="border-t-2 border-accent/30" />
 
       {/* Section B — Preferences */}
@@ -167,17 +165,13 @@ export function StepUseCase() {
           <div className="flex rounded-full overflow-hidden border border-border w-fit">
             <button
               onClick={() => updatePreferences({ darkMode: false })}
-              className={`px-5 py-2 text-sm font-medium transition-all ${
-                !userPreferences.darkMode ? "bg-foreground text-background" : "bg-muted text-muted-foreground"
-              }`}
+              className={`px-5 py-2 text-sm font-medium transition-all ${!userPreferences.darkMode ? "bg-foreground text-background" : "bg-muted text-muted-foreground"}`}
             >
               ☀️ {t("lightMode", lang)}
             </button>
             <button
               onClick={() => updatePreferences({ darkMode: true })}
-              className={`px-5 py-2 text-sm font-medium transition-all ${
-                userPreferences.darkMode ? "bg-foreground text-background" : "bg-muted text-muted-foreground"
-              }`}
+              className={`px-5 py-2 text-sm font-medium transition-all ${userPreferences.darkMode ? "bg-foreground text-background" : "bg-muted text-muted-foreground"}`}
             >
               🌙 {t("darkModeLabel", lang)}
             </button>
@@ -195,9 +189,7 @@ export function StepUseCase() {
                 <button
                   key={key}
                   onClick={() => updatePreferences({ chartStyle: key })}
-                  className={`w-[140px] sm:w-[160px] h-[100px] rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all relative ${
-                    selected ? "border-dxc-melon bg-dxc-melon/10" : "border-border bg-card hover:border-primary/30"
-                  }`}
+                  className={`w-[140px] sm:w-[160px] h-[100px] rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all relative ${selected ? "border-dxc-melon bg-dxc-melon/10" : "border-border bg-card hover:border-primary/30"}`}
                 >
                   {selected && (
                     <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-dxc-melon flex items-center justify-center">
@@ -226,11 +218,7 @@ export function StepUseCase() {
                 <button
                   key={d}
                   onClick={() => updatePreferences({ density: d })}
-                  className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${
-                    userPreferences.density === d
-                      ? "border-dxc-melon bg-dxc-melon/10"
-                      : "border-border bg-card hover:border-primary/30"
-                  }`}
+                  className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${userPreferences.density === d ? "border-dxc-melon bg-dxc-melon/10" : "border-border bg-card hover:border-primary/30"}`}
                 >
                   <span className="font-semibold text-sm text-foreground">{t(labels[d].titleKey, lang)}</span>
                   <span className="text-xs text-muted-foreground ml-2">{t(labels[d].descKey, lang)}</span>
