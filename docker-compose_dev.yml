@@ -143,6 +143,28 @@ services:
     networks:
       - nexora_net
 
+  # ─── Orchestrator ────────────────────────────────────
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+      nlq_context_api:
+        condition: service_started
+    environment:
+      NLQ_CONTEXT_URL: ${NLQ_CONTEXT_URL:-http://nlq_context_api:8000}
+      DATA_PREP_URL: ${DATA_PREP_URL:-http://data_preparation_agent:8001}
+      INSIGHT_URL: ${INSIGHT_URL:-http://insight_agent:8004}
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./orchestrator/app:/app/app
+    networks:
+      - nexora_net
+
   # ─── Frontend (Vite Dev) ─────────────────────────────
   frontend:
     build:
