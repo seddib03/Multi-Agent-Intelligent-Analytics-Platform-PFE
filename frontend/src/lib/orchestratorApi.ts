@@ -1,65 +1,98 @@
-const ORCHESTRATOR_API_BASE_URL =
-  (import.meta.env.VITE_ORCHESTRATOR_API_URL as string | undefined)?.replace(/\/$/, "") ||
+import { ensureValidSession } from "@/lib/mockAuth";
+import type { ChartData, Entity } from "@/types/app";
+
+const ORCHESTRATOR_URL =
+  (import.meta.env.VITE_ORCHESTRATOR_URL as string | undefined)?.replace(/\/$/, "") ||
   "http://localhost:8003";
 
-function url(path: string) {
-  return `${ORCHESTRATOR_API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+export interface OrchestratorResponse {
+  user_id:               string;
+  session_id:            string;
+  query_raw:             string;
+  response:              string;
+  response_format:       "text" | "kpi" | "chart" | "table";
+  route_taken?:          string;
+  route_reason:          string;
+  sector_detected:       string;
+  intent_detected:       string;
+  needs_clarification:   boolean;
+  clarification_question: string;
+  data_payload:          Record<string, unknown>;
 }
 
-export interface InsightKpi {
-  name: string;
-  value?: number | string | null;
+export interface ParsedOrchestratorResult {
+  text:        string;
+  charts?:     ChartData[];
+  predictions?: Entity[];
+  needsClarification: boolean;
+  clarificationQuestion: string;
 }
 
-export interface InsightChart {
-  type?: string;
-  title?: string;
-  x?: string;
-  y?: string;
-  data?: Record<string, unknown>[];
-}
+/**
+ * Sends a user query to the orchestrator.
+ * @param queryRaw     The user's natural language question
+ * @param csvPath      Optional — path already stored on server (not re-uploaded)
+ * @param metadata     Optional metadata dict
+ */
+export async function callOrchestrator(
+  queryRaw:  string,
+  metadata:  Record<string, unknown> = {},
+): Promise<OrchestratorResponse> {
+  // Token not strictly required by orchestrator but included for consistency
+  try { await ensureValidSession(); } catch { /* orchestrator may not require auth */ }
 
-export interface AnalyzeResponse {
-  response_format?: "text" | "kpi" | "chart" | "table" | string;
-  final_response?: string;
-  needs_clarification?: boolean;
-  clarification_question?: string;
-  agent_response?: {
-    kpis?: InsightKpi[];
-    charts?: InsightChart[];
-    insights?: string[];
-  };
-}
+  const form = new FormData();
+  form.append("query_raw", queryRaw);
+  form.append("metadata", JSON.stringify(metadata));
 
-export async function analyzeOrchestrator(params: {
-  queryRaw: string;
-  datasetFile?: File | null;
-  metadata?: Record<string, unknown>;
-}): Promise<AnalyzeResponse> {
-  const formData = new FormData();
-  formData.append("query_raw", params.queryRaw);
-
-  if (params.datasetFile) {
-    formData.append("dataset", params.datasetFile);
-  }
-
-  formData.append("metadata", JSON.stringify(params.metadata ?? {}));
-
-  const res = await fetch(url("/analyze"), {
+  const res = await fetch(`${ORCHESTRATOR_URL}/analyze`, {
     method: "POST",
-    body: formData,
+    body: form,
   });
 
   if (!res.ok) {
-    let message = "Erreur serveur sur /analyze";
+    let detail = `Orchestrateur — erreur ${res.status}`;
     try {
-      const data = (await res.json()) as { detail?: string };
-      if (data?.detail) message = data.detail;
-    } catch {
-      // keep default message
-    }
-    throw new Error(message);
+      const data = await res.json() as { detail?: string };
+      if (data?.detail) detail = data.detail;
+    } catch { /* ignore */ }
+    throw new Error(detail);
   }
 
-  return (await res.json()) as AnalyzeResponse;
+  return res.json() as Promise<OrchestratorResponse>;
+}
+
+/**
+ * Maps the raw OrchestratorResponse to the Message-compatible format.
+ */
+export function parseOrchestratorResponse(
+  raw: OrchestratorResponse,
+): ParsedOrchestratorResult {
+  const result: ParsedOrchestratorResult = {
+    text:                  raw.response || "Aucune réponse reçue.",
+    needsClarification:    raw.needs_clarification,
+    clarificationQuestion: raw.clarification_question,
+  };
+
+  const payload = raw.data_payload ?? {};
+
+  // ── KPIs → texte enrichi si format kpi ─────────────────────────────────
+  if (raw.response_format === "kpi" && Array.isArray(payload.kpis)) {
+    const kpiLines = (payload.kpis as { name: string; value: number; unit: string }[])
+      .map((k) => `**${k.name}** : ${k.value} ${k.unit}`)
+      .join("\n");
+    result.text = `${raw.response}\n\n${kpiLines}`;
+  }
+
+  // ── Charts ──────────────────────────────────────────────────────────────
+  if (Array.isArray(payload.charts)) {
+    result.charts = (payload.charts as ChartData[]);
+  }
+
+  // ── Predictions / table ─────────────────────────────────────────────────
+  if (raw.response_format === "table" && Array.isArray(payload.rows)) {
+    result.predictions = (payload.rows as Entity[]);
+  }
+
+  return result;
 }

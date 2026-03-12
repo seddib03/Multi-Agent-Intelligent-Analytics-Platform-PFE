@@ -15,8 +15,9 @@ const Index = () => {
   const step = useAppStore((s) => s.onboardingStep);
   useDarkMode();
 
-  if (phase === 2) return <NLQInterface />;
-  if (phase === 3) return <Dashboard />;
+  // phase 2 now leads to the dashboard; chat comes later in phase 3
+  if (phase === 2) return <Dashboard />;
+  if (phase === 3) return <NLQInterface />;
 
   const StepComponent = STEPS[step - 1];
   return (
