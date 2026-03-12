@@ -28,103 +28,19 @@ export function StepConfirmation() {
   const targetCol   = dataset.columns.find((c) => c.semanticType === "target");
   const sectorContext = onboarding.sectorContext;
 
-  const toChartData = (chart: InsightChart): ChartData | null => {
-    const rawType = (chart.type || "bar").toLowerCase();
-    const type: ChartData["type"] = rawType === "line" || rawType === "pie" || rawType === "area" ? rawType : "bar";
-    const xKey = chart.x || "name";
-    const yKey = chart.y || "value";
-    const rows = Array.isArray(chart.data) ? chart.data : [];
-    if (!rows.length) return null;
-
-    return {
-      type,
-      title: chart.title || "Chart",
-      data: rows.map((row) => ({
-        name: String(row[xKey] ?? ""),
-        [yKey]: Number(row[yKey] ?? 0),
-      })),
-      dataKeys: [yKey],
-    };
-  };
-
-  const buildMetadataPayload = () => ({
-    columns: dataset.columns.map((c) => ({
-      column_name: c.originalName,
-      business_name: c.businessName,
-      type: c.semanticType,
-      description: c.description ?? "",
-      nullable: c.missingPercent > 0,
-    })),
-  });
-
-  const buildAssistantMessage = (result: AnalyzeResponse): { content: string; charts?: ChartData[] } => {
-    if (result.needs_clarification) {
-      return {
-        content: result.clarification_question || result.final_response || "Pouvez-vous préciser votre demande ?",
-      };
-    }
-
-    const format = (result.response_format || "text").toLowerCase();
-    const payload = result.agent_response || {};
-    const charts = (Array.isArray(payload.charts) ? payload.charts : [])
-      .map(toChartData)
-      .filter((chart): chart is ChartData => chart !== null);
-
-    if (format === "kpi") {
-      const kpiLines = (payload.kpis || []).map((kpi) => `- ${kpi.name}: ${kpi.value ?? "N/A"}`).join("\n");
-      const insightLines = (payload.insights || []).map((insight) => `- ${insight}`).join("\n");
-      return {
-        content: `Dashboard généré.\n\nKPIs\n${kpiLines || "- Aucun KPI"}\n\nInsights\n${insightLines || "- Aucun insight"}`,
-        charts,
-      };
-    }
-
-    if (format === "chart") {
-      return {
-        content: result.final_response || "Graphique généré.",
-        charts,
-      };
-    }
-
-    return {
-      content: result.final_response || "Réponse reçue.",
-      charts: charts.length ? charts : undefined,
-    };
-  };
-
-  const runInitialAnalyze = async () => {
-    const queryRaw = onboarding.useCaseDescription?.trim() || "Generate dashboard insights";
-
-    const result = await analyzeOrchestrator({
-      queryRaw,
-      datasetFile: dataset.sourceCsvFile ?? null,
-      metadata: buildMetadataPayload(),
-    });
-
-    const assistant = buildAssistantMessage(result);
-
-    clearMessages();
-    addMessage({
-      id: `u-${Date.now()}`,
-      role: "user",
-      content: queryRaw,
-      timestamp: new Date(),
-    });
-    addMessage({
-      id: `s-${Date.now()}`,
-      role: "system",
-      content: assistant.content,
-      charts: assistant.charts,
-      timestamp: new Date(),
-    });
-  };
+  // when sectorContext is missing (e.g. after navigating back to settings)
+  // fall back to the dataset value so that the launch animation still shows
+  // a valid sector instead of "Unknown".
+  const displaySector = sectorContext?.sector || dataset.detectedSector || "Unknown";
+  const displayConfidence = sectorContext?.confidence ?? 0;
+  const displayDashboardFocus = sectorContext?.dashboard_focus;
 
   const LAUNCH_STEPS: LaunchStep[] = [
     { 
       label: "Sector Detection Agent", 
       agent: lang === "fr" ? "Détection du secteur ·" : "Sector detection ·", 
-      detail: sectorContext?.sector || "Unknown", 
-      result: `✅ ${sectorContext?.sector || "N/A"} - ${(sectorContext?.confidence || 0 * 100).toFixed(1)}%` 
+      detail: displaySector, 
+      result: `✅ ${displaySector} - ${ (displayConfidence * 100).toFixed(1) }%` 
     },
     { 
       label: "Orchestrator", 
@@ -133,8 +49,8 @@ export function StepConfirmation() {
       result: "✅ Orchestrator ready" 
     },
     { 
-      label: "Insight Agent", 
-      agent: lang === "fr" ? "Génération des métriques ·" : "Metrics generation ·", 
+      label: "Dashboard Generation", 
+      agent: lang === "fr" ? "Création du dashboard ·" : "Dashboard creation ·", 
       detail: "Feature importance & Analysis", 
       result: `✅ ${t("insightsGenerated", lang)}` 
     },
@@ -154,23 +70,14 @@ export function StepConfirmation() {
       if (currentStep < LAUNCH_STEPS.length - 1) {
         setCurrentStep(currentStep + 1);
       } else {
-        void (async () => {
-          try {
-            const fi       = generateFeatureImportance(dataset.columns);
-            const entities = generateEntities(safeSector);
-            updateModelResults({ featureImportance: fi, topRiskyEntities: entities });
-            const kpis = SECTOR_KPIS[safeSector] ?? [];
-            updatePreferences({ visibleKPIs: kpis.map((k) => k.key) });
-            await runInitialAnalyze();
-            setDone(true);
-            setTimeout(() => setPhase(2), 1200);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : "Erreur inconnue";
-            toast.error(`Echec du lancement: ${message}`);
-            setLaunching(false);
-            setCurrentStep(-1);
-          }
-        })();
+        const fi       = generateFeatureImportance(dataset.columns);
+        const entities = generateEntities(safeSector);
+        updateModelResults({ featureImportance: fi, topRiskyEntities: entities });
+        const kpis = SECTOR_KPIS[safeSector] ?? [];
+        updatePreferences({ visibleKPIs: kpis.map((k) => k.key) });
+        setDone(true);
+        // after launch sequence complete move to dashboard (phase 2)
+        setTimeout(() => setPhase(2), 1500);
       }
     }, 1800);
     return () => clearTimeout(timer);
