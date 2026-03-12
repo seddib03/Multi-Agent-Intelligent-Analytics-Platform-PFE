@@ -1,4 +1,5 @@
 from app.graph.state import OrchestratorState
+from app.utils.async_utils import run_async
 
 def nlq_node(state: OrchestratorState) -> OrchestratorState:
     """

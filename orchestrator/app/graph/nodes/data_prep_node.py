@@ -1,4 +1,5 @@
 import time
+import httpx
 from app.graph.state import OrchestratorState, DataPrepStatusEnum
 from app.clients.data_prep_client import (
     call_prepare,
@@ -12,10 +13,6 @@ POLL_INTERVAL    = 5     # vérifier toutes les 5 secondes
 
 
 def data_prep_node(state: OrchestratorState) -> OrchestratorState:
-    # BYPASS temporaire
-    state.processing_steps.append("data_prep_node → bypassed")
-    return state
-    
     """
     Node 3 — Data Preparation Agent (Collègue 2).
 
@@ -55,8 +52,28 @@ def data_prep_node(state: OrchestratorState) -> OrchestratorState:
     while elapsed < MAX_WAIT_SECONDS:
         try:
             status_result = run_async(call_get_status(state.data_prep_job_id))
+        except httpx.ReadError as e:
+            # ✅ FIX : catch explicite du ReadError (service coupé mid-request)
+            state.errors.append(
+                f"Data Prep service disconnected during polling: {e}"
+            )
+            state.data_prep_status = DataPrepStatusEnum.FAILED
+            break
+        except httpx.ConnectError as e:
+            state.errors.append(
+                f"Data Prep service unreachable during polling: {e}"
+            )
+            state.data_prep_status = DataPrepStatusEnum.FAILED
+            break
+        except httpx.TimeoutException as e:
+            state.errors.append(
+                f"Data Prep polling timeout: {e}"
+            )
+            state.data_prep_status = DataPrepStatusEnum.FAILED
+            break
         except Exception as e:
             state.errors.append(f"Data Prep polling error: {e}")
+            state.data_prep_status = DataPrepStatusEnum.FAILED
             break
 
         current_status = status_result.get("status", "")
@@ -91,7 +108,9 @@ def data_prep_node(state: OrchestratorState) -> OrchestratorState:
             f"silver={state.data_prep_paths.get('silver', 'N/A')}"
         )
     else:
-        state.data_prep_status = DataPrepStatusEnum.FAILED
-        state.errors.append(f"Data Prep timeout after {MAX_WAIT_SECONDS}s")
+        if state.data_prep_status != DataPrepStatusEnum.FAILED:
+            # Timeout atteint sans erreur explicite
+            state.data_prep_status = DataPrepStatusEnum.FAILED
+            state.errors.append(f"Data Prep timeout after {MAX_WAIT_SECONDS}s")
 
     return state
