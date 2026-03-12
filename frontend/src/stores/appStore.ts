@@ -12,6 +12,7 @@ const EMPTY_PROJECT = {
     useCaseDescription: "",
     analysisTypes: [] as string[],
     timeHorizon: "30 jours",
+    sectorContext: null,
   },
   dataset: {
     fileName: "",

@@ -17,9 +17,10 @@ const TYPE_BADGES: Record<SemanticType, { color: string; bg: string; icon: strin
 };
 
 export function StepMetadata() {
-  const { dataset, updateDataset, setOnboardingStep, userPreferences } = useAppStore();
+  const { dataset, onboarding, updateDataset, setOnboardingStep, userPreferences } = useAppStore();
   const lang = userPreferences.language;
   const { detectedSector, businessRules } = dataset;
+  const sectorContext = onboarding.sectorContext;
 
   const uploadedDatasets: { fileName: string; columns: ColumnMetadata[] }[] =
     (dataset as never as { uploadedDatasets?: { fileName: string; columns: ColumnMetadata[] }[] })
@@ -183,6 +184,29 @@ export function StepMetadata() {
               </div>
               <p className="text-dxc-sky text-xs">{t("autoDetectedNoEdit", lang)}</p>
             </div>
+
+            {sectorContext && (
+              <div className="mt-4 pt-4 border-t border-dxc-royal/30 space-y-2 text-left">
+                <p className="text-dxc-peach text-xs font-semibold">Sector Detection Agent</p>
+                <p className="text-white text-xs">
+                  Confidence: {(sectorContext.confidence * 100).toFixed(1)}%
+                </p>
+                <p className="text-white text-xs">
+                  Routing target: {sectorContext.routing_target}
+                </p>
+                <p className="text-dxc-sky text-xs">
+                  Focus: {sectorContext.dashboard_focus}
+                </p>
+                {sectorContext.kpis.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-dxc-peach text-xs">Top KPIs:</p>
+                    {sectorContext.kpis.slice(0, 3).map((kpi) => (
+                      <p key={kpi.name} className="text-white text-xs">• {kpi.name} ({kpi.unit})</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
