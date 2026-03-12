@@ -235,7 +235,7 @@ def detect_anomalies(
     # ── Anomalies Table-Level (ex: row_not_duplicate ou règles métier globales) ──
     
     # 1. Duplication de lignes (table-level uniqueness)
-    if hasattr(quality_report, "row_duplication_score") and quality_report.row_duplication_score < 100:
+    if hasattr(quality_report, "row_duplication_score") and quality_report.row_duplication_score is not None and quality_report.row_duplication_score < 100:
         dup_info = quality_report.row_duplication_detail
         if dup_info and dup_info.get("duplicate_row_count", 0) > 0:
             anomalies.append(AnomalyItem(

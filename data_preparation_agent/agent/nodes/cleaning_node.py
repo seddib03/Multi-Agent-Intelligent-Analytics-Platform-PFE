@@ -153,11 +153,8 @@ def cleaning_node(state: AgentState) -> dict:
         "NODE 6 terminé — %d lignes restantes (était %d)",
         len(df), len(_load_df(state["raw_df"])),
     )
-    # Reset index une seule fois à la fin pour le rescoring_node
-    # On recalcule __row_id pour que le rapport "APRÈS" utilise les nouveaux index
+    # Reset index pour la propreté du DataFrame pandas, mais on GARDE les __row_id originaux
     df = df.reset_index(drop=True)
-    if "__row_id" in df.columns:
-        df["__row_id"] = range(len(df))
     
     return {
         "clean_df": {
