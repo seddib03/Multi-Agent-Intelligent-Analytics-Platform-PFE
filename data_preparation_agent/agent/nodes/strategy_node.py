@@ -1,22 +1,3 @@
-"""
-agent/nodes/strategy_node.py
-NODE 5 — Strategy (LLM)
-─────────────────────────────
-Appelle le LLM (GPT-4o-mini via OpenRouter) pour :
-
-    1. Produire un résumé global en français compréhensible
-       par un non-technicien
-
-    2. Reformuler chaque anomalie détectée de façon claire
-       et actionnable
-
-Le LLM NE DÉCIDE PAS des actions — celles-ci sont déjà
-proposées par anomaly_engine (3 choix par anomalie).
-Le LLM sert uniquement à rendre le plan lisible pour l'user.
-
-Après ce node, le graph s'interrompt (interrupt_before=["cleaning"])
-et attend la validation humaine via POST /jobs/{id}/validate.
-"""
 from __future__ import annotations
 
 import json
@@ -24,6 +5,10 @@ import logging
 
 from agent.state import AgentState
 from core.llm_client import LLMClient
+from prompts.anomaly_impact_prompt import (
+    ANOMALY_IMPACT_SYSTEM_PROMPT,
+    build_single_anomaly_impact_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +35,8 @@ Réponds UNIQUEMENT en JSON valide, sans texte avant ou après :
 def strategy_node(state: AgentState) -> dict:
     logger.info(">>> NODE 5 : Strategy LLM — démarrage")
 
-    cleaning_plan = state["cleaning_plan"]
+    cleaning_plan    = state["cleaning_plan"]
+    profiling_summary = state.get("profiling_summary")
 
     # Construire le résumé des anomalies pour le LLM
     anomalies_summary = [
@@ -61,6 +47,11 @@ def strategy_node(state: AgentState) -> dict:
             "probleme": a.problem_description,
             "lignes":   a.affected_count,
             "pct":      round(a.affected_pct, 1),
+            "actions":  {
+                "action_1": a.action_1.value,
+                "action_2": a.action_2.value,
+                "action_3": a.action_3.value,
+            },
         }
         for a in cleaning_plan.anomalies
     ]
@@ -72,8 +63,9 @@ def strategy_node(state: AgentState) -> dict:
         f"{json.dumps(anomalies_summary, ensure_ascii=False, indent=2)}"
     )
 
-    # Appel LLM
     client = LLMClient()
+
+    # ── Appel 1 : résumé global + reformulations ──────────────────────────
     try:
         result             = client.call_structured(STRATEGY_SYSTEM_PROMPT, user_prompt)
         llm_summary        = result.get("resume_global", "")
@@ -84,7 +76,6 @@ def strategy_node(state: AgentState) -> dict:
             len(llm_reformulations),
         )
     except Exception as e:
-        # Fallback : utiliser les descriptions techniques par défaut
         logger.warning("LLM échoué, fallback sur descriptions par défaut : %s", e)
         llm_summary        = (
             f"Le dataset contient {len(cleaning_plan.anomalies)} anomalie(s) "
@@ -94,6 +85,65 @@ def strategy_node(state: AgentState) -> dict:
             a.anomaly_id: a.problem_description
             for a in cleaning_plan.anomalies
         }
+
+    # ── Appel 2 : impact par anomalie — 1 appel LLM par anomalie ──────────
+    # Évite la troncature JSON quand il y a beaucoup d'anomalies
+    if cleaning_plan.anomalies:
+        if not profiling_summary or not profiling_summary.get("columns"):
+            logger.warning(
+                "⚠ profiling_summary vide — LLM sans stats de profiling. "
+                "Vérifiez NODE 2."
+            )
+
+        enriched = 0
+        for anomaly in cleaning_plan.anomalies:
+            try:
+                # Construire le prompt pour UNE anomalie
+                anomaly_dict = {
+                    "id":       anomaly.anomaly_id,
+                    "colonne":  anomaly.column_name,
+                    "type":     anomaly.anomaly_type.value,
+                    "probleme": anomaly.problem_description,
+                    "lignes":   anomaly.affected_count,
+                    "pct":      round(anomaly.affected_pct, 1),
+                    "actions":  {
+                        "action_1": anomaly.action_1.value,
+                        "action_2": anomaly.action_2.value,
+                        "action_3": anomaly.action_3.value,
+                    },
+                }
+
+                impact_prompt = build_single_anomaly_impact_prompt(
+                    anomaly=anomaly_dict,
+                    profiling_summary=profiling_summary,
+                    sector=cleaning_plan.sector,
+                )
+
+                # ~400-600 tokens par appel — jamais de troncature
+                enrichment = client.call_structured(
+                    ANOMALY_IMPACT_SYSTEM_PROMPT,
+                    impact_prompt,
+                )
+
+                if enrichment:
+                    anomaly.impact_1           = enrichment.get("action_1_impact")
+                    anomaly.impact_2           = enrichment.get("action_2_impact")
+                    anomaly.impact_3           = enrichment.get("action_3_impact")
+                    anomaly.recommended_action = enrichment.get("recommended_action")
+                    anomaly.recommended_reason = enrichment.get("recommended_reason")
+                    enriched += 1
+
+            except Exception as e:
+                logger.warning(
+                    "Impact LLM échoué pour anomalie %s : %s",
+                    anomaly.anomaly_id, e
+                )
+                # Continuer — les autres anomalies ne sont pas affectées
+
+        logger.info(
+            "Impact LLM généré pour %d/%d anomalies",
+            enriched, len(cleaning_plan.anomalies)
+        )
 
     # Injecter les reformulations dans le plan
     cleaning_plan.llm_summary        = llm_summary

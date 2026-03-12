@@ -1,0 +1,11 @@
+order_id,customer_id,total_amount,status
+ORD-001,CUST-001,100.0,delivered
+ORD-002,,150.0,shipped
+ORD-003,CUST-003,5000.0,pending
+ORD-001,CUST-001,100.0,delivered
+ORD-005,CUST-005,200.0,invalid_status
+ORD-006,CUST-006,-10.0,shipped
+ORD-007,,300.0,delivered
+ORD-008,CUST-008,400.0,shipped
+ORD-009,CUST-009,250.0,delivered
+ORD-010,CUST-010,120.0,pending

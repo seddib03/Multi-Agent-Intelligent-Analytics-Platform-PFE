@@ -24,7 +24,6 @@ from prompts.business_rules_prompt import (
 
 logger = logging.getLogger(__name__)
 
-
 class BusinessRuleTest:
     """Représente un test dbt généré à partir d'une business rule."""
 
@@ -83,6 +82,11 @@ def process_business_rules(
     settings = get_settings()
     if macros_dir is None:
         macros_dir = str(settings.dbt_project_dir / "macros")
+
+    generated_dir = str(Path(macros_dir) / "generated")
+
+    # Vider le dossier des anciennes macros générées
+    _cleanup_generated_macros(generated_dir)
 
     # Préparer les infos colonnes pour le prompt
     columns_info = []
@@ -152,7 +156,7 @@ def process_business_rules(
 
             # Si c'est un test custom, créer la macro .sql
             if rule.test_type == "custom" and rule.macro_sql:
-                _create_custom_macro(rule, macros_dir)
+                _create_custom_macro(rule, generated_dir)
 
             results.append(rule)
             logger.info(
@@ -174,19 +178,30 @@ def process_business_rules(
     return results
 
 
-def _create_custom_macro(rule: BusinessRuleTest, macros_dir: str) -> None:
+def _cleanup_generated_macros(generated_dir: str) -> None:
     """
-    Crée un fichier .sql pour une macro custom dans dbt_project/macros/.
+    Vide intégralement le dossier macros/generated/ des anciennes macros.
+    """
+    gen_path = Path(generated_dir)
+    if not gen_path.exists():
+        return
 
-    Args:
-        rule:       BusinessRuleTest avec macro_sql
-        macros_dir: Dossier cible
+    for macro_file in gen_path.glob("*.sql"):
+        try:
+            macro_file.unlink()
+            logger.info("Ancienne macro générée supprimée : %s", macro_file)
+        except Exception as e:
+            logger.warning("Impossible de supprimer %s : %s", macro_file, e)
+
+
+def _create_custom_macro(rule: BusinessRuleTest, generated_dir: str) -> None:
+    """
+    Crée un fichier .sql pour une macro custom dans dbt_project/macros/generated/.
     """
     macro_filename = f"test_{rule.macro_name}.sql"
-    macro_path = Path(macros_dir) / macro_filename
+    macro_path = Path(generated_dir) / macro_filename
 
-    # Toujours écrire/écraser pour propager les changements de prompt/logique LLM
-    Path(macros_dir).mkdir(parents=True, exist_ok=True)
+    Path(generated_dir).mkdir(parents=True, exist_ok=True)
     with open(macro_path, "w", encoding="utf-8") as f:
         f.write(rule.macro_sql)
 

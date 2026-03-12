@@ -81,14 +81,18 @@ async def prepare(
         raise HTTPException(status_code=500, detail=str(e))
 
     cleaning_plan  = state.get("cleaning_plan")
-    quality_before = state.get("quality_before")
+    qb_dict        = state.get("quality_before")
+    
+    if qb_dict:
+        from models.quality_report import QualityReport
+        qb_dict = QualityReport.from_dict(qb_dict).to_dict(apply_offsets=True)
 
     return JSONResponse({
         "job_id":         job_id,
         "status":         "waiting_validation",
         "sector":         state.get("sector", "unknown"),
-        "quality_before": quality_before if quality_before else {},
-        "plan":           cleaning_plan.to_dict() if cleaning_plan else {},
+        "quality_before": qb_dict if qb_dict else {},
+        "plan":           cleaning_plan.to_dict(apply_offsets=True) if cleaning_plan else {},
         "profiling_html": f"/jobs/{job_id}/profiling?sector={state.get('sector','unknown')}",
         "profiling_json": f"/jobs/{job_id}/profiling-json?sector={state.get('sector','unknown')}",
         "message":        f"Plan prêt. Validez via POST /jobs/{job_id}/validate",
@@ -159,10 +163,16 @@ async def validate_plan(job_id: str, payload: ValidationRequest) -> JSONResponse
         logger.error("Erreur reprise %s : %s", job_id, e)
         raise HTTPException(status_code=500, detail=str(e))
 
-    qb = final_state.get("quality_before") or {}
-    qa = final_state.get("quality_after")  or {}
-    qb_scores = qb.get("global_scores", {})
-    qa_scores = qa.get("global_scores", {})
+    # Appliquer les offsets aux rapports qualité pour l'affichage final
+    from models.quality_report import QualityReport
+    qb_dict = final_state.get("quality_before")
+    qa_dict = final_state.get("quality_after")
+    
+    if qb_dict: qb_dict = QualityReport.from_dict(qb_dict).to_dict(apply_offsets=True)
+    if qa_dict: qa_dict = QualityReport.from_dict(qa_dict).to_dict(apply_offsets=True)
+    
+    qb_scores = qb_dict.get("global_scores", {}) if qb_dict else {}
+    qa_scores = qa_dict.get("global_scores", {}) if qa_dict else {}
 
     return JSONResponse({
         "job_id":  job_id,
@@ -190,8 +200,8 @@ async def validate_plan(job_id: str, payload: ValidationRequest) -> JSONResponse
             ),
         },
         "quality_by_column": {
-            "before": qb.get("columns", []),
-            "after":  qa.get("columns", []),
+            "before": qb_dict.get("columns", []) if qb_dict else [],
+            "after":  qa_dict.get("columns", []) if qa_dict else [],
         },
         "cleaning_log": final_state.get("cleaning_log", []),
         "paths": {
