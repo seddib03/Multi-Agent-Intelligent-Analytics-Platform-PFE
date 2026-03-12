@@ -84,7 +84,7 @@ function ProcessingIndicator() {
 }
 
 export function NLQInterface() {
-  const { dataset, messages, addMessage, togglePin, setPhase, userPreferences, resetProject, clearMessages } = useAppStore();
+  const { dataset, onboarding, messages, addMessage, togglePin, setPhase, userPreferences, resetProject, clearMessages } = useAppStore();
   const navigate = useNavigate();
   const lang = userPreferences.language;
   const [input, setInput] = useState("");
@@ -96,9 +96,16 @@ export function NLQInterface() {
   const isMobile = useIsMobile();
   useDarkMode();
 
-  const sector = dataset.detectedSector;
-  const sectorInfo = SECTOR_LABELS[sector] ?? { icon: "📊", label: sector ?? "Général" };
-  const suggestions = getSuggestedQuestions(sector);
+  const rawSector = dataset.detectedSector;
+  const safeSector = rawSector && rawSector in SECTOR_LABELS ? rawSector : undefined;
+  const sectorInfo = safeSector ? SECTOR_LABELS[safeSector] : undefined;
+  const apiDetectedSector = onboarding.sectorContext?.sector?.trim();
+  const detectedSectorLabel = apiDetectedSector
+    ? apiDetectedSector
+    : rawSector && rawSector !== "public"
+    ? (SECTOR_LABELS[rawSector]?.label ?? rawSector)
+    : "";
+  const suggestions = safeSector ? getSuggestedQuestions(safeSector) ?? [] : [];
   const chartStyle = userPreferences.chartStyle;
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -110,7 +117,17 @@ export function NLQInterface() {
     setInput("");
     setProcessing(true);
     setTimeout(() => {
-      const { text: responseText, charts, predictions } = generateMockResponse(text, sector);
+      if (!safeSector) {
+        addMessage({
+          id: `s-${Date.now()}`,
+          role: "system",
+          content: "Le secteur n'a pas encore ete detecte. Veuillez revenir a l'etape 1.",
+          timestamp: new Date(),
+        });
+        setProcessing(false);
+        return;
+      }
+      const { text: responseText, charts, predictions } = generateMockResponse(text, safeSector);
       addMessage({ id: `s-${Date.now()}`, role: "system", content: responseText, charts, predictions, timestamp: new Date() });
       setProcessing(false);
     }, 2000);
@@ -155,7 +172,9 @@ export function NLQInterface() {
         </div>
 
         <div className="px-4 pt-4 pb-1">
-          <p className="text-xs text-dxc-white">Secteur: <span className="text-dxc-melon font-semibold">{sectorInfo.label}</span></p>
+          {detectedSectorLabel && (
+            <p className="text-xs text-dxc-white">Secteur: <span className="text-dxc-melon font-semibold">{detectedSectorLabel}</span></p>
+          )}
         </div>
 
         <div className="px-4 pt-2 pb-1">
@@ -236,12 +255,10 @@ export function NLQInterface() {
       <div className="flex-1 flex flex-col min-w-0">
         <div className="bg-card border-b border-border px-4 md:px-6 py-2 flex items-center gap-2 flex-wrap pl-14 lg:pl-6">
           <BrandLogo logoClassName="h-7" showSubtitle={false} className="mr-2" />
-          <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded">{sectorInfo.label}</span>
-          {useAppStore.getState().onboarding.analysisTypes.map((tStr) => (
-            <span key={tStr} className="text-xs bg-dxc-melon/10 text-dxc-melon px-2 py-0.5 rounded">{tStr}</span>
-          ))}
+          {detectedSectorLabel && (
+            <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded">{detectedSectorLabel}</span>
+          )}
           <span className="text-xs text-muted-foreground">{dataset.rowCount.toLocaleString()} {t("registrations", lang)}</span>
-          <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded">XGBoost · AUC 0.871</span>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4">

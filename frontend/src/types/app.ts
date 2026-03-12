@@ -90,8 +90,6 @@ export interface AppState {
   savedProjects: SavedProject[];
   onboarding: {
     useCaseDescription: string;
-    analysisTypes: string[];
-    timeHorizon: string;
     sectorContext: SectorDetectionContext | null;
   };
   dataset: {

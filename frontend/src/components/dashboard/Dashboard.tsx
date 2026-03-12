@@ -67,16 +67,22 @@ function DashboardChart({ chartStyle, primaryColor, lang }: { chartStyle: ChartS
 }
 
 export function Dashboard() {
-  const { dataset, modelResults, userPreferences, updatePreferences, pinnedInsights, togglePin, setPhase } = useAppStore();
+  const { dataset, modelResults, userPreferences, updatePreferences, pinnedInsights, togglePin, setPhase, onboarding } = useAppStore();
   const [drawerOpen, setDrawerOpen] = useState(false);
   useDarkMode();
 
   const sector = dataset.detectedSector;
-  const sectorInfo = SECTOR_LABELS[sector];
-  const kpis = SECTOR_KPIS[sector];
+  const sectorContext = onboarding.sectorContext;
+  const normalizedDetectedSector = (sectorContext?.sector && sectorContext.sector in SECTOR_LABELS
+    ? (sectorContext.sector as keyof typeof SECTOR_LABELS)
+    : (sector in SECTOR_LABELS ? sector : "public"));
+  const sectorInfo = SECTOR_LABELS[normalizedDetectedSector] ?? SECTOR_LABELS.public;
+  const detectedSectorLabel = sectorContext?.sector || sectorInfo.label;
+  const kpis = SECTOR_KPIS[normalizedDetectedSector] ?? [];
   const { chartStyle, density, accentTheme, visibleKPIs, primaryColor, secondaryColor, language } = userPreferences;
 
-  const visibleKPIList = kpis.filter((k) => visibleKPIs.includes(k.key));
+  const safeVisibleKPIs = Array.isArray(visibleKPIs) ? visibleKPIs : [];
+  const visibleKPIList = kpis.filter((k) => safeVisibleKPIs.includes(k.key));
   const kpiCount = density === "simplified" ? 4 : density === "standard" ? 6 : 8;
   const displayKPIs = visibleKPIList.slice(0, kpiCount);
   const gridCols = density === "simplified" ? "grid-cols-1 sm:grid-cols-2" : density === "standard" ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2 sm:grid-cols-4";
@@ -91,7 +97,7 @@ export function Dashboard() {
       <div className="h-16 bg-dxc-midnight px-4 md:px-6 flex items-center justify-between flex-wrap gap-2">
         <div className="min-w-0">
           <BrandLogo logoClassName="h-7" subtitleClassName="text-[13px] font-semibold" className="mb-0.5" />
-          <p className="text-white/80 text-xs mt-0.5">{sectorInfo.icon} {sectorInfo.label} · {t("binaryClassification", language)} · {t("updatedAt", language)} {timeStr}</p>
+          <p className="text-white/80 text-xs mt-0.5">{sectorInfo.icon} {detectedSectorLabel} {sectorContext && `· 📊 ${(sectorContext.confidence * 100).toFixed(1)}% · 🎯 ${sectorContext.dashboard_focus}`} · {t("updatedAt", language)} {timeStr}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <button onClick={() => setPhase(2)} className="text-xs border border-dxc-sky text-dxc-sky px-3 py-1.5 rounded-lg hover:bg-dxc-sky/10 transition-colors flex items-center gap-1"><MessageSquare size={12} /> {t("chat", language)}</button>
