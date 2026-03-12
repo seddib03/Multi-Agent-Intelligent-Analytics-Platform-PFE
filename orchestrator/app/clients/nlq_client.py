@@ -72,7 +72,7 @@ async def call_detect_sector(state: OrchestratorState):
     Retourne (state, suggested_route)
     """
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=130.0) as client:
             response = await client.post(
                 f"{NLQ_API_URL}/detect-sector",
                 json={"user_query": state.query_raw}
@@ -134,7 +134,7 @@ async def call_nlq_chat(
         if nlq_profile:
             payload["data_profile"] = nlq_profile
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=150.0) as client:
             response = await client.post(
                 f"{NLQ_API_URL}/chat",
                 json=payload
@@ -183,7 +183,7 @@ async def reset_nlq_session(user_id: str) -> dict:
     Appelle POST /chat/reset (Collègue 1).
     Nettoie l'historique de conversation de l'utilisateur.
     """
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
             f"{NLQ_API_URL}/chat/reset",
             json={"user_id": user_id}
