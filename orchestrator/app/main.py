@@ -82,4 +82,3 @@ async def analyze(
 def health():
     """Health check endpoint."""
     return {"status": "ok", "graph": "ready"}
-
