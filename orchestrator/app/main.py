@@ -2,6 +2,7 @@
 from fastapi.middleware.cors import CORSMiddleware
 from app.schemas.input_schema import UserQueryInput
 from app.graph.orchestrator import build_orchestrator_graph
+from app.graph.state import OrchestratorState
 import shutil, uuid, json, os, tempfile
 import nest_asyncio
 nest_asyncio.apply()
@@ -36,7 +37,6 @@ def _normalize_metadata(metadata_parsed) -> dict:
       4. Dict standard  : {"metadata_path": "...", ...}
     """
     if isinstance(metadata_parsed, list):
-        # Normalise chaque colonne : "name" → "column_name"
         normalized_cols = []
         for col in metadata_parsed:
             if isinstance(col, dict):
@@ -48,7 +48,6 @@ def _normalize_metadata(metadata_parsed) -> dict:
     if isinstance(metadata_parsed, dict):
         cols = metadata_parsed.get("columns", [])
         if cols and isinstance(cols[0], dict):
-            # Normalise "name" → "column_name" si nécessaire
             normalized_cols = []
             for col in cols:
                 if "column_name" not in col and "name" in col:
@@ -61,18 +60,25 @@ def _normalize_metadata(metadata_parsed) -> dict:
 
 
 def run_orchestrator(input_data: UserQueryInput) -> dict:
-    initial_state = {
-        "user_id":    input_data.user_id,
-        "session_id": input_data.session_id,
-        "query_raw":  input_data.query,
-        "csv_path":   input_data.csv_path or "",
-        "metadata":   input_data.metadata or {},
-    }
+    # ✅ FIX : On initialise directement un OrchestratorState
+    # au lieu d'un dict brut — LangGraph gère l'état Pydantic nativement
+    initial_state = OrchestratorState(
+        user_id=input_data.user_id,
+        session_id=input_data.session_id,
+        query_raw=input_data.query,
+        csv_path=input_data.csv_path or "",
+        metadata=input_data.metadata or {},
+    )
+
     result = graph.invoke(initial_state)
+
     # result est un OrchestratorState — on le sérialise
     if hasattr(result, "model_dump"):
         return result.model_dump()
-    return result
+    # Si LangGraph retourne un dict (selon la version)
+    if isinstance(result, dict):
+        return result
+    return {}
 
 
 @app.post("/analyze")

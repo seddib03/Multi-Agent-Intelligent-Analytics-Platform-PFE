@@ -14,17 +14,17 @@ def build_orchestrator_graph():
     sector_detection → nlq → data_prep → routing → dispatch → response → END
                                                   ↘ (clarification) → response
     """
-    graph =StateGraph(OrchestratorState) #StateGraph(dict)
-
-    
+    # ✅ FIX : On utilise OrchestratorState directement comme schéma
+    # au lieu de `dict` pour éviter le InvalidUpdateError sur __root__
+    graph = StateGraph(OrchestratorState)
 
     # ── Nodes ──────────────────────────────────────────────────────
-    graph.add_node("sector_detection", _wrap(sector_detection_node))
-    graph.add_node("nlq",              _wrap(nlq_node))
-    graph.add_node("data_prep",        _wrap(data_prep_node))
-    graph.add_node("routing",          _wrap(routing_node))
-    graph.add_node("dispatch",         _wrap(dispatch_node))
-    graph.add_node("response",         _wrap(response_node))
+    graph.add_node("sector_detection", sector_detection_node)
+    graph.add_node("nlq",              nlq_node)
+    graph.add_node("data_prep",        data_prep_node)
+    graph.add_node("routing",          routing_node)
+    graph.add_node("dispatch",         dispatch_node)
+    graph.add_node("response",         response_node)
 
     # ── Entry point ────────────────────────────────────────────────
     graph.set_entry_point("sector_detection")
@@ -33,7 +33,6 @@ def build_orchestrator_graph():
     graph.add_edge("sector_detection", "nlq")
     graph.add_edge("nlq",              "data_prep")
     graph.add_edge("data_prep",        "routing")
-    # ⚠️ Pas de add_edge depuis "routing" — géré par le conditionnel
     graph.add_edge("dispatch",         "response")
     graph.add_edge("response",         END)
 
@@ -50,16 +49,8 @@ def build_orchestrator_graph():
     return graph.compile()
 
 
-def _should_dispatch(state: dict) -> str:
-    route = state.get("route")
+def _should_dispatch(state: OrchestratorState) -> str:
+    route = state.route
     if route == RouteEnum.CLARIFICATION.value:
         return "response"
     return "dispatch"
-
-
-def _wrap(node_fn):
-    def wrapped(state: dict) -> dict:
-        s = OrchestratorState(**state)
-        result = node_fn(s)
-        return result.model_dump()
-    return wrapped
