@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/stores/appStore";
 import type { ChartStyle, AccentTheme, Density } from "@/types/app";
 import { ACCENT_THEMES } from "@/types/app";
@@ -25,6 +25,18 @@ function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function getPreferencesSignature(prefs: ReturnType<typeof useAppStore.getState>["userPreferences"]): string {
+  return JSON.stringify({
+    darkMode: prefs.darkMode,
+    chartStyle: prefs.chartStyle,
+    density: prefs.density,
+    accentTheme: prefs.accentTheme,
+    dashboardLayout: prefs.dashboardLayout,
+    visibleKPIs: [...prefs.visibleKPIs].sort(),
+    language: prefs.language,
+  });
+}
+
 export function StepUseCase() {
   const { currentProjectId, onboarding, updateOnboarding, updateDataset, userPreferences, updatePreferences, setOnboardingStep } = useAppStore();
   const lang = userPreferences.language;
@@ -32,6 +44,18 @@ export function StepUseCase() {
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const initialSnapshotRef = useRef<{ desc: string; preferencesSig: string } | null>(null);
+
+  if (!initialSnapshotRef.current) {
+    initialSnapshotRef.current = {
+      desc: onboarding.useCaseDescription.trim(),
+      preferencesSig: getPreferencesSignature(userPreferences),
+    };
+  }
+
+  useEffect(() => {
+    setDesc(onboarding.useCaseDescription);
+  }, [onboarding.useCaseDescription]);
 
   const CHART_STYLES = getChartStyles(lang);
 
@@ -40,6 +64,25 @@ export function StepUseCase() {
 
   const handleNext = async () => {
     if (!canProceed || saving) return;
+
+    const currentDesc = desc.trim();
+    const hasChanges = Boolean(
+      initialSnapshotRef.current
+      && (
+        initialSnapshotRef.current.desc !== currentDesc
+        || initialSnapshotRef.current.preferencesSig !== getPreferencesSignature(userPreferences)
+      )
+    );
+
+    const canUpdateExisting = Boolean(currentProjectId && isUuid(currentProjectId));
+
+    // Si on revient modifier les paramètres sans rien changer, on passe directement à l'étape suivante.
+    if (canUpdateExisting && !hasChanges) {
+      updateOnboarding({ useCaseDescription: desc });
+      setOnboardingStep(2);
+      return;
+    }
+
     setTouched(true);
     setApiError(null);
     setSaving(true);
@@ -61,7 +104,6 @@ export function StepUseCase() {
       };
 
       // Si un projet existe déjà, on le met à jour; sinon on le crée.
-      const canUpdateExisting = Boolean(currentProjectId && isUuid(currentProjectId));
       const project = canUpdateExisting
         ? await updateProject(currentProjectId as string, projectPayload)
         : await createProject(projectPayload);
@@ -74,8 +116,6 @@ export function StepUseCase() {
       // Mettre à jour le store local
       updateOnboarding({
         useCaseDescription: desc,
-        analysisTypes: [],
-        timeHorizon: "",
         sectorContext: sectorCtx,
       });
 

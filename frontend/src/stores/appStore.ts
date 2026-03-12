@@ -10,8 +10,6 @@ const EMPTY_PROJECT = {
   currentProjectId: null,
   onboarding: {
     useCaseDescription: "",
-    analysisTypes: [] as string[],
-    timeHorizon: "30 jours",
     sectorContext: null,
   },
   dataset: {
