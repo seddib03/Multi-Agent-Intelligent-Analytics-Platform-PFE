@@ -6,21 +6,8 @@ import { Check, Loader2 } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { ChartPreviews } from "./usecase/ChartPreviews";
 import type { Language } from "@/lib/i18n";
-import { createProject } from "@/lib/projectsApi";
-
-function getAnalysisTypes(lang: Language) {
-  return [
-    t("prediction", lang),
-    t("anomalyDetection", lang),
-    t("segmentation", lang),
-    t("trendAnalysis", lang),
-    t("recommendation", lang),
-  ];
-}
-
-function getTimeHorizons(lang: Language) {
-  return [t("days7", lang), t("days30", lang), t("days90", lang), t("custom", lang)];
-}
+import { createProject, updateProject } from "@/lib/projectsApi";
+import { detectSector } from "@/lib/sectorDetectionApi";
 
 function getChartStyles(lang: Language): { key: ChartStyle; icon: string; label: string }[] {
   return [
@@ -34,26 +21,22 @@ function getChartStyles(lang: Language): { key: ChartStyle; icon: string; label:
 
 const ACCENT_SWATCHES: AccentTheme[] = ["royal-melon", "blue-gold", "midnight-peach", "melon-royal", "gold-blue", "sky-midnight"];
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 export function StepUseCase() {
-  const { onboarding, updateOnboarding, userPreferences, updatePreferences, setOnboardingStep } = useAppStore();
+  const { currentProjectId, onboarding, updateOnboarding, updateDataset, userPreferences, updatePreferences, setOnboardingStep } = useAppStore();
   const lang = userPreferences.language;
   const [desc, setDesc] = useState(onboarding.useCaseDescription);
-  const [types, setTypes] = useState<string[]>(onboarding.analysisTypes);
-  const [horizon, setHorizon] = useState(onboarding.timeHorizon);
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  const ANALYSIS_TYPES = getAnalysisTypes(lang);
-  const TIME_HORIZONS = getTimeHorizons(lang);
   const CHART_STYLES = getChartStyles(lang);
 
-  const toggleType = (tStr: string) =>
-    setTypes((prev) => (prev.includes(tStr) ? prev.filter((x) => x !== tStr) : [...prev, tStr]));
-
   const descTooShort = touched && desc.trim().length > 0 && desc.trim().length <= 10;
-  const noTypes = touched && types.length === 0;
-  const canProceed = desc.trim().length > 10 && types.length > 0;
+  const canProceed = desc.trim().length > 10;
 
   const handleNext = async () => {
     if (!canProceed || saving) return;
@@ -62,18 +45,45 @@ export function StepUseCase() {
     setSaving(true);
 
     try {
-      // Créer le projet dans le backend
-      const project = await createProject({
+      const projectPayload = {
         name: desc.trim().slice(0, 60) || "Sans titre",
         use_case: desc.trim(),
-        description: types.join(", "),
-      });
+        description: desc.trim(),
+        visual_preferences: {
+          darkMode: userPreferences.darkMode,
+          chartStyle: userPreferences.chartStyle,
+          density: userPreferences.density,
+          accentTheme: userPreferences.accentTheme,
+          dashboardLayout: userPreferences.dashboardLayout,
+          visibleKPIs: userPreferences.visibleKPIs,
+          language: userPreferences.language,
+        },
+      };
+
+      // Si un projet existe déjà, on le met à jour; sinon on le crée.
+      const canUpdateExisting = Boolean(currentProjectId && isUuid(currentProjectId));
+      const project = canUpdateExisting
+        ? await updateProject(currentProjectId as string, projectPayload)
+        : await createProject(projectPayload);
+
+      const sectorCtx = await detectSector(desc.trim());
 
       // Stocker l'ID backend dans le store
       useAppStore.setState({ currentProjectId: project.id });
 
       // Mettre à jour le store local
-      updateOnboarding({ useCaseDescription: desc, analysisTypes: types, timeHorizon: horizon });
+      updateOnboarding({
+        useCaseDescription: desc,
+        analysisTypes: [],
+        timeHorizon: "",
+        sectorContext: sectorCtx,
+      });
+
+      // Mapper le secteur détecté vers les secteurs supportés par l'UI.
+      const normalizedSector = (["finance", "transport", "retail", "manufacturing", "public"].includes(sectorCtx.sector)
+        ? sectorCtx.sector
+        : "public") as "finance" | "transport" | "retail" | "manufacturing" | "public";
+      updateDataset({ detectedSector: normalizedSector });
 
       // Passer à l'étape suivante
       setOnboardingStep(2);
@@ -102,46 +112,6 @@ export function StepUseCase() {
         )}
         <p className="text-xs italic text-muted-foreground">{t("sectorAutoDetect", lang)}</p>
 
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-foreground">{t("analysisType", lang)}</label>
-          <div className="flex flex-wrap gap-2">
-            {ANALYSIS_TYPES.map((tStr) => (
-              <button
-                key={tStr}
-                onClick={() => toggleType(tStr)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
-                  types.includes(tStr)
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-card text-primary border-border hover:border-primary"
-                }`}
-              >
-                {tStr}
-              </button>
-            ))}
-          </div>
-          {noTypes && (
-            <p className="text-xs text-destructive font-medium">{t("selectAnalysisType", lang)}</p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-foreground">{t("timeHorizon", lang)}</label>
-          <div className="flex gap-2 flex-wrap">
-            {TIME_HORIZONS.map((h) => (
-              <button
-                key={h}
-                onClick={() => setHorizon(h)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  horizon === h
-                    ? "bg-dxc-melon text-dxc-white"
-                    : "bg-card text-foreground border border-border hover:border-dxc-melon"
-                }`}
-              >
-                {h}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* Divider */}
