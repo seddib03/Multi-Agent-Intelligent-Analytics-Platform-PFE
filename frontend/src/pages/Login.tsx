@@ -52,7 +52,8 @@ const Login = () => {
         if (targetProject) {
           useAppStore.setState((s) => ({
             currentProjectId: targetProject.id,
-            currentPhase: 3,
+            // show dashboard first after login
+            currentPhase: 2,
             onboardingStep: 4,
             onboarding: {
               ...s.onboarding,
