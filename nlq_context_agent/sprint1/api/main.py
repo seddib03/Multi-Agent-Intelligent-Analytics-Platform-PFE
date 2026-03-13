@@ -99,7 +99,7 @@ def _get_agents():
                 "Create a .env file with: OPENROUTER_API_KEY=sk-or-v1-..."
             )
         sa = SectorDetectionAgent(openrouter_api_key=api_key, verbose=False)
-        na = NLQAgent(openrouter_api_key=api_key, verbose=False)
+        na = NLQAgent(openrouter_api_key=api_key, verbose=True)
         _self.sector_agent = sa
         _self.nlq_agent    = na
     return sa, na
