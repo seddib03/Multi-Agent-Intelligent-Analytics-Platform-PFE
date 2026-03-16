@@ -1,20 +1,21 @@
 """
-main.py — FastAPI V3
+main.py — FastAPI V4 (Import + Check Quality)
 """
 from __future__ import annotations
-import logging, shutil, uuid
+import dataclasses, json, logging, shutil, uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
-from agent.graph import agent_graph
-from agent.state import build_initial_state
+from agent.graph import import_graph, agent_graph
+from agent.state import build_import_state
 from config.settings import get_settings
 from core.minio_client import MinioClient
 from models.anomaly_report import CleaningAction, UserDecision
+from models.metadata_schema import parse_metadata
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,7 +23,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app      = FastAPI(title="Data Preparation Agent V3", version="3.0.0")
+app      = FastAPI(title="Data Preparation Agent V4", version="4.0.0")
 settings = get_settings()
 
 
@@ -50,39 +51,125 @@ async def on_startup():
         logger.error("MinIO non disponible : %s", e)
 
 
-# ── POST /prepare ─────────────────────────────────────────────────────────────
+# ── POST /import ──────────────────────────────────────────────────────────────
+# Étape 1 : Import léger — ingestion + profiling uniquement.
+# L'utilisateur envoie son dataset brut (CSV). Pas de metadata.
+# Retourne profiling_summary pour le NLQ agent.
 
-@app.post("/prepare")
-async def prepare(
-    dataset:  UploadFile = File(...),
-    metadata: UploadFile = File(...),
+@app.post("/import")
+async def import_dataset(
+    dataset: UploadFile = File(...),
+    sector:  str        = Form("unknown"),
 ) -> JSONResponse:
     job_id  = str(uuid.uuid4())
     tmp_dir = settings.tmp_dir / job_id
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    dataset_path  = tmp_dir / dataset.filename
-    metadata_path = tmp_dir / metadata.filename
+    dataset_path = tmp_dir / dataset.filename
+    with open(dataset_path, "wb") as f:
+        shutil.copyfileobj(dataset.file, f)
 
-    with open(dataset_path,  "wb") as f: shutil.copyfileobj(dataset.file,  f)
-    with open(metadata_path, "wb") as f: shutil.copyfileobj(metadata.file, f)
-
-    initial_state = build_initial_state(
+    initial_state = build_import_state(
         job_id=job_id,
         dataset_path=str(dataset_path),
-        metadata_path=str(metadata_path),
+        sector=sector,
     )
 
     config = {"configurable": {"thread_id": job_id}}
     try:
-        state = agent_graph.invoke(initial_state, config=config)
+        state = import_graph.invoke(initial_state, config=config)
     except Exception as e:
-        logger.error("Erreur pipeline %s : %s", job_id, e)
+        logger.error("Erreur import %s : %s", job_id, e)
         raise HTTPException(status_code=500, detail=str(e))
 
-    cleaning_plan  = state.get("cleaning_plan")
-    qb_dict        = state.get("quality_before")
-    
+    sector = state.get("sector", "unknown")
+
+    return JSONResponse({
+        "job_id":            job_id,
+        "status":            "imported",
+        "sector":            sector,
+        "profiling_html":    f"/jobs/{job_id}/profiling?sector={sector}",
+        "profiling_json":    f"/jobs/{job_id}/profiling-json?sector={sector}",
+        "raw_data_path":     state.get("bronze_path"),
+        "message":           f"Import OK. Lancez le check qualité via POST /prepare/{job_id}",
+    })
+
+
+# ── POST /prepare/{job_id} ───────────────────────────────────────────────────
+# Étape 2 : Check Quality — l'utilisateur fournit les règles (metadata JSON).
+# Reprend le job existant (même DuckDB, même Bronze) et lance NODE 3 → 8.
+
+@app.post("/prepare/{job_id}")
+async def prepare(
+    job_id:   str,
+    metadata: UploadFile = File(...),
+) -> JSONResponse:
+    # ── 1. Lire le state existant depuis l'import_graph ───────────────────
+    config = {"configurable": {"thread_id": job_id}}
+    try:
+        snapshot = import_graph.get_state(config)
+        if not snapshot or not snapshot.values:
+            raise ValueError("State vide")
+        existing_state = snapshot.values
+    except Exception as e:
+        logger.error("Job %s introuvable : %s", job_id, e)
+        raise HTTPException(
+            status_code=404,
+            detail=f"Job {job_id} introuvable. Avez-vous fait POST /import d'abord ?",
+        )
+
+    if existing_state.get("status") != "imported":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Job {job_id} n'est pas en état 'imported' (état actuel: {existing_state.get('status')})",
+        )
+
+    # ── 2. Parser le metadata JSON uploadé ────────────────────────────────
+    tmp_dir = settings.tmp_dir / job_id
+    metadata_path = tmp_dir / metadata.filename
+    with open(metadata_path, "wb") as f:
+        shutil.copyfileobj(metadata.file, f)
+
+    with open(metadata_path, encoding="utf-8") as f:
+        raw_meta = json.load(f)
+
+    # Extraire colonnes, secteur, business_rules
+    if isinstance(raw_meta, list):
+        meta_list = raw_meta
+    elif isinstance(raw_meta, dict) and "columns" in raw_meta:
+        meta_list = raw_meta["columns"]
+    else:
+        meta_list = raw_meta
+
+    parsed_metadata = parse_metadata(meta_list)
+    meta_dicts = [dataclasses.asdict(m) for m in parsed_metadata]
+
+    sector = "unknown"
+    business_rules = []
+    if isinstance(raw_meta, dict):
+        sector = raw_meta.get("sector", raw_meta.get("secteur", "unknown"))
+        business_rules = raw_meta.get("business_rules", [])
+
+    # ── 3. Construire le state pour le prep graph ─────────────────────────
+    prep_state = {
+        **existing_state,
+        "metadata":       meta_dicts,
+        "business_rules": business_rules,
+        "sector":         sector,
+        "metadata_path":  str(metadata_path),
+        "status":         "running",
+    }
+
+    # ── 4. Lancer le prep graph (NODE 3 → NODE 5, interrupt avant cleaning)
+    try:
+        state = agent_graph.invoke(prep_state, config=config)
+    except Exception as e:
+        logger.error("Erreur pipeline prep %s : %s", job_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+    cleaning_plan = state.get("cleaning_plan")
+    qb_dict       = state.get("quality_before")
+
     if qb_dict:
         from models.quality_report import QualityReport
         qb_dict = QualityReport.from_dict(qb_dict).to_dict(apply_offsets=True)
@@ -274,13 +361,17 @@ async def get_profiling_json(
     config  = {"configurable": {"thread_id": job_id}}
     
     try:
-        # 1. Tenter depuis le State
+        # 1. Tenter depuis le State (import_graph ou agent_graph)
         try:
-            snapshot = agent_graph.get_state(config)
-            if snapshot.values:
+            snapshot = import_graph.get_state(config)
+            if snapshot and snapshot.values:
                 summary = snapshot.values.get("profiling_summary")
-                if summary:
-                    logger.info("Résumé profiling récupéré depuis le State pour le job %s", job_id)
+            if not summary:
+                snapshot = agent_graph.get_state(config)
+                if snapshot and snapshot.values:
+                    summary = snapshot.values.get("profiling_summary")
+            if summary:
+                logger.info("Résumé profiling récupéré depuis le State pour le job %s", job_id)
         except Exception as e:
             logger.warning("Échec lecture state pour profiling %s : %s", job_id, e)
 
@@ -328,7 +419,7 @@ async def health():
         minio_ok = False
     return JSONResponse({
         "status":  "ok",
-        "version": "3.0.0",
+        "version": "4.0.0",
         "minio":   "ok" if minio_ok else "unreachable",
     })
 
