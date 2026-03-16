@@ -36,7 +36,7 @@ app = FastAPI(
 )
 
 # ─── CORS ────────────────────────────────────────────────────────────────────
-origins = [settings.FRONTEND_URL]
+origins = [settings.FRONTEND_URL, "http://localhost:5173", "http://localhost:3000"]
 if settings.DEBUG:
     origins.append("http://localhost:3000")
 

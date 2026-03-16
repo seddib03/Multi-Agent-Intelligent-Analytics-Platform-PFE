@@ -9,12 +9,12 @@ import type { ColumnMetadata } from "@/types/app";
 type SemanticType = "numeric" | "date" | "category" | "target" | "identifier" | "ignore";
 
 interface UploadedFile {
-  name:         string;
-  datasetId:    string;
-  rowCount:     number;
-  columnCount:  number;
-  preview:      Record<string, unknown>[];
-  columns:      { original_name: string; detected_type: string; null_percent: number; unique_count: number; sample_values?: unknown[] }[];
+  name:          string;
+  datasetId:     string;
+  rowCount:      number;
+  columnCount:   number;
+  preview:       Record<string, unknown>[];
+  columns:       { original_name: string; detected_type: string; null_percent: number; unique_count: number; sample_values?: unknown[] }[];
   mappedColumns: ColumnMetadata[];
 }
 
@@ -26,47 +26,19 @@ function toSemanticType(detected: string): SemanticType {
 }
 
 export function StepUpload() {
-  const { dataset, updateDataset, setOnboardingStep, userPreferences } = useAppStore();
+  const { updateDataset, setOnboardingStep, userPreferences } = useAppStore();
   const lang = userPreferences.language;
-
-  const restoredUploadedDatasets: { fileName: string; columns: ColumnMetadata[] }[] =
-    (dataset as never as { uploadedDatasets?: { fileName: string; columns: ColumnMetadata[] }[] })
-      .uploadedDatasets ?? [];
-
-  const restoredFiles: UploadedFile[] = restoredUploadedDatasets.map((ds, idx) => ({
-    name: ds.fileName,
-    datasetId: `restored-${idx}`,
-    rowCount: idx === 0 ? dataset.rowCount : 0,
-    columnCount: ds.columns.length,
-    preview: idx === 0 ? dataset.previewData : [],
-    columns: ds.columns.map((col) => ({
-      ...(col as never as {
-        detectedType?: string;
-        uniqueCount?: number;
-        sampleValues?: unknown[];
-      }),
-      original_name: col.originalName,
-      detected_type: (col as never as { detectedType?: string }).detectedType ?? "unknown",
-      null_percent: col.missingPercent,
-      unique_count: (col as never as { uniqueCount?: number }).uniqueCount ?? 0,
-      sample_values: (col as never as { sampleValues?: unknown[] }).sampleValues ?? [],
-    })),
-    mappedColumns: ds.columns,
-  }));
 
   const [uploading, setUploading]         = useState(false);
   const [progress, setProgress]           = useState(0);
-  const [files, setFiles]                 = useState<UploadedFile[]>(restoredFiles);
+  const [files, setFiles]                 = useState<UploadedFile[]>([]);
   const [activeFileIdx, setActiveFileIdx] = useState(0);
   const [error, setError]                 = useState<string | null>(null);
 
   const handleUpload = useCallback(
     async (file: File) => {
       const projectId = useAppStore.getState().currentProjectId;
-      if (!projectId) {
-        setError("Aucun projet actif — retournez à l'étape 1.");
-        return;
-      }
+      if (!projectId) { setError("Aucun projet actif — retournez à l'étape 1."); return; }
 
       setUploading(true);
       setProgress(10);
@@ -103,25 +75,20 @@ export function StepUpload() {
           mappedColumns,
         };
 
-        const next       = [...files, newFile];
-        const totalRows  = next.reduce((s, f) => s + f.rowCount, 0);
-        const totalCols  = next.reduce((s, f) => s + f.columnCount, 0);
-        const newIdx     = next.length - 1;
-
-        const normalizedSector = (["finance", "transport", "retail", "manufacturing", "public"].includes(result.detected_sector ?? "")
-          ? result.detected_sector
-          : "public") as "finance" | "transport" | "retail" | "manufacturing" | "public";
+        const next      = [...files, newFile];
+        const totalRows = next.reduce((s, f) => s + f.rowCount, 0);
+        const totalCols = next.reduce((s, f) => s + f.columnCount, 0);
+        const newIdx    = next.length - 1;
 
         updateDataset({
           fileName:         next.map((f) => f.name).join(", "),
           rowCount:         totalRows,
           columnCount:      totalCols,
-          detectedSector:   normalizedSector,
+          detectedSector:   (result.detected_sector as never) ?? "general",
           previewData:      result.preview,
           columns:          next[0].mappedColumns,
-          sourceCsvFile:    file,
-          sourceCsvPath:    "",
           uploadedDatasets: next.map((f) => ({ fileName: f.name, columns: f.mappedColumns })),
+          filePath:         result.file_path ?? "",  // chemin serveur persisté
         } as never);
 
         setFiles(next);
@@ -156,7 +123,7 @@ export function StepUpload() {
   const removeFile = (idx: number) => {
     const next = files.filter((_, i) => i !== idx);
     if (next.length === 0) {
-      updateDataset({ fileName: "", rowCount: 0, columnCount: 0, previewData: [], columns: [], sourceCsvFile: null, sourceCsvPath: "", uploadedDatasets: [] } as never);
+      updateDataset({ fileName: "", rowCount: 0, columnCount: 0, previewData: [], columns: [], uploadedDatasets: [] } as never);
       setActiveFileIdx(0);
     } else {
       const newIdx    = Math.min(activeFileIdx, next.length - 1);
@@ -167,8 +134,6 @@ export function StepUpload() {
         rowCount: totalRows, columnCount: totalCols,
         previewData: next[newIdx].preview,
         columns: next[0].mappedColumns,
-        sourceCsvFile: null,
-        sourceCsvPath: "",
         uploadedDatasets: next.map((f) => ({ fileName: f.name, columns: f.mappedColumns })),
       } as never);
       setActiveFileIdx(newIdx);
@@ -183,12 +148,10 @@ export function StepUpload() {
     <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
       <h2 className="text-xl font-bold text-primary">{t("uploadTitle", lang)}</h2>
 
-      {/* ── Dropzone ── */}
+      {/* Dropzone */}
       <div
         {...getRootProps()}
-        className={`bg-card rounded-xl shadow-sm border-2 border-dashed text-center cursor-pointer transition-all ${
-          hasFiles ? "p-6" : "p-8 md:p-12"
-        } ${isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/30 hover:border-primary"} ${uploading ? "opacity-60 pointer-events-none" : ""}`}
+        className={`bg-card rounded-xl shadow-sm border-2 border-dashed text-center cursor-pointer transition-all ${hasFiles ? "p-6" : "p-8 md:p-12"} ${isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/30 hover:border-primary"} ${uploading ? "opacity-60 pointer-events-none" : ""}`}
       >
         <input {...getInputProps()} />
         {hasFiles ? (
@@ -212,7 +175,7 @@ export function StepUpload() {
         )}
       </div>
 
-      {/* ── Progress ── */}
+      {/* Progress */}
       {uploading && (
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -226,7 +189,7 @@ export function StepUpload() {
         </div>
       )}
 
-      {/* ── Error ── */}
+      {/* Error */}
       {error && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
           <AlertCircle size={16} className="shrink-0" />
@@ -234,16 +197,14 @@ export function StepUpload() {
         </div>
       )}
 
-      {/* ── File tabs ── */}
+      {/* File tabs */}
       {hasFiles && (
         <>
           <div className="flex gap-2 flex-wrap">
             {files.map((file, i) => (
               <div
                 key={`${file.name}-${i}`}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all ${
-                  i === activeFileIdx ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/30"
-                }`}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all ${i === activeFileIdx ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/30"}`}
                 onClick={() => setActiveFileIdx(i)}
               >
                 <FileCheck className="text-primary shrink-0" size={14} />
@@ -261,7 +222,7 @@ export function StepUpload() {
 
           {activeFile && (
             <>
-              {/* ── File summary (sans score qualité) ── */}
+              {/* File summary */}
               <div className="bg-card rounded-xl shadow-sm border border-border p-5 flex items-center gap-4">
                 <FileCheck className="text-primary shrink-0" size={24} />
                 <div className="flex-1">
@@ -273,7 +234,7 @@ export function StepUpload() {
                 </div>
               </div>
 
-              {/* ── Preview table ── */}
+              {/* Preview table */}
               {activeFile.preview.length > 0 && (
                 <div className="rounded-xl overflow-hidden border border-border shadow-sm">
                   <div className="overflow-x-auto">
