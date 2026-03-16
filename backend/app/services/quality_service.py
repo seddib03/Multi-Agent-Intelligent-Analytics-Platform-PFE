@@ -34,14 +34,14 @@ class QualityService:
                     "type":     "medium_missing",
                     "severity": "warning",
                     "message":  f"{null_pct:.1f}% de valeurs manquantes",
-                    "fix":      "impute_mean" if col.get("detected_type") in ("integer", "float") else "impute_mode",
+                    "fix":      "impute_mean" if col.get("detected_type") in ("numeric", "integer", "float") else "impute_mode",
                 })
             elif null_pct > 0:
                 col_issues.append({
                     "type":     "low_missing",
                     "severity": "info",
                     "message":  f"{null_pct:.1f}% de valeurs manquantes",
-                    "fix":      "impute_mean" if col.get("detected_type") in ("integer", "float") else "impute_mode",
+                    "fix":      "impute_mean" if col.get("detected_type") in ("numeric", "integer", "float") else "impute_mode",
                 })
 
             # ── Colonne constante (unique_count == 1) ──────────────────

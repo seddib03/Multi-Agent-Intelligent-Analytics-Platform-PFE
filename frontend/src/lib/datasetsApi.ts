@@ -49,6 +49,12 @@ export interface UploadResponse {
   columns:           ColumnProfile[];
 }
 
+export interface DictionaryUploadResponse {
+  original_filename: string;
+  stored_path:       string;
+  file_size_bytes:   number;
+}
+
 export interface QualityIssue {
   type:     string;
   severity: string;
@@ -72,6 +78,14 @@ export interface QualityReport {
   warning_count:         number;
   issues:                ColumnQuality[];
   corrections_available: string[];
+}
+
+export interface DatasetMetadataColumnUpdate {
+  original_name: string;
+  business_name?: string;
+  semantic_type?: string;
+  description?: string;
+  [key: string]: unknown;
 }
 
 // ─── API calls ────────────────────────────────────────────────────────────────
@@ -134,4 +148,41 @@ export async function applyCorrections(
     },
   );
   return handleResponse(res);
+}
+
+export async function uploadDatasetDictionary(
+  projectId: string,
+  file: File,
+  datasetName: string,
+): Promise<DictionaryUploadResponse> {
+  const token = await getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const params = new URLSearchParams({ dataset_name: datasetName });
+  const res = await fetch(url(`/api/projects/${projectId}/datasets/dictionary/upload?${params}`), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+
+  return handleResponse<DictionaryUploadResponse>(res);
+}
+
+export async function updateDatasetMetadata(
+  projectId: string,
+  datasetId: string,
+  columns: DatasetMetadataColumnUpdate[],
+): Promise<void> {
+  const token = await getToken();
+  const res = await fetch(url(`/api/projects/${projectId}/datasets/${datasetId}/metadata`), {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ columns }),
+  });
+
+  await handleResponse(res);
 }

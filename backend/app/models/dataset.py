@@ -36,12 +36,49 @@ class DatasetColumn(Base):
     dataset_id:     Mapped[uuid.UUID]    = mapped_column(UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=False)
     original_name:  Mapped[str]          = mapped_column(String(255), nullable=False)
     business_name:  Mapped[str | None]   = mapped_column(String(255), nullable=True)
+    description:    Mapped[str | None]   = mapped_column(Text, nullable=True)
     detected_type:  Mapped[str]          = mapped_column(String(50), nullable=False)   # numeric | categorical | datetime | text | boolean
     business_type:  Mapped[str | None]   = mapped_column(String(50), nullable=True)
     null_percent:   Mapped[float | None] = mapped_column(Float, nullable=True)
     unique_count:   Mapped[int | None]   = mapped_column(Integer, nullable=True)
     sample_values:  Mapped[dict | None]  = mapped_column(JSONB, nullable=True)
     stats:          Mapped[dict | None]  = mapped_column(JSONB, nullable=True)
+    extra_metadata: Mapped[dict | None]  = mapped_column(JSONB, nullable=True)
     column_order:   Mapped[int]          = mapped_column(Integer, nullable=False, default=0)
 
     dataset: Mapped["Dataset"] = relationship("Dataset", back_populates="columns")
+
+    def _extra_metadata_value(self, *keys: str):
+        metadata = self.extra_metadata or {}
+        for key in keys:
+            if key in metadata:
+                return metadata[key]
+        return None
+
+    @property
+    def semantic_type(self):
+        return self.business_type
+
+    @property
+    def pattern(self):
+        return self._extra_metadata_value("pattern")
+
+    @property
+    def nullable(self):
+        return self._extra_metadata_value("nullable")
+
+    @property
+    def min(self):
+        return self._extra_metadata_value("min")
+
+    @property
+    def max(self):
+        return self._extra_metadata_value("max")
+
+    @property
+    def enums(self):
+        return self._extra_metadata_value("enums")
+
+    @property
+    def date_format(self):
+        return self._extra_metadata_value("dateFormat", "date_format")

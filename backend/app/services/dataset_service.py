@@ -3,11 +3,10 @@ from __future__ import annotations
 import io
 import os
 import time
+from datetime import datetime
 from typing import Any
 
 import pandas as pd
-
-from app.core.config import settings
 
 
 class DatasetService:
@@ -21,8 +20,16 @@ class DatasetService:
 
         Result dictionary includes `file_path` instead of a MinIO key.
         """
+        from app.core.config import settings
+
         safe_filename = filename or "upload.csv"
         file_format = os.path.splitext(safe_filename)[1].lower().lstrip(".") or "csv"
+
+        max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+        if len(file_bytes) > max_bytes:
+            raise ValueError(
+                f"Fichier trop volumineux (max {settings.MAX_UPLOAD_SIZE_MB} MB)"
+            )
 
         # profile using pandas as before
         df = self._read_dataframe(file_bytes, file_format)
@@ -78,7 +85,7 @@ class DatasetService:
             return pd.read_excel(io.BytesIO(raw))
         if fmt == "json":
             return pd.read_json(io.BytesIO(raw))
-        raise ValueError(f"Unsupported file format: {file_format}")
+        raise ValueError(f"Format non supporté : {file_format}")
 
     def _column_profile(self, df: pd.DataFrame, col: Any, index: int) -> dict[str, Any]:
         series = df[col]
@@ -87,6 +94,7 @@ class DatasetService:
         null_percent = float(round(series.isna().mean() * 100, 2)) if len(series) else 0.0
         unique_count = int(series.nunique(dropna=True))
         sample_values = [str(v) for v in series.dropna().head(5).tolist()]
+        extra_metadata = self._build_extra_metadata(series)
 
         stats: dict[str, Any] | None = None
         if pd.api.types.is_numeric_dtype(series):
@@ -105,8 +113,106 @@ class DatasetService:
             "unique_count": unique_count,
             "sample_values": sample_values,
             "stats": stats,
+            "extra_metadata": extra_metadata or None,
             "column_order": index,
         }
+
+    def _build_extra_metadata(self, series: pd.Series) -> dict[str, Any]:
+        metadata: dict[str, Any] = {
+            "nullable": bool(series.isna().any()),
+        }
+
+        clean = series.dropna()
+        if clean.empty:
+            return metadata
+
+        if pd.api.types.is_numeric_dtype(series):
+            metadata["min"] = float(clean.min())
+            metadata["max"] = float(clean.max())
+
+        enum_values = self._extract_enums(clean)
+        if enum_values is not None:
+            metadata["enums"] = enum_values
+
+        date_format = self._infer_date_format(clean)
+        if date_format is not None:
+            metadata["dateFormat"] = date_format
+
+        pattern = self._infer_pattern(clean)
+        if pattern is not None:
+            metadata["pattern"] = pattern
+
+        return metadata
+
+    def _extract_enums(self, series: pd.Series) -> list[str] | None:
+        if pd.api.types.is_numeric_dtype(series):
+            return None
+
+        values = [str(value) for value in series.astype(str).drop_duplicates().tolist() if str(value).strip()]
+        if not values:
+            return None
+
+        if len(values) <= 20:
+            return values
+
+        return None
+
+    def _infer_date_format(self, series: pd.Series) -> str | None:
+        sample_values = [str(value).strip() for value in series.astype(str).head(10).tolist() if str(value).strip()]
+        if not sample_values:
+            return None
+
+        candidate_formats = [
+            "%Y-%m-%d",
+            "%d/%m/%Y",
+            "%m/%d/%Y",
+            "%Y/%m/%d",
+            "%d-%m-%Y",
+            "%Y-%m-%d %H:%M:%S",
+            "%d/%m/%Y %H:%M:%S",
+            "%m/%d/%Y %H:%M:%S",
+        ]
+
+        for date_format in candidate_formats:
+            try:
+                for value in sample_values:
+                    datetime.strptime(value, date_format)
+                return date_format
+            except ValueError:
+                continue
+
+        return None
+
+    def _infer_pattern(self, series: pd.Series) -> str | None:
+        if pd.api.types.is_numeric_dtype(series):
+            return None
+
+        sample_values = [str(value).strip() for value in series.astype(str).head(5).tolist() if str(value).strip()]
+        if len(sample_values) < 2:
+            return None
+
+        signatures = {self._value_signature(value) for value in sample_values}
+        if len(signatures) != 1:
+            return None
+
+        signature = signatures.pop()
+        if signature and any(char.isalpha() or char.isdigit() for char in signature):
+            return signature
+
+        return None
+
+    def _value_signature(self, value: str) -> str:
+        signature: list[str] = []
+        for char in value:
+            if char.isdigit():
+                signature.append("9")
+            elif char.isalpha() and char.isupper():
+                signature.append("A")
+            elif char.isalpha():
+                signature.append("a")
+            else:
+                signature.append(char)
+        return "".join(signature)
 
     def _quality_score(self, df: pd.DataFrame) -> float:
         if df.empty:

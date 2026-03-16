@@ -18,6 +18,12 @@ interface UploadedFile {
   mappedColumns: ColumnMetadata[];
 }
 
+type StoredUploadedDataset = {
+  fileName: string;
+  columns: ColumnMetadata[];
+  datasetId?: string;
+};
+
 function toSemanticType(detected: string): SemanticType {
   if (detected === "numeric")  return "numeric";
   if (detected === "datetime") return "date";
@@ -29,13 +35,13 @@ export function StepUpload() {
   const { dataset, updateDataset, setOnboardingStep, userPreferences } = useAppStore();
   const lang = userPreferences.language;
 
-  const restoredUploadedDatasets: { fileName: string; columns: ColumnMetadata[] }[] =
-    (dataset as never as { uploadedDatasets?: { fileName: string; columns: ColumnMetadata[] }[] })
+  const restoredUploadedDatasets: StoredUploadedDataset[] =
+    (dataset as never as { uploadedDatasets?: StoredUploadedDataset[] })
       .uploadedDatasets ?? [];
 
   const restoredFiles: UploadedFile[] = restoredUploadedDatasets.map((ds, idx) => ({
     name: ds.fileName,
-    datasetId: `restored-${idx}`,
+    datasetId: ds.datasetId ?? `restored-${idx}`,
     rowCount: idx === 0 ? dataset.rowCount : 0,
     columnCount: ds.columns.length,
     preview: idx === 0 ? dataset.previewData : [],
@@ -121,7 +127,7 @@ export function StepUpload() {
           columns:          next[0].mappedColumns,
           sourceCsvFile:    file,
           sourceCsvPath:    "",
-          uploadedDatasets: next.map((f) => ({ fileName: f.name, columns: f.mappedColumns })),
+          uploadedDatasets: next.map((f) => ({ fileName: f.name, columns: f.mappedColumns, datasetId: f.datasetId })),
         } as never);
 
         setFiles(next);
@@ -169,7 +175,7 @@ export function StepUpload() {
         columns: next[0].mappedColumns,
         sourceCsvFile: null,
         sourceCsvPath: "",
-        uploadedDatasets: next.map((f) => ({ fileName: f.name, columns: f.mappedColumns })),
+        uploadedDatasets: next.map((f) => ({ fileName: f.name, columns: f.mappedColumns, datasetId: f.datasetId })),
       } as never);
       setActiveFileIdx(newIdx);
     }
@@ -252,6 +258,8 @@ export function StepUpload() {
                 <button
                   onClick={(e) => { e.stopPropagation(); removeFile(i); }}
                   className="text-muted-foreground/50 hover:text-destructive transition-colors ml-1 min-w-[28px] min-h-[28px] flex items-center justify-center"
+                  aria-label={`${t("delete", lang)} ${file.name}`}
+                  title={`${t("delete", lang)} ${file.name}`}
                 >
                   <Trash2 size={12} />
                 </button>

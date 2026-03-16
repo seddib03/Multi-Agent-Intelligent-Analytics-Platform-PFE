@@ -1,4 +1,5 @@
 import { ensureValidSession } from "./mockAuth";
+import type { SectorDetectionContext } from "@/types/app";
 
 const API_BASE_URL =
   (import.meta.env.VITE_BACKEND_API_URL as string | undefined)?.replace(/\/$/, "") ||
@@ -113,4 +114,35 @@ export async function deleteProject(projectId: string): Promise<void> {
     headers,
   });
   return handleResponse<void>(res);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function parseProjectVisualPreferences(raw: string | null): Record<string, unknown> | null {
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getProjectSectorContext(project: Project): SectorDetectionContext | null {
+  const visualPreferences = parseProjectVisualPreferences(project.visual_preferences);
+  const context = visualPreferences?.sectorContext;
+  if (!isRecord(context)) return null;
+
+  if (
+    typeof context.sector !== "string" ||
+    typeof context.confidence !== "number" ||
+    typeof context.dashboard_focus !== "string"
+  ) {
+    return null;
+  }
+
+  return context as unknown as SectorDetectionContext;
 }

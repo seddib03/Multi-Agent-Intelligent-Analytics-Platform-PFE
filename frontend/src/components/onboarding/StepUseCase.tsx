@@ -114,6 +114,12 @@ export function StepUseCase() {
       try {
         const sectorCtx = await detectSector(desc.trim());
         updateOnboarding({ useCaseDescription: desc, sectorContext: sectorCtx });
+        await updateProject(project.id, {
+          visual_preferences: {
+            ...projectPayload.visual_preferences,
+            sectorContext: sectorCtx,
+          },
+        });
         normalizedSector = (SUPPORTED_SECTORS.includes(sectorCtx.sector as SupportedSector)
           ? sectorCtx.sector
           : "finance") as SupportedSector;

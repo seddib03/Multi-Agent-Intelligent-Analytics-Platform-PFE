@@ -1,5 +1,7 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+import os
+import re
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -14,11 +16,14 @@ from app.schemas.dataset import (
     MetadataUpdateRequest, DatasetResponse, ColumnProfile,
     QualityReportResponse, ColumnQuality, QualityIssue,
     ApplyCorrectionsRequest, ApplyCorrectionsResponse,
+    DictionaryUploadResponse,
 )
 from app.services.dataset_service import DatasetService
 from app.services.quality_service import QualityService
 
 router = APIRouter(tags=["Datasets"])
+
+DICTIONARY_ALLOWED_EXTENSIONS = {".json", ".csv", ".tsv"}
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -99,6 +104,7 @@ async def upload_dataset(
             unique_count=col["unique_count"],
             sample_values=col["sample_values"],
             stats=col["stats"],
+            extra_metadata=col.get("extra_metadata"),
             column_order=col["column_order"],
         ))
 
@@ -115,6 +121,54 @@ async def upload_dataset(
         quality_score=result["quality_score"],
         preview=result["preview"],
         columns=[ColumnProfile(**c) for c in result["columns"]],
+    )
+
+
+@router.post("/dictionary/upload", response_model=DictionaryUploadResponse, status_code=status.HTTP_201_CREATED)
+async def upload_dictionary_file(
+    project_id:   uuid.UUID,
+    dataset_name: str          = Query(..., description="Nom du dataset (nom de fichier sans extension)"),
+    file:         UploadFile   = File(...),
+    db:           AsyncSession = Depends(get_db),
+    current_user: User         = Depends(get_current_user),
+):
+    await _get_project_or_404(db, project_id, current_user.id)
+
+    original_filename = file.filename or "dictionary.json"
+    _, extension = os.path.splitext(original_filename)
+    extension = extension.lower()
+
+    if extension not in DICTIONARY_ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Format dictionnaire non supporté (JSON/CSV/TSV uniquement).",
+        )
+
+    file_bytes = await file.read()
+    if len(file_bytes) > settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Fichier trop volumineux (max {settings.MAX_UPLOAD_SIZE_MB} Mo)",
+        )
+
+    # Sanitize dataset_name: keep only alphanumeric, dash, underscore and dot
+    safe_dataset_name = re.sub(r"[^\w\-\.]", "_", dataset_name)[:80] or "dataset"
+
+    dictionary_dir = os.path.abspath(
+        os.path.join(settings.TEMP_UPLOAD_DIR, str(project_id), "datasets", safe_dataset_name)
+    )
+    os.makedirs(dictionary_dir, exist_ok=True)
+
+    stored_filename = f"dictionary{extension}"
+    stored_path = os.path.abspath(os.path.join(dictionary_dir, stored_filename))
+
+    with open(stored_path, "wb") as output_file:
+        output_file.write(file_bytes)
+
+    return DictionaryUploadResponse(
+        original_filename=original_filename,
+        stored_path=stored_path,
+        file_size_bytes=len(file_bytes),
     )
 
 
@@ -157,6 +211,14 @@ async def update_metadata(
                 col.business_name = update.business_name
             if update.business_type is not None:
                 col.business_type = update.business_type
+            if update.description is not None:
+                col.description = update.description
+
+            extra_metadata_patch = update.to_extra_metadata_patch()
+            if extra_metadata_patch:
+                merged_metadata = dict(col.extra_metadata or {})
+                merged_metadata.update(extra_metadata_patch)
+                col.extra_metadata = merged_metadata
 
     await db.flush()
     await db.refresh(dataset)

@@ -21,6 +21,7 @@ import BrandLogo from "@/components/BrandLogo";
 import {
   listProjects,
   deleteProject as apiDeleteProject,
+  getProjectSectorContext,
   type Project,
 } from "@/lib/projectsApi";
 
@@ -79,6 +80,7 @@ export default function Projects() {
       onboarding: {
         ...state.onboarding,
         useCaseDescription: project.use_case ?? state.onboarding.useCaseDescription,
+        sectorContext: getProjectSectorContext(project) ?? state.onboarding.sectorContext,
       },
       dataset: {
         ...state.dataset,

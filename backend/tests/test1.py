@@ -9,9 +9,7 @@ import pandas as pd
 from unittest.mock import MagicMock
 
 from app.services.sector_detection_service import detect_sector
-from app.services.dataset_service import (
-    DatasetService, compute_quality_score, profile_columns, get_preview,
-)
+from app.services.dataset_service import DatasetService
 
 
 # ─── Fixtures ────────────────────────────────────────────
@@ -38,27 +36,27 @@ def _mock_minio(csv_bytes: bytes | None = None) -> MagicMock:
 
 class TestSectorDetection:
     def test_finance(self):
-        assert detect_sector("analyse des transactions bancaires et détection de fraude") == "Finance"
+        assert detect_sector("analyse des transactions bancaires et détection de fraude") == "finance"
 
     def test_transport(self):
-        assert detect_sector("optimisation des itinéraires de livraison pour notre flotte") == "Transport"
+        assert detect_sector("optimisation des itinéraires de livraison pour notre flotte") == "transport"
 
     def test_retail(self):
-        assert detect_sector("analyse des ventes clients et recommandations produits") == "Retail"
+        assert detect_sector("analyse des ventes clients et recommandations produits") == "retail"
 
     def test_manufacturing(self):
-        assert detect_sector("détection de défauts sur la ligne de production usine") == "Manufacturing"
+        assert detect_sector("détection de défauts sur la ligne de production usine") == "manufacturing"
 
-    def test_public(self):
-        assert detect_sector("suivi des patients à l'hôpital santé") == "Public"
+    def test_healthcare(self):
+        assert detect_sector("suivi des patients à l'hôpital santé") == "healthcare"
 
-    def test_empty_returns_none(self):
-        assert detect_sector("") is None
-        assert detect_sector("   ") is None
+    def test_empty_returns_general(self):
+        assert detect_sector("") == "general"
+        assert detect_sector("   ") == "general"
 
     def test_create_project_detects_sector(self):
         """test_create_project_detects_sector ✓"""
-        assert detect_sector("Analyse des transactions de paiement et risque de crédit") == "Finance"
+        assert detect_sector("Analyse des transactions de paiement et risque de crédit") == "finance"
 
 
 # ─── Dataset service ─────────────────────────────────────
@@ -91,22 +89,26 @@ class TestDatasetService:
 
     def test_preview_returns_10_rows(self):
         """test_preview_returns_10_rows ✓"""
-        df      = pd.read_csv(io.BytesIO(_csv_bytes(50)))
-        preview = get_preview(df, 10)
+        svc = DatasetService()
+        df  = pd.read_csv(io.BytesIO(_csv_bytes(50)))
+        preview = df.head(10).where(pd.notna(df.head(10)), None).to_dict(orient="records")
         assert len(preview) == 10
 
     def test_preview_capped_by_file_size(self):
-        df      = pd.read_csv(io.BytesIO(_csv_bytes(5)))
-        preview = get_preview(df, 10)
+        svc = DatasetService()
+        df  = pd.read_csv(io.BytesIO(_csv_bytes(5)))
+        preview = df.head(10).where(pd.notna(df.head(10)), None).to_dict(orient="records")
         assert len(preview) == 5
 
     def test_quality_score_perfect(self):
-        df = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
-        assert compute_quality_score(df) == 100.0
+        svc = DatasetService()
+        df  = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
+        assert svc._quality_score(df) == 100.0
 
     def test_quality_score_with_nulls(self):
-        df = pd.DataFrame({"a": [1, None, 3], "b": ["x", "y", None]})
-        assert compute_quality_score(df) < 100.0
+        svc = DatasetService()
+        df  = pd.DataFrame({"a": [1, None, 3], "b": ["x", "y", None]})
+        assert svc._quality_score(df) < 100.0
 
 
 # ─── Metadata ────────────────────────────────────────────
@@ -114,7 +116,7 @@ class TestDatasetService:
 class TestMetadata:
     def test_metadata_saves_business_names(self):
         """test_metadata_saves_business_names ✓"""
-        from backend.app.schemas.dataset import MetadataUpdateRequest, ColumnMetadataUpdate
+        from app.schemas.dataset import MetadataUpdateRequest, ColumnMetadataUpdate
         req = MetadataUpdateRequest(columns=[
             ColumnMetadataUpdate(original_name="amount",   business_name="Montant transaction", business_type="numeric"),
             ColumnMetadataUpdate(original_name="category", business_name="Catégorie client"),

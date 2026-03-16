@@ -6,7 +6,7 @@ import {
   AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useAppStore } from "@/stores/appStore";
-import { SECTOR_LABELS, getSuggestedQuestions } from "@/lib/mockData";
+import { SECTOR_LABELS, getSuggestedQuestions, generateMockResponse } from "@/lib/mockData";
 import { DXC_CHART_COLORS } from "@/types/app";
 import {
   Send, Download, BarChart3, Pin, Plus, MessageSquare,
@@ -19,13 +19,11 @@ import { t } from "@/lib/i18n";
 import { toast } from "sonner";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { analyzeOrchestrator, type AnalyzeResponse, type InsightChart } from "@/lib/orchestratorApi";
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import type { ChartData, Message, Entity } from "@/types/app";
-import { callOrchestrator, parseOrchestratorResponse } from "@/lib/orchestratorApi";
 
 // ── Chart renderer ─────────────────────────────────────────────────────────
 function DXCChart({ chart, style }: { chart: ChartData; style: string }) {
@@ -101,7 +99,15 @@ function PredictionTable({ predictions, lang }: { predictions: Entity[]; lang: "
               <td className="px-3 py-2">
                 <div className="flex items-center gap-2">
                   <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${e.riskScore}%`, background: e.riskScore > 80 ? "#D14600" : e.riskScore > 60 ? "#FF7E51" : "#004AAC" }} />
+                    <div
+                      className={`h-full rounded-full origin-left ${
+                        e.riskScore > 80
+                          ? "bg-dxc-red scale-x-100"
+                          : e.riskScore > 60
+                            ? "bg-dxc-melon scale-x-75"
+                            : "bg-dxc-blue scale-x-50"
+                      }`}
+                    />
                   </div>
                   <span className="text-foreground font-semibold">{e.riskScore}%</span>
                 </div>
@@ -199,7 +205,7 @@ export function NLQInterface() {
       const { text: responseText, charts, predictions } = generateMockResponse(text, safeSector);
       addMessage({ id: `s-${Date.now()}`, role: "system", content: responseText, charts, predictions, timestamp: new Date() });
       setProcessing(false);
-    }
+    }, 1200);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

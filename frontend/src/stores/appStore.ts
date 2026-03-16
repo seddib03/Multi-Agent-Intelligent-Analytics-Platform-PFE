@@ -155,6 +155,14 @@ export const useAppStore = create<AppState>()(
     {
       name: "dxc-insight-platform",
       partialize: (state) => ({
+        currentPhase: state.currentPhase,
+        onboardingStep: state.onboardingStep,
+        onboarding: state.onboarding,
+        dataset: {
+          ...state.dataset,
+          // File object is not reliably serializable in localStorage.
+          sourceCsvFile: null,
+        },
         userPreferences: state.userPreferences,
         pinnedInsights: state.pinnedInsights,
         savedProjects: state.savedProjects,

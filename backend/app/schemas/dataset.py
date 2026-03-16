@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, Any
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 # ─── Sub-models ───────────────────────────────────────────────────────────────
@@ -12,13 +12,48 @@ class ColumnProfile(BaseModel):
     unique_count:   int
     sample_values:  list[Any]
     stats:          Optional[dict] = None
+    extra_metadata: Optional[dict[str, Any]] = None
 
 
 # ─── Requests ─────────────────────────────────────────────────────────────────
 class ColumnMetadataUpdate(BaseModel):
-    original_name: str
-    business_name: Optional[str] = None
-    business_type: Optional[str] = None
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    original_name: str = Field(validation_alias=AliasChoices("original_name", "originalName"))
+    business_name: Optional[str] = Field(default=None, validation_alias=AliasChoices("business_name", "businessName"))
+    business_type: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("business_type", "semantic_type", "semanticType"),
+    )
+    description: Optional[str] = None
+    pattern: Optional[str] = None
+    nullable: Optional[bool | str] = None
+    min: Optional[Any] = Field(default=None, validation_alias=AliasChoices("min", "minimum"))
+    max: Optional[Any] = Field(default=None, validation_alias=AliasChoices("max", "maximum"))
+    enums: Optional[list[Any] | str] = None
+    date_format: Optional[str] = Field(default=None, validation_alias=AliasChoices("date_format", "dateFormat"))
+
+    def to_extra_metadata_patch(self) -> dict[str, Any]:
+        metadata: dict[str, Any] = {}
+
+        if self.pattern is not None:
+            metadata["pattern"] = self.pattern
+        if self.nullable is not None:
+            metadata["nullable"] = self.nullable
+        if self.min is not None:
+            metadata["min"] = self.min
+        if self.max is not None:
+            metadata["max"] = self.max
+        if self.enums is not None:
+            metadata["enums"] = self.enums
+        if self.date_format is not None:
+            metadata["dateFormat"] = self.date_format
+
+        for key, value in (self.model_extra or {}).items():
+            if value is not None:
+                metadata[key] = value
+
+        return metadata
 
 
 class MetadataUpdateRequest(BaseModel):
@@ -50,6 +85,12 @@ class UploadResponse(BaseModel):
     columns:           list[ColumnProfile]
 
 
+class DictionaryUploadResponse(BaseModel):
+    original_filename: str
+    stored_path:       str
+    file_size_bytes:   int
+
+
 class DatasetPreviewResponse(BaseModel):
     rows:       list[dict[str, Any]]
     total_rows: int
@@ -60,12 +101,21 @@ class DatasetColumnResponse(BaseModel):
     id:             uuid.UUID
     original_name:  str
     business_name:  Optional[str]
+    description:    Optional[str]
     detected_type:  str
     business_type:  Optional[str]
+    semantic_type:  Optional[str]
     null_percent:   Optional[float]
     unique_count:   Optional[int]
     sample_values:  Optional[list]
     stats:          Optional[dict]
+    extra_metadata: Optional[dict]
+    pattern:        Optional[Any]
+    nullable:       Optional[Any]
+    min:            Optional[Any]
+    max:            Optional[Any]
+    enums:          Optional[Any]
+    date_format:    Optional[Any]
     column_order:   int
     model_config = {"from_attributes": True}
 

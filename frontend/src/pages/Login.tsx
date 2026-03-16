@@ -9,7 +9,7 @@ import { useAppStore } from "@/stores/appStore";
 import { useAuth } from "@/hooks/useAuth";
 import { t } from "@/lib/i18n";
 import BrandLogo from "@/components/BrandLogo";
-import { listProjects, type Project } from "@/lib/projectsApi";
+import { getProjectSectorContext, listProjects, type Project } from "@/lib/projectsApi";
 
 const SUPPORTED_SECTORS = ["finance", "transport", "retail", "manufacturing", "public"] as const;
 
@@ -58,6 +58,7 @@ const Login = () => {
             onboarding: {
               ...s.onboarding,
               useCaseDescription: targetProject.use_case ?? s.onboarding.useCaseDescription,
+              sectorContext: getProjectSectorContext(targetProject) ?? s.onboarding.sectorContext,
             },
             dataset: {
               ...s.dataset,

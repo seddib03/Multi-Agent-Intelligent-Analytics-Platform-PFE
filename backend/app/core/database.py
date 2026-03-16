@@ -78,6 +78,15 @@ async def init_db_schema() -> None:
             ALTER COLUMN file_path SET NOT NULL;
         """))
 
+        await conn.execute(text("""
+            ALTER TABLE dataset_columns
+            ADD COLUMN IF NOT EXISTS description TEXT;
+        """))
+        await conn.execute(text("""
+            ALTER TABLE dataset_columns
+            ADD COLUMN IF NOT EXISTS extra_metadata JSONB;
+        """))
+
         # Old databases may still keep minio columns with NOT NULL constraints.
         await conn.execute(text("""
             DO $$
