@@ -1,6 +1,5 @@
 services:
 
-  # ─── PostgreSQL ────────────────────────────────────────
   postgres:
     image: postgres:15-alpine
     restart: unless-stopped
@@ -20,19 +19,18 @@ services:
     networks:
       - nexora_net
 
-  # ─── MinIO ─────────────────────────────────────────────
   minio:
     image: minio/minio:latest
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
     volumes:
       - minio_data:/data
     ports:
-      - "9000:9000"   # API S3
-      - "9001:9001"   # Console web
+      - "9000:9000"
+      - "9001:9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
@@ -41,8 +39,6 @@ services:
     networks:
       - nexora_net
 
-  # ─── MinIO Init ────────────────────────────────────────
-  # Crée le bucket dxc-datasets au démarrage, puis s'arrête
   minio_init:
     image: minio/mc:latest
     depends_on:
@@ -50,7 +46,7 @@ services:
         condition: service_healthy
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
       MINIO_BUCKET: ${MINIO_BUCKET:-dxc-datasets}
     entrypoint: >
       /bin/sh -c "
@@ -63,13 +59,11 @@ services:
     networks:
       - nexora_net
 
-  # ─── API ───────────────────────────────────────────────
-
   keycloak:
     image: quay.io/keycloak/keycloak:23.0
     container_name: nexora_keycloak
     restart: unless-stopped
-    command: start-dev          # mode dev — utiliser start en prod
+    command: start-dev
     environment:
       KEYCLOAK_ADMIN:          ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin123}
@@ -80,7 +74,7 @@ services:
       KC_HOSTNAME_STRICT:      false
       KC_HTTP_ENABLED:         true
     ports:
-      - "8081:8080"             # Console admin Keycloak (host 8081 to keep frontend on 8080)
+      - "8081:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,7 +85,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
-      
+
   api:
     build:
       context: .
@@ -108,7 +102,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-dxc}:${POSTGRES_PASSWORD:-dxcpassword}@postgres:5432/${POSTGRES_DB:-dxc_insight}
       MINIO_ENDPOINT: minio:9000
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
       MINIO_BUCKET: ${MINIO_BUCKET:-dxc-datasets}
       MINIO_SECURE: "false"
       KEYCLOAK_URL: ${KEYCLOAK_URL:-http://keycloak:8080}
@@ -118,19 +112,20 @@ services:
       KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:-dxc_backend}
       KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-sbZ2ol7kpC6uUrZbmmO1zTn1C8TcrIzB}
       SECRET_KEY: ${SECRET_KEY:-changeme-in-production-32chars-min}
-      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1200}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
       ENVIRONMENT: ${ENVIRONMENT:-development}
+      TEMP_UPLOAD_DIR: /shared/uploads
     ports:
-      - "8005:8000"
+      - "8000:8000"
     volumes:
-      - ./backend/app:/app/app   
+      - ./backend/app:/app/app
       - ./backend/feature3:/app/feature3
       - ./backend/alembic:/app/alembic
+      - uploads_shared:/shared/uploads
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     networks:
       - nexora_net
 
-  # ─── NLQ Context API (Sprint 1) ───────────────────────
   nlq_context_api:
     build:
       context: ./nlq_context_agent/sprint1
@@ -139,34 +134,10 @@ services:
     env_file:
       - ./nlq_context_agent/sprint1/.env
     ports:
-      - "8000:8000"
+      - "8002:8000"
     networks:
       - nexora_net
 
-  # ─── Data Preparation Agent ─────────────────────────
-  data_preparation_agent:
-    build:
-      context: ./data_preparation_agent
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    depends_on:
-      minio:
-        condition: service_healthy
-    env_file:
-      - ./data_preparation_agent/.env
-    environment:
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      MINIO_SECURE: "false"
-    ports:
-      - "8001:8000"
-    volumes:
-      - ./data_preparation_agent:/app
-    networks:
-      - nexora_net
-
-  # ─── Orchestrator ────────────────────────────────────
   orchestrator:
     build:
       context: ./orchestrator
@@ -177,35 +148,33 @@ services:
         condition: service_started
       nlq_context_api:
         condition: service_started
-      data_preparation_agent:
-        condition: service_started
-      insight_agent:
-        condition: service_started
     environment:
-      NLQ_API_URL: ${NLQ_API_URL:-http://nlq_context_api:8000}
-      DATA_PREP_API_URL: ${DATA_PREP_API_URL:-http://data_preparation_agent:8001}
-      INSIGHT_API_URL: ${INSIGHT_API_URL:-http://insight_agent:8002}
+      NLQ_CONTEXT_URL: ${NLQ_CONTEXT_URL:-http://nlq_context_api:8000}
+      NLQ_API_URL: http://nlq_context_api:8000
+      DATA_PREP_URL: ${DATA_PREP_URL:-http://data_preparation_agent:8001}
+      INSIGHT_URL: ${INSIGHT_URL:-http://insight_agent:8004}
+      INSIGHT_API_URL: http://insight_agent:8004
+      SHARED_UPLOAD_DIR: /shared/uploads
     ports:
       - "8003:8003"
     volumes:
       - ./orchestrator/app:/app/app
+      - uploads_shared:/shared/uploads
     networks:
       - nexora_net
 
-  # ─── Insight Agent API ───────────────────────────────
   insight_agent:
     build:
       context: ./insight_agent
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "8002:8002"
+      - "8004:8002"
     volumes:
-      - ./insight_agent:/app
+      - uploads_shared:/shared/uploads
     networks:
       - nexora_net
 
-  # ─── Frontend (Vite Dev) ─────────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -217,7 +186,6 @@ services:
     environment:
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
-      VITE_BACKEND_API_URL: http://localhost:8005
     ports:
       - "5173:5173"
     volumes:
@@ -229,6 +197,7 @@ services:
 volumes:
   postgres_data:
   minio_data:
+  uploads_shared:
 
 networks:
   nexora_net:
