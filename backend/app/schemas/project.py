@@ -19,6 +19,7 @@ class ProjectUpdate(BaseModel):
     name:               Optional[str]           = None
     description:        Optional[str]           = None
     use_case:           Optional[str]           = None
+    detected_sector:    Optional[str]           = None
     visual_preferences: Optional[dict]          = None
     business_rules:     Optional[str]           = None
     status:             Optional[ProjectStatus] = None

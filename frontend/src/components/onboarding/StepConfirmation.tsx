@@ -2,10 +2,20 @@ import { useState, useEffect } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { SECTOR_LABELS, generateFeatureImportance, generateEntities, SECTOR_KPIS } from "@/lib/mockData";
 import { ACCENT_THEMES } from "@/types/app";
+import type { AccentTheme } from "@/types/app";
+
+const ACCENT_TEXT_CLASS: Record<AccentTheme, string> = {
+  "royal-melon":    "text-[#004AAC]",
+  "blue-gold":      "text-[#4995FF]",
+  "midnight-peach": "text-[#0E1020]",
+  "melon-royal":    "text-[#FF7E51]",
+  "gold-blue":      "text-[#FFAE41]",
+  "sky-midnight":   "text-[#A1E6FF]",
+};
 import { Rocket } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { toast } from "sonner";
-import { analyzeOrchestrator, type AnalyzeResponse, type InsightChart } from "@/lib/orchestratorApi";
+import { callOrchestrator, type OrchestratorResponse, type ParsedOrchestratorResult } from "@/lib/orchestratorApi";
 import type { ChartData } from "@/types/app";
 
 interface LaunchStep {
@@ -28,10 +38,8 @@ export function StepConfirmation() {
   const targetCol   = dataset.columns.find((c) => c.semanticType === "target");
   const sectorContext = onboarding.sectorContext;
 
-  // when sectorContext is missing (e.g. after navigating back to settings)
-  // fall back to the dataset value so that the launch animation still shows
-  // a valid sector instead of "Unknown".
-  const displaySector = sectorContext?.sector || dataset.detectedSector || "Unknown";
+  // always use the final selected project sector for launch.
+  const displaySector = sectorInfo.label;
   const displayConfidence = sectorContext?.confidence ?? 0;
   const displayDashboardFocus = sectorContext?.dashboard_focus;
 
@@ -40,25 +48,25 @@ export function StepConfirmation() {
       label: "Sector Detection Agent", 
       agent: lang === "fr" ? "Détection du secteur ·" : "Sector detection ·", 
       detail: displaySector, 
-      result: `✅ ${displaySector} - ${ (displayConfidence * 100).toFixed(1) }%` 
+      result: ` ${displaySector} - ${ (displayConfidence * 100).toFixed(1) }%` 
     },
     { 
       label: "Orchestrator", 
       agent: lang === "fr" ? "Initialisation de l'orchestrateur ·" : "Orchestrator initialization ·", 
       detail: "Coordination des agents", 
-      result: "✅ Orchestrator ready" 
+      result: " Orchestrator ready" 
     },
     { 
       label: "Dashboard Generation", 
       agent: lang === "fr" ? "Création du dashboard ·" : "Dashboard creation ·", 
       detail: "Feature importance & Analysis", 
-      result: `✅ ${t("insightsGenerated", lang)}` 
+      result: ` ${t("insightsGenerated", lang)}` 
     },
     { 
       label: "Chatbot / NLQ Interface", 
       agent: lang === "fr" ? "Initialisation du chatbot ·" : "Chatbot initialization ·", 
       detail: "Natural Language Queries", 
-      result: "✅ NLQ Interface ready" 
+      result: " NLQ Interface ready" 
     },
   ];
 
@@ -98,9 +106,9 @@ export function StepConfirmation() {
               {i <= currentStep && (
                 <div className="space-y-1">
                   <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-dxc-melon rounded-full transition-all duration-1000" style={{ width: i < currentStep ? "100%" : "80%" }} />
+                    <div className={`h-full bg-dxc-melon rounded-full transition-all duration-1000 ${i < currentStep ? "w-full" : "w-4/5"}`} />
                   </div>
-                  {i < currentStep && <p className="text-xs text-primary font-medium">✅ {step.result}</p>}
+                  {i < currentStep && <p className="text-xs text-primary font-medium"> {step.result}</p>}
                 </div>
               )}
             </div>
@@ -124,7 +132,7 @@ export function StepConfirmation() {
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("useCase", lang)}</h3>
           <p className="text-sm text-foreground line-clamp-2">{onboarding.useCaseDescription}</p>
           <div className="flex gap-2 mt-2 flex-wrap">
-            <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded font-medium">{sectorInfo.icon} {onboarding.sectorContext?.sector || sectorInfo.label}</span>
+            <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded font-medium">{sectorInfo.icon} {sectorInfo.label}</span>
             {onboarding.sectorContext && (
               <>
                 <span className="text-xs bg-dxc-sky text-white px-2 py-0.5 rounded font-medium">📊 Confidence: {(onboarding.sectorContext.confidence * 100).toFixed(1)}%</span>
@@ -168,7 +176,8 @@ export function StepConfirmation() {
             <span>{userPreferences.darkMode ? "🌙 " + t("dark", lang) : "☀️ " + t("light", lang)}</span>
             <span>📊 {userPreferences.chartStyle}</span>
             <span>📐 {userPreferences.density}</span>
-            <span style={{ color: accentTheme.primary }}>● {accentTheme.label}</span>
+            {/* eslint-disable-next-line react/forbid-dom-props */}
+            <span className={ACCENT_TEXT_CLASS[userPreferences.accentTheme]}>● {accentTheme.label}</span>
           </div>
         </div>
       </div>

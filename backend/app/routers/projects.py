@@ -90,7 +90,10 @@ async def update_project(
     if body.status             is not None: project.status             = body.status
     if body.use_case           is not None:
         project.use_case        = body.use_case
-        project.detected_sector = detect_sector(body.use_case)
+        if body.detected_sector is None:
+            project.detected_sector = detect_sector(body.use_case)
+    if body.detected_sector is not None:
+        project.detected_sector = body.detected_sector
 
     await db.flush()
     await db.refresh(project)

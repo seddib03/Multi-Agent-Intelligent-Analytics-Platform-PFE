@@ -270,7 +270,12 @@ export const translations = {
     candidateModels: "Modèles candidats : XGBoost · LightGBM",
     estimatedDuration: "Durée estimée : ~3-4 minutes",
     detectedSector: "Secteur détecté",
-    autoDetectedNoEdit: "Détecté automatiquement — non modifiable",
+    selectedSector: "Secteur sélectionné",
+    sectorDetectedFromUseCase: "Secteur recommandé automatiquement à partir de votre use case :",
+    changeSectorAction: "Choisir un autre secteur",
+    cancelSectorSelection: "Masquer la sélection",
+    chooseAnotherSector: "Choisissez un autre secteur pris en charge",
+    sectorOverrideApplied: "Recommandation initiale :",
 
     // StepAnomalyReview
     analyzing: "Analyse en cours...",
@@ -670,7 +675,12 @@ export const translations = {
     candidateModels: "Candidate models: XGBoost · LightGBM",
     estimatedDuration: "Estimated duration: ~3-4 minutes",
     detectedSector: "Detected sector",
-    autoDetectedNoEdit: "Automatically detected — not editable",
+    selectedSector: "Selected sector",
+    sectorDetectedFromUseCase: "Sector automatically recommended from your use case:",
+    changeSectorAction: "Choose another sector",
+    cancelSectorSelection: "Hide selector",
+    chooseAnotherSector: "Choose another supported sector",
+    sectorOverrideApplied: "Initial recommendation:",
 
     // StepAnomalyReview
     analyzing: "Analyzing...",

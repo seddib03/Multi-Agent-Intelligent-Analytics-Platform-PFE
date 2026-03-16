@@ -1,8 +1,8 @@
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
-import { AlertCircle, ChevronLeft, ChevronRight, FileUp, Info, Maximize2, Minimize2, RotateCcw, X } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight, FileUp, Info, Maximize2, Minimize2, RotateCcw, X } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { SECTOR_LABELS } from "@/lib/mockData";
-import type { ColumnMetadata } from "@/types/app";
+import type { ColumnMetadata, Sector } from "@/types/app";
 import { t } from "@/lib/i18n";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -112,6 +112,13 @@ const TECHNICAL_METADATA_KEYS = new Set([
 ]);
 
 const EXTRA_KEY_ORDER = ["pattern", "nullable", "min", "max", "dateFormat", "enums"];
+const SUPPORTED_SECTORS = Object.keys(SECTOR_LABELS) as Sector[];
+
+function normalizeSector(value: string | null | undefined): Sector | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  return SUPPORTED_SECTORS.includes(normalized as Sector) ? (normalized as Sector) : null;
+}
 
 function normalizeText(value: string): string {
   return value
@@ -430,6 +437,8 @@ export function StepMetadata() {
   const [attemptedNext, setAttemptedNext] = useState(false);
   const [dictionaryInfoOpen, setDictionaryInfoOpen] = useState(false);
   const [tableFullscreen, setTableFullscreen] = useState(false);
+  const [sectorSelectorOpen, setSectorSelectorOpen] = useState(false);
+  const [sectorDropdownOpen, setSectorDropdownOpen] = useState(false);
   const dictionaryInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -438,7 +447,36 @@ export function StepMetadata() {
     setActiveDsIdx((idx) => Math.min(idx, Math.max(0, uploadedDatasets.length - 1)));
   }, [uploadedDatasets]);
 
-  const sectorInfo = SECTOR_LABELS[detectedSector] ?? { icon: "📊", label: detectedSector ?? "Général" };
+  const selectedSector = normalizeSector(detectedSector) ?? "finance";
+  const recommendedSector = normalizeSector(sectorContext?.sector) ?? selectedSector;
+  const selectedSectorInfo = SECTOR_LABELS[selectedSector] ?? { icon: "📊", label: selectedSector };
+  const recommendedSectorInfo = SECTOR_LABELS[recommendedSector] ?? { icon: "📊", label: recommendedSector };
+  const hasManualSectorOverride = selectedSector !== recommendedSector;
+  const sectorUiText = lang === "fr"
+    ? {
+        detectedSector: "Secteur détecté",
+        selectedSector: "Secteur choisi",
+        recommendedBadge: "Recommandé",
+        selectedBadge: "Sélectionné",
+        infoTitle: "Comment le secteur est choisi ?",
+        infoBody:
+          "Le secteur est détecté automatiquement à partir de votre use case. Si la recommandation ne correspond pas à votre besoin, vous pouvez détailler davantage le use case ou sélectionner le secteur manuellement.",
+        backToUseCase: "Détailler le use case",
+        changeSectorAction: "Choisir manuellement",
+        chooseAnotherSector: "Sélectionner un secteur",
+      }
+    : {
+        detectedSector: "Detected sector",
+        selectedSector: "Selected sector",
+        recommendedBadge: "Recommended",
+        selectedBadge: "Selected",
+        infoTitle: "How is the sector selected?",
+        infoBody:
+          "The sector is automatically detected from your use case. If this recommendation does not match your need, you can refine the use case or choose the sector manually.",
+        backToUseCase: "Refine use case",
+        changeSectorAction: "Choose manually",
+        chooseAnotherSector: "Select a sector",
+      };
   const activeDs   = localDatasets[activeDsIdx] ?? { fileName: "", columns: [] };
   const activeDatasetStatus = datasetStatuses[activeDsIdx] ?? createEmptyDatasetDictionaryStatus();
   const columns    = activeDs.columns;
@@ -799,6 +837,7 @@ export function StepMetadata() {
 
       await updateProject(currentProjectId, {
         business_rules: businessRules,
+        detected_sector: selectedSector,
         status: "METADATA_CONFIGURED",
       });
     } catch (error) {
@@ -1151,13 +1190,93 @@ export function StepMetadata() {
             </div>
 
             <div className="mt-4 pt-4 border-t border-dxc-royal/30 text-center space-y-1">
-              <div className="inline-block bg-dxc-royal text-white px-4 py-2 rounded-lg font-semibold text-sm">
-                {sectorInfo.icon} {t("detectedSector", lang)} : {sectorContext?.sector || sectorInfo.label}
+              <div className="inline-flex items-center gap-2 bg-dxc-royal text-white px-4 py-2 rounded-lg font-semibold text-sm">
+                {hasManualSectorOverride ? selectedSectorInfo.icon : recommendedSectorInfo.icon} {hasManualSectorOverride ? sectorUiText.selectedSector : sectorUiText.detectedSector} : {hasManualSectorOverride ? selectedSectorInfo.label : recommendedSectorInfo.label}
+                <span className="rounded bg-white/20 px-2 py-0.5 text-[10px] uppercase tracking-wide">
+                  {hasManualSectorOverride ? sectorUiText.selectedBadge : sectorUiText.recommendedBadge}
+                </span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/40 text-white/90 hover:bg-white/10"
+                      aria-label={sectorUiText.infoTitle}
+                      title={sectorUiText.infoTitle}
+                    >
+                      <Info size={12} />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent side="top" align="center" className="w-[320px] max-w-[92vw] p-3 text-left">
+                    <p className="text-sm font-semibold text-foreground">{sectorUiText.infoTitle}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">{sectorUiText.infoBody}</p>
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setOnboardingStep(1)}
+                        className="text-xs font-semibold text-primary hover:underline"
+                      >
+                        {sectorUiText.backToUseCase}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSectorSelectorOpen(true)}
+                        className="text-xs font-semibold text-primary hover:underline"
+                      >
+                        {sectorUiText.changeSectorAction}
+                      </button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
-              <p className="text-dxc-sky text-xs">{t("autoDetectedNoEdit", lang)}</p>
+
+              {sectorSelectorOpen && (
+                <div className="mx-auto mt-2 max-w-[280px] space-y-2 text-left">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="block text-[11px] text-dxc-sky">{sectorUiText.chooseAnotherSector}</label>
+                    <button
+                      type="button"
+                      onClick={() => setSectorSelectorOpen(false)}
+                      className="inline-flex h-5 w-5 items-center justify-center rounded border border-dxc-royal/40 text-dxc-sky hover:text-dxc-peach hover:bg-white/10 transition-colors"
+                      aria-label={t("closeLabel", lang)}
+                      title={t("closeLabel", lang)}
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setSectorDropdownOpen((o) => !o)}
+                      className="flex w-full items-center justify-between rounded-md border border-dxc-royal/40 bg-dxc-midnight px-2 py-1.5 text-xs text-white hover:border-dxc-peach focus:outline-none"
+                    >
+                      <span>{SECTOR_LABELS[selectedSector]?.icon} {SECTOR_LABELS[selectedSector]?.label}</span>
+                      <ChevronDown size={12} className={`ml-1 shrink-0 transition-transform ${sectorDropdownOpen ? "rotate-180" : ""}`} />
+                    </button>
+                    {sectorDropdownOpen && (
+                      <div className="absolute z-50 mt-1 max-h-44 w-full overflow-y-auto rounded-md border border-dxc-royal/40 bg-dxc-midnight shadow-lg text-xs text-white">
+                        {SUPPORTED_SECTORS.map((sector) => (
+                          <button
+                            key={sector}
+                            type="button"
+                            onClick={() => { updateDataset({ detectedSector: sector as Sector }); setSectorDropdownOpen(false); }}
+                            className={`flex w-full items-center justify-between px-2 py-1.5 text-left transition-colors hover:bg-dxc-royal/30 ${selectedSector === sector ? "bg-dxc-royal/40" : ""}`}
+                          >
+                            <span>{SECTOR_LABELS[sector].icon} {SECTOR_LABELS[sector].label}</span>
+                            {sector === recommendedSector && (
+                              <span className="ml-2 shrink-0 rounded bg-white/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-dxc-peach">
+                                {sectorUiText.recommendedBadge}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {sectorContext && (
+            {sectorContext && !hasManualSectorOverride && (
               <div className="mt-4 pt-4 border-t border-dxc-royal/30 space-y-2 text-left">
                 <p className="text-dxc-peach text-xs font-semibold">Sector Detection Agent</p>
                 <p className="text-white text-xs">

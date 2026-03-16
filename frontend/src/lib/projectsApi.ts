@@ -68,6 +68,7 @@ export interface ProjectUpdate {
   name?: string;
   description?: string;
   use_case?: string;
+  detected_sector?: string;
   visual_preferences?: Record<string, unknown>;
   business_rules?: string;
   status?: ProjectStatus;
