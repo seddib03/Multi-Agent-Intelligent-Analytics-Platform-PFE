@@ -115,6 +115,7 @@ async def upload_dataset(
         quality_score=result["quality_score"],
         preview=result["preview"],
         columns=[ColumnProfile(**c) for c in result["columns"]],
+        file_path=result["file_path"],
     )
 
 
