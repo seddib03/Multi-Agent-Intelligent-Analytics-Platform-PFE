@@ -67,6 +67,38 @@ class AgentState(TypedDict, total=False):
     completed_at: Optional[str]
 
 
+def build_import_state(
+    job_id: str,
+    dataset_path: str,
+    sector: str = "unknown",
+) -> AgentState:
+    """
+    State initial pour POST /import — sans metadata.
+    Seuls NODE 1 (ingestion) et NODE 2 (profiling) seront exécutés.
+    """
+    from datetime import datetime
+    return AgentState(
+        job_id=job_id,
+        dataset_path=dataset_path,
+        metadata_path="",
+        sector=sector,
+        raw_df=None, metadata=None, business_rules=None, bronze_path=None, duckdb_path=None,
+        profiling_summary=None,
+        profiling_html_path=None,
+        profiling_json_path=None,
+        quality_before=None,
+        business_rule_tests=None,
+        cleaning_plan=None,
+        llm_summary=None, llm_reformulations=None,
+        clean_df=None, cleaning_log=[],
+        quality_after=None,
+        silver_path=None, gold_path=None,
+        status="imported", errors=[],
+        started_at=datetime.now().isoformat(),
+        completed_at=None,
+    )
+
+
 def build_initial_state(
     job_id: str,
     dataset_path: str,

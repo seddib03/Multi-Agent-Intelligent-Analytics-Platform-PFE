@@ -50,6 +50,8 @@ def rescoring_node(state: AgentState) -> dict:
     business_rules = state.get("business_rules", [])
     br_tests = state.get("business_rule_tests")
 
+    logger.info("clean_df reçu — %d lignes x %d colonnes", len(df), len(df.columns))
+
     # ── Mettre à jour DuckDB avec les données nettoyées ───────────────────
     import duckdb
     with duckdb.connect(state["duckdb_path"]) as conn:

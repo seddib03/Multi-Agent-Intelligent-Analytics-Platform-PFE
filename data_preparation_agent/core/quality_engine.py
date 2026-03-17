@@ -66,8 +66,10 @@ def generate_dbt_schema(
     for meta in metadata:
         tests = []
         
-        if not meta.nullable:
+        if meta.nullable is False or meta.nullable is None:
             tests.append("not_null")
+            tests.append({"not_empty_string": {}})
+            tests.append({"not_null_string": {}})
         if meta.identifier:
             tests.append("unique")
         # Macros custom : paramètres passés DIRECTEMENT (pas sous "arguments")
