@@ -26,12 +26,14 @@ async def call_import(state: OrchestratorState) -> OrchestratorState:
             print(f"[import] HTTP {response.status_code} — {response.text[:300]}")
             result = response.json()
             state.data_prep_job_id = result.get("job_id", "")
-            state.data_prep_status = DataPrepStatusEnum(
-                result.get("status", "not_started")
-            )
+            raw_status = result.get("status", "not_started")
+            try:
+                state.data_prep_status = DataPrepStatusEnum(raw_status)
+            except ValueError:
+                state.data_prep_status = DataPrepStatusEnum.RUNNING
             state.processing_steps.append(
                 f"data_prep → import | job_id={state.data_prep_job_id} | "
-                f"status={state.data_prep_status.value}"
+                f"status={raw_status}"
             )
     except httpx.ConnectError:
         state.data_prep_status = DataPrepStatusEnum.FAILED
