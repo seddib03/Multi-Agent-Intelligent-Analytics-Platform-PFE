@@ -38,6 +38,12 @@ class AnomalyDecision(BaseModel):
 class ValidationRequest(BaseModel):
     decisions: list[AnomalyDecision]
 
+from datetime import datetime, date
+
+def _serial(obj):
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    raise TypeError(f"Type {type(obj)} non sérialisable")
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 
@@ -75,7 +81,7 @@ async def import_dataset(
         sector=sector,
     )
 
-    config = {"configurable": {"thread_id": job_id}}
+    config = {"configurable": {"thread_id": f"import_{job_id}"}}
     try:
         state = import_graph.invoke(initial_state, config=config)
     except Exception as e:
@@ -105,9 +111,9 @@ async def prepare(
     metadata: UploadFile = File(...),
 ) -> JSONResponse:
     # ── 1. Lire le state existant depuis l'import_graph ───────────────────
-    config = {"configurable": {"thread_id": job_id}}
+    config_import = {"configurable": {"thread_id": f"import_{job_id}"}}
     try:
-        snapshot = import_graph.get_state(config)
+        snapshot = import_graph.get_state(config_import)
         if not snapshot or not snapshot.values:
             raise ValueError("State vide")
         existing_state = snapshot.values
@@ -162,7 +168,8 @@ async def prepare(
 
     # ── 4. Lancer le prep graph (NODE 3 → NODE 5, interrupt avant cleaning)
     try:
-        state = agent_graph.invoke(prep_state, config=config)
+        config_agent = {"configurable": {"thread_id": f"agent_{job_id}"}}
+        state = agent_graph.invoke(prep_state, config=config_agent)
     except Exception as e:
         logger.error("Erreur pipeline prep %s : %s", job_id, e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -210,13 +217,35 @@ async def get_plan(job_id: str) -> JSONResponse:
 
 @app.post("/jobs/{job_id}/validate")
 async def validate_plan(job_id: str, payload: ValidationRequest) -> JSONResponse:
-    config   = {"configurable": {"thread_id": job_id}}
-    snapshot = _get_snapshot(job_id, config)
+    config_agent = {"configurable": {"thread_id": f"agent_{job_id}"}}
+    config_import = {"configurable": {"thread_id": f"import_{job_id}"}}
+    
+    snapshot = _get_snapshot(job_id, config_agent)
     state    = snapshot.values
 
     cleaning_plan = state.get("cleaning_plan")
     if not cleaning_plan:
         raise HTTPException(status_code=400, detail="Aucun plan à valider")
+
+    # ── Récupérer raw_df depuis import_graph ──────────────────────────────
+    # raw_df est dans import_graph (thread import_{job_id})
+    # pas dans agent_graph
+    raw_df = state.get("raw_df")
+    if not raw_df or not raw_df.get("columns"):
+        # Fallback : lire depuis import_graph
+        try:
+            import_snapshot = import_graph.get_state(config_import)
+            if import_snapshot and import_snapshot.values:
+                raw_df = import_snapshot.values.get("raw_df")
+                logger.info("raw_df récupéré depuis import_graph pour validate")
+        except Exception as e:
+            logger.error("Impossible de récupérer raw_df depuis import_graph : %s", e)
+
+    if not raw_df or not raw_df.get("columns"):
+        raise HTTPException(
+            status_code=400,
+            detail="raw_df introuvable — relancez POST /import"
+        )
 
     decisions_map = {d.anomaly_id: d for d in payload.decisions}
 
@@ -241,11 +270,17 @@ async def validate_plan(job_id: str, payload: ValidationRequest) -> JSONResponse
         if dec.params:
             anomaly.user_params = dec.params
 
-    cleaning_plan.status = "validated"
-    agent_graph.update_state(config, {"cleaning_plan": cleaning_plan}, as_node="strategy")
-
+    cleaning_plan.status = "validated" 
+    agent_graph.update_state(
+        config_agent, 
+        {
+            "cleaning_plan": cleaning_plan,
+            "raw_df": raw_df,
+        }, 
+        as_node="strategy"
+    )
     try:
-        final_state = agent_graph.invoke(None, config=config)
+        final_state = agent_graph.invoke(None, config=config_agent)
     except Exception as e:
         logger.error("Erreur reprise %s : %s", job_id, e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -261,7 +296,7 @@ async def validate_plan(job_id: str, payload: ValidationRequest) -> JSONResponse
     qb_scores = qb_dict.get("global_scores", {}) if qb_dict else {}
     qa_scores = qa_dict.get("global_scores", {}) if qa_dict else {}
 
-    return JSONResponse({
+    response_data = {
         "job_id":  job_id,
         "status":  final_state.get("status"),
         "sector":  final_state.get("sector"),
@@ -295,15 +330,14 @@ async def validate_plan(job_id: str, payload: ValidationRequest) -> JSONResponse
             "silver": final_state.get("silver_path"),
             "gold":   final_state.get("gold_path"),
         },
-        "completed_at": final_state.get("completed_at"),
-    })
-
+    }
+    return JSONResponse(content=json.loads(json.dumps(response_data, default=_serial)))
 
 # ── GET /jobs/{job_id}/status ─────────────────────────────────────────────────
 
 @app.get("/jobs/{job_id}/status")
 async def get_status(job_id: str) -> JSONResponse:
-    config   = {"configurable": {"thread_id": job_id}}
+    config   = {"configurable": {"thread_id": f"agent_{job_id}"}}
     snapshot = _get_snapshot(job_id, config)
     state    = snapshot.values
     return JSONResponse({
@@ -358,16 +392,17 @@ async def get_profiling_json(
     Tente de lire depuis le State d'abord, puis MinIO.
     """
     summary = None
-    config  = {"configurable": {"thread_id": job_id}}
-    
+    config_import  = {"configurable": {"thread_id": f"import_{job_id}"}}
+    config_agent   = {"configurable": {"thread_id": f"agent_{job_id}"}}
+
     try:
         # 1. Tenter depuis le State (import_graph ou agent_graph)
         try:
-            snapshot = import_graph.get_state(config)
+            snapshot = import_graph.get_state(config_import)
             if snapshot and snapshot.values:
                 summary = snapshot.values.get("profiling_summary")
             if not summary:
-                snapshot = agent_graph.get_state(config)
+                snapshot = agent_graph.get_state(config_agent)
                 if snapshot and snapshot.values:
                     summary = snapshot.values.get("profiling_summary")
             if summary:

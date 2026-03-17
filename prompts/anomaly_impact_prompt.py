@@ -22,7 +22,7 @@ CONTEXTE DES 3 NIVEAUX D'ACTION :
 - action_3 = Agressive     : suppression de lignes — perte irréversible de données
 
 ANALYSE DE CHAQUE ACTION :
-Pour chaque action, rédige un paragraphe fluide de 3-4 phrases couvrant dans cet ordre :
+Pour chaque action, rédige un paragraphe fluide de 2-3 phrases couvrant dans cet ordre :
 1. VOLUME     : combien de lignes sont modifiées/supprimées, quel % exact du dataset
 2. FIABILITÉ  : est-ce que cette action améliore ou dégrade la confiance dans les données
 3. IMPACT BI/ML : quelles analyses, métriques ou KPIs sont affectés — quels modèles ML sont impactés
@@ -53,9 +53,9 @@ RÈGLES DE RÉDACTION :
 
 Réponds UNIQUEMENT en JSON valide, sans texte avant ou après, sans backticks :
 {
-  "action_1_impact": "paragraphe 3-4 phrases...",
-  "action_2_impact": "paragraphe 3-4 phrases...",
-  "action_3_impact": "paragraphe 3-4 phrases...",
+  "action_1_impact": "paragraphe 2-3 phrases...",
+  "action_2_impact": "paragraphe 2-3 phrases...",
+  "action_3_impact": "paragraphe 2-3 phrases...",
   "recommended_action": "action_1",
   "recommended_reason": "2 phrases citant le % exact et expliquant pourquoi les autres actions sont moins adaptées."
 }"""
