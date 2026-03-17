@@ -51,6 +51,7 @@ class ExecutionTypeEnum(str, Enum):
 # Data preparation for agent execution
 class DataPrepStatusEnum(str, Enum):
     NOT_STARTED        = "not_started"
+    IMPORTED           = "imported"
     RUNNING            = "running"
     WAITING_VALIDATION = "waiting_validation"  # Human-in-the-Loop
     COMPLETED          = "completed"

@@ -27,9 +27,10 @@ import type { ChartData, Message, Entity } from "@/types/app";
 
 // ── Chart renderer ─────────────────────────────────────────────────────────
 function DXCChart({ chart, style }: { chart: ChartData; style: string }) {
+  const safeDataKeys = chart.dataKeys?.length ? chart.dataKeys : ["value"];
   const effectiveType =
     style === "heatmap" ? "bar"
-    : style === "pie" && chart.dataKeys.length > 1 ? "bar"
+    : style === "pie" && safeDataKeys.length > 1 ? "bar"
     : style;
   const type = effectiveType as string;
   return (
@@ -42,7 +43,7 @@ function DXCChart({ chart, style }: { chart: ChartData; style: string }) {
             <XAxis dataKey="name" tick={{ fontSize: 10 }} />
             <YAxis tick={{ fontSize: 10 }} />
             <Tooltip />
-            {chart.dataKeys.map((key, i) => (
+            {safeDataKeys.map((key, i) => (
               <Bar key={key} dataKey={key} fill={DXC_CHART_COLORS[i % DXC_CHART_COLORS.length]} radius={[4, 4, 0, 0]} />
             ))}
           </BarChart>
@@ -68,7 +69,7 @@ function DXCChart({ chart, style }: { chart: ChartData; style: string }) {
           </AreaChart>
         ) : (
           <PieChart>
-            <Pie data={chart.data} dataKey={chart.dataKeys[0]} nameKey="name" cx="50%" cy="50%" innerRadius={30} outerRadius={60}>
+            <Pie data={chart.data} dataKey={safeDataKeys[0]} nameKey="name" cx="50%" cy="50%" innerRadius={30} outerRadius={60}>
               {chart.data.map((_, i) => (<Cell key={i} fill={DXC_CHART_COLORS[i % DXC_CHART_COLORS.length]} />))}
             </Pie>
             <Tooltip />
@@ -164,7 +165,6 @@ export function NLQInterface() {
   const [historyOpen, setHistoryOpen]         = useState(false);
   const [sidebarOpen, setSidebarOpen]         = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [analysisFile, setAnalysisFile] = useState<File | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const isMobile   = useIsMobile();
   useDarkMode();
@@ -185,25 +185,62 @@ export function NLQInterface() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = (text: string) => {
-    if (!text.trim()) return;
-    const userMsg: Message = { id: `u-${Date.now()}`, role: "user", content: text, timestamp: new Date() };
+  // ── Métadonnées contextuelles envoyées à l'orchestrateur ─────────────────
+  const buildMetadata = () => ({
+    sector:       rawSector ?? "general",
+    use_case:     onboarding.useCaseDescription,
+    dataset_name: dataset.fileName,
+    row_count:    dataset.rowCount,
+    column_count: dataset.columnCount,
+    columns:      dataset.columns.map((c) => ({
+      name:         c.businessName || c.originalName,
+      type:         c.semanticType,
+      original:     c.originalName,
+    })),
+  });
+
+  // ── Send handler ──────────────────────────────────────────────────────────
+  const handleSend = async (text: string) => {
+    if (!text.trim() || processing) return;
+
+    const userMsg: Message = {
+      id:        `u-${Date.now()}`,
+      role:      "user",
+      content:   text,
+      timestamp: new Date(),
+    };
     addMessage(userMsg);
     setInput("");
     setProcessing(true);
-    setTimeout(() => {
-      if (!safeSector) {
-        addMessage({
-          id: `s-${Date.now()}`,
-          role: "system",
-          content: "Le secteur n'a pas encore ete detecte. Veuillez revenir a l'etape 1.",
-          timestamp: new Date(),
-        });
-        setProcessing(false);
-        return;
-      }
-      const { text: responseText, charts, predictions } = generateMockResponse(text, safeSector);
-      addMessage({ id: `s-${Date.now()}`, role: "system", content: responseText, charts, predictions, timestamp: new Date() });
+
+    try {
+      const csvPath = (useAppStore.getState().dataset as any)?.filePath ?? null;
+      const raw    = await callOrchestrator(text.trim(), buildMetadata(), csvPath);
+      const parsed = parseOrchestratorResponse(raw);
+
+      // Si l'orchestrateur demande une clarification, afficher la question
+      const content = parsed.needsClarification && parsed.clarificationQuestion
+        ? `${parsed.text}\n\n❓ ${parsed.clarificationQuestion}`
+        : parsed.text;
+
+      addMessage({
+        id:          `s-${Date.now()}`,
+        role:        "system",
+        content,
+        charts:      parsed.charts,
+        predictions: parsed.predictions,
+        timestamp:   new Date(),
+      });
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Erreur de connexion à l'orchestrateur";
+      addMessage({
+        id:        `e-${Date.now()}`,
+        role:      "system",
+        content:   `⚠️ ${errorMsg}`,
+        timestamp: new Date(),
+      });
+      toast.error("Orchestrateur indisponible");
+    } finally {
       setProcessing(false);
     }, 1200);
   };
@@ -297,7 +334,7 @@ export function NLQInterface() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <button onClick={() => setPhase(2)} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-dxc-royal text-dxc-white rounded-lg text-xs font-medium hover:bg-dxc-blue transition-colors min-h-[36px]">
+          <button onClick={() => setPhase(3)} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-dxc-royal text-dxc-white rounded-lg text-xs font-medium hover:bg-dxc-blue transition-colors min-h-[36px]">
             <BarChart3 size={12} /> {t("dashboard", lang)}
           </button>
           <AccountMenu variant="dark" />
@@ -399,18 +436,6 @@ export function NLQInterface() {
 
         <div className="bg-card border-t border-border p-4">
           <div className="max-w-3xl mx-auto flex gap-3">
-            <label className="flex items-center justify-center w-11 h-11 rounded-full border border-border bg-muted hover:bg-muted/80 cursor-pointer shrink-0 self-center min-w-[44px] min-h-[44px]" aria-label="Uploader un CSV">
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0] ?? null;
-                  setAnalysisFile(file);
-                }}
-              />
-              <Plus size={16} />
-            </label>
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -429,11 +454,6 @@ export function NLQInterface() {
               <Send size={16} />
             </button>
           </div>
-          {analysisFile && (
-            <p className="text-xs text-muted-foreground text-center mt-2">
-              CSV sélectionné: {analysisFile.name}
-            </p>
-          )}
           <p className="text-xs text-muted-foreground text-center mt-1">
             {isMobile ? t("enterToSend", lang) : t("ctrlEnterSend", lang)}
           </p>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { SECTOR_LABELS, generateFeatureImportance, generateEntities, SECTOR_KPIS } from "@/lib/mockData";
 import { ACCENT_THEMES } from "@/types/app";
@@ -14,8 +14,10 @@ const ACCENT_TEXT_CLASS: Record<AccentTheme, string> = {
 };
 import { Rocket } from "lucide-react";
 import { t } from "@/lib/i18n";
+import { callOrchestrator, parseOrchestratorResponse } from "@/lib/orchestratorApi";
+import type { OrchestratorMeta } from "@/lib/orchestratorApi";
 import { toast } from "sonner";
-import { callOrchestrator, type OrchestratorResponse, type ParsedOrchestratorResult } from "@/lib/orchestratorApi";
+import {  type OrchestratorResponse, type ParsedOrchestratorResult } from "@/lib/orchestratorApi";
 import type { ChartData } from "@/types/app";
 
 interface LaunchStep {
@@ -26,11 +28,14 @@ interface LaunchStep {
 }
 
 export function StepConfirmation() {
-  const { onboarding, dataset, userPreferences, setOnboardingStep, setPhase, updateModelResults, updatePreferences, clearMessages, addMessage } = useAppStore();
+  const {
+    onboarding, dataset, userPreferences, currentProjectId,
+    setOnboardingStep, setPhase, updateModelResults, updatePreferences, addMessage,
+  } = useAppStore();
   const lang = userPreferences.language;
-  const [launching, setLaunching] = useState(false);
+  const [launching, setLaunching]     = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);
-  const [done, setDone] = useState(false);
+  const [done, setDone]               = useState(false);
 
   const sectorInfo  = SECTOR_LABELS[dataset.detectedSector] ?? { icon: "📊", label: dataset.detectedSector ?? "Général" };
   const safeSector  = dataset.detectedSector in SECTOR_LABELS ? dataset.detectedSector : "finance";
@@ -43,54 +48,79 @@ export function StepConfirmation() {
   const displayConfidence = sectorContext?.confidence ?? 0;
   const displayDashboardFocus = sectorContext?.dashboard_focus;
 
-  const LAUNCH_STEPS: LaunchStep[] = [
-    { 
-      label: "Sector Detection Agent", 
-      agent: lang === "fr" ? "Détection du secteur ·" : "Sector detection ·", 
-      detail: displaySector, 
-      result: ` ${displaySector} - ${ (displayConfidence * 100).toFixed(1) }%` 
-    },
-    { 
-      label: "Orchestrator", 
-      agent: lang === "fr" ? "Initialisation de l'orchestrateur ·" : "Orchestrator initialization ·", 
-      detail: "Coordination des agents", 
-      result: " Orchestrator ready" 
-    },
-    { 
-      label: "Dashboard Generation", 
-      agent: lang === "fr" ? "Création du dashboard ·" : "Dashboard creation ·", 
-      detail: "Feature importance & Analysis", 
-      result: ` ${t("insightsGenerated", lang)}` 
-    },
-    { 
-      label: "Chatbot / NLQ Interface", 
-      agent: lang === "fr" ? "Initialisation du chatbot ·" : "Chatbot initialization ·", 
-      detail: "Natural Language Queries", 
-      result: " NLQ Interface ready" 
-    },
+
+  const LAUNCH_STEPS = [
+    { label: "Generic Predictive Agent (AutoML)", detail: "Test XGBoost · LightGBM · Logistic Regression" },
+    { label: "Insight Agent",                     detail: "Génération des métriques · Feature importance" },
   ];
 
-  const handleLaunch = () => { setLaunching(true); setCurrentStep(0); };
+  const handleLaunch = async () => {
+    setLaunching(true);
+    setCurrentStep(0);
 
-  useEffect(() => {
-    if (currentStep < 0 || currentStep >= LAUNCH_STEPS.length) return;
-    const timer = setTimeout(() => {
-      if (currentStep < LAUNCH_STEPS.length - 1) {
-        setCurrentStep(currentStep + 1);
-      } else {
-        const fi       = generateFeatureImportance(dataset.columns);
-        const entities = generateEntities(safeSector);
-        updateModelResults({ featureImportance: fi, topRiskyEntities: entities });
-        const kpis = SECTOR_KPIS[safeSector] ?? [];
-        updatePreferences({ visibleKPIs: kpis.map((k) => k.key) });
-        setDone(true);
-        // after launch sequence complete move to dashboard (phase 2)
-        setTimeout(() => setPhase(2), 1500);
+    // Récupérer le chemin CSV persisté dans le store
+    const csvPath = (dataset as any)?.filePath ?? null;
+
+    const meta: OrchestratorMeta = {
+      sector:       dataset.detectedSector ?? "general",
+      use_case:     onboarding.useCaseDescription,
+      dataset_name: dataset.fileName,
+      row_count:    dataset.rowCount,
+      column_count: dataset.columnCount,
+      columns:      dataset.columns.map((c) => ({
+        name:     c.businessName || c.originalName,
+        type:     c.semanticType,
+        original: c.originalName,
+      })),
+    };
+
+    try {
+      const raw    = await callOrchestrator(onboarding.useCaseDescription, meta, csvPath);
+      const parsed = parseOrchestratorResponse(raw);
+
+      setCurrentStep(1);
+      await new Promise((r) => setTimeout(r, 1800));
+
+      // Résultats ML
+      const fi       = generateFeatureImportance(dataset.columns);
+      const entities = generateEntities(safeSector);
+      updateModelResults({ featureImportance: fi, topRiskyEntities: entities });
+      const kpis = SECTOR_KPIS[safeSector] ?? [];
+      updatePreferences({ visibleKPIs: kpis.map((k) => k.key) });
+
+      // Premier message de l'orchestrateur dans le chat
+      if (parsed.text) {
+        addMessage({
+          id:        `orch-${Date.now()}`,
+          role:      "system",
+          content:   parsed.text,
+          charts:    parsed.charts,
+          timestamp: new Date(),
+        });
       }
-    }, 1800);
-    return () => clearTimeout(timer);
-  }, [currentStep]);
 
+      setDone(true);
+      setTimeout(() => setPhase(2), 1500);
+
+    } catch (err) {
+      // Fallback silencieux si orchestrateur down
+      console.warn("Orchestrateur indisponible — fallback mock", err);
+      setCurrentStep(1);
+      await new Promise((r) => setTimeout(r, 1800));
+      const fi       = generateFeatureImportance(dataset.columns);
+      const entities = generateEntities(safeSector);
+      updateModelResults({ featureImportance: fi, topRiskyEntities: entities });
+      const kpis = SECTOR_KPIS[safeSector] ?? [];
+      updatePreferences({ visibleKPIs: kpis.map((k) => k.key) });
+      setDone(true);
+      setTimeout(() => setPhase(2), 1500);
+    }
+  };
+ 
+
+
+
+  // ── Animation lancement ────────────────────────────────────────────────
   if (launching) {
     return (
       <div className="max-w-2xl mx-auto py-12 space-y-6 animate-fade-in">
@@ -102,13 +132,13 @@ export function StepConfirmation() {
                 <span className="text-sm font-bold text-foreground">{t("stepLabel", lang)} {i + 1}</span>
                 <span className="text-sm font-semibold text-primary">{step.label}</span>
               </div>
-              <p className="text-xs text-muted-foreground">{step.agent} {step.detail}</p>
+              <p className="text-xs text-muted-foreground">{step.detail}</p>
               {i <= currentStep && (
                 <div className="space-y-1">
                   <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div className={`h-full bg-dxc-melon rounded-full transition-all duration-1000 ${i < currentStep ? "w-full" : "w-4/5"}`} />
+                    <div className="h-full bg-dxc-melon rounded-full transition-all duration-1000" style={{ width: i < currentStep ? "100%" : "60%" }} />
                   </div>
-                  {i < currentStep && <p className="text-xs text-primary font-medium"> {step.result}</p>}
+                  {i < currentStep && <p className="text-xs text-primary font-medium">✅ Terminé</p>}
                 </div>
               )}
             </div>
@@ -123,6 +153,7 @@ export function StepConfirmation() {
     );
   }
 
+  // ── Récapitulatif ──────────────────────────────────────────────────────
   return (
     <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
       <h2 className="text-xl font-bold text-primary">{t("confirmationTitle", lang)}</h2>
@@ -164,9 +195,11 @@ export function StepConfirmation() {
         <div className="p-5">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t("features", lang)}</h3>
           <div className="flex flex-wrap gap-1.5">
-            {dataset.columns.filter((c) => c.semanticType !== "identifier" && c.semanticType !== "target" && c.semanticType !== "ignore").map((c) => (
-              <span key={c.originalName} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">{c.businessName}</span>
-            ))}
+            {dataset.columns
+              .filter((c) => c.semanticType !== "identifier" && c.semanticType !== "target" && c.semanticType !== "ignore")
+              .map((c) => (
+                <span key={c.originalName} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">{c.businessName}</span>
+              ))}
           </div>
         </div>
 

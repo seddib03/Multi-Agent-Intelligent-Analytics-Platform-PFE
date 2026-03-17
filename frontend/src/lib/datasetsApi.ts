@@ -47,6 +47,7 @@ export interface UploadResponse {
   quality_score:     number;
   preview:           Record<string, unknown>[];
   columns:           ColumnProfile[];
+  file_path?:         string;
 }
 
 export interface DictionaryUploadResponse {
