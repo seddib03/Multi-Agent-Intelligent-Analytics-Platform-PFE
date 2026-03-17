@@ -13,6 +13,8 @@ POLL_INTERVAL    = 5
 
 
 def data_prep_node(state: OrchestratorState) -> OrchestratorState:
+    """state.processing_steps.append("data_prep_node → bypassed")
+    return state"""
     """
     Node 3 — Data Preparation Agent (Collègue 2).
 
@@ -40,6 +42,10 @@ def data_prep_node(state: OrchestratorState) -> OrchestratorState:
     if state.data_prep_status == DataPrepStatusEnum.FAILED:
         state.errors.append("Data Prep /import failed — continuing without prep")
         return state
+
+    # IMPORTED = succès de l'étape 1
+    if state.data_prep_status == DataPrepStatusEnum.IMPORTED:
+        state.data_prep_status = DataPrepStatusEnum.RUNNING
 
     # ── Étape 2 : Qualité + metadata ──────────────────────────────
     # Seulement si la metadata est disponible
