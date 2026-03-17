@@ -136,7 +136,7 @@ function ProcessingIndicator() {
       setActive((prev) => (prev < steps.length - 1 ? prev + 1 : prev));
     }, 300);
     return () => clearInterval(interval);
-  }, []);
+  }, [steps.length]);
   return (
     <div className="flex items-center gap-1 py-3" role="status" aria-live="polite" aria-label="Traitement en cours">
       {steps.map((s, i) => (
@@ -214,7 +214,9 @@ export function NLQInterface() {
     setProcessing(true);
 
     try {
-      const csvPath = (useAppStore.getState().dataset as any)?.filePath ?? null;
+      const csvPath = (
+        useAppStore.getState().dataset as { filePath?: string }
+      ).filePath ?? null;
       const raw    = await callOrchestrator(text.trim(), buildMetadata(), csvPath);
       const parsed = parseOrchestratorResponse(raw);
 
@@ -242,7 +244,7 @@ export function NLQInterface() {
       toast.error("Orchestrateur indisponible");
     } finally {
       setProcessing(false);
-    }, 1200);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

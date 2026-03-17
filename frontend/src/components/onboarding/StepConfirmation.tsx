@@ -59,7 +59,7 @@ export function StepConfirmation() {
     setCurrentStep(0);
 
     // Récupérer le chemin CSV persisté dans le store
-    const csvPath = (dataset as any)?.filePath ?? null;
+    const csvPath = (dataset as { filePath?: string }).filePath ?? null;
 
     const meta: OrchestratorMeta = {
       sector:       dataset.detectedSector ?? "general",
@@ -136,7 +136,7 @@ export function StepConfirmation() {
               {i <= currentStep && (
                 <div className="space-y-1">
                   <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-dxc-melon rounded-full transition-all duration-1000" style={{ width: i < currentStep ? "100%" : "60%" }} />
+                    <div className={`h-full bg-dxc-melon rounded-full transition-all duration-1000 ${i < currentStep ? "w-full" : "w-3/5"}`} />
                   </div>
                   {i < currentStep && <p className="text-xs text-primary font-medium">✅ Terminé</p>}
                 </div>
@@ -209,7 +209,6 @@ export function StepConfirmation() {
             <span>{userPreferences.darkMode ? "🌙 " + t("dark", lang) : "☀️ " + t("light", lang)}</span>
             <span>📊 {userPreferences.chartStyle}</span>
             <span>📐 {userPreferences.density}</span>
-            {/* eslint-disable-next-line react/forbid-dom-props */}
             <span className={ACCENT_TEXT_CLASS[userPreferences.accentTheme]}>● {accentTheme.label}</span>
           </div>
         </div>

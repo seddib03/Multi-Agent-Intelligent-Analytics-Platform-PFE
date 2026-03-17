@@ -32,7 +32,7 @@ function toSemanticType(detected: string): SemanticType {
 }
 
 export function StepUpload() {
-  const { updateDataset, setOnboardingStep, userPreferences } = useAppStore();
+  const { dataset, updateDataset, setOnboardingStep, userPreferences } = useAppStore();
   const lang = userPreferences.language;
 
   const restoredUploadedDatasets: StoredUploadedDataset[] =
@@ -62,7 +62,7 @@ export function StepUpload() {
 
   const [uploading, setUploading]         = useState(false);
   const [progress, setProgress]           = useState(0);
-  const [files, setFiles]                 = useState<UploadedFile[]>([]);
+  const [files, setFiles]                 = useState<UploadedFile[]>(restoredFiles);
   const [activeFileIdx, setActiveFileIdx] = useState(0);
   const [error, setError]                 = useState<string | null>(null);
 
@@ -216,7 +216,11 @@ export function StepUpload() {
             <span>Upload en cours…</span>
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
-            <div className="h-full bg-dxc-melon rounded-full transition-all duration-200" style={{ width: `${progress}%` }} />
+            <progress
+              className="h-full w-full [&::-webkit-progress-bar]:bg-transparent [&::-webkit-progress-value]:bg-dxc-melon [&::-moz-progress-bar]:bg-dxc-melon"
+              value={progress}
+              max={100}
+            />
           </div>
           <p className="text-xs text-muted-foreground text-center">{progress}%</p>
         </div>

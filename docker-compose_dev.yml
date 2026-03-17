@@ -135,7 +135,6 @@ services:
       - ./nlq_context_agent/sprint1/.env
     ports:
       - "8002:8000"
-      - "8000:8000"
     networks:
       - nexora_net
 

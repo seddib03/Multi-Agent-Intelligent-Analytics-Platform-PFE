@@ -1,4 +1,4 @@
-import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight, FileUp, Info, Maximize2, Minimize2, RotateCcw, X } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { SECTOR_LABELS } from "@/lib/mockData";
@@ -425,9 +425,13 @@ export function StepMetadata() {
   const { detectedSector, businessRules } = dataset;
   const sectorContext = onboarding.sectorContext;
 
-  const uploadedDatasets: UploadedDataset[] =
-    (dataset as never as { uploadedDatasets?: UploadedDataset[] })
-      .uploadedDatasets ?? [{ fileName: dataset.fileName, columns: dataset.columns, datasetId: undefined }];
+  const uploadedDatasets = useMemo<UploadedDataset[]>(
+    () => (
+      (dataset as never as { uploadedDatasets?: UploadedDataset[] })
+        .uploadedDatasets ?? [{ fileName: dataset.fileName, columns: dataset.columns, datasetId: undefined }]
+    ),
+    [dataset],
+  );
 
   const [activeDsIdx, setActiveDsIdx] = useState(0);
   const [localDatasets, setLocalDatasets] = useState(uploadedDatasets);
