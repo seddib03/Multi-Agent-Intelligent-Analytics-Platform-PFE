@@ -37,7 +37,23 @@ def _load_df(df_dict: dict) -> pd.DataFrame:
 def cleaning_node(state: AgentState) -> dict:
     logger.info(">>> NODE 6 : Cleaning — démarrage")
 
-    df            = _load_df(state["raw_df"])
+    raw_df_dict = state.get("raw_df")
+    logger.info(
+        "raw_df dans state — type: %s | colonnes: %s | lignes: %s",
+        type(raw_df_dict).__name__,
+        raw_df_dict.get("columns") if isinstance(raw_df_dict, dict) else "N/A",
+        len(raw_df_dict.get("data", [])) if isinstance(raw_df_dict, dict) else "N/A",
+    )
+
+    df = _load_df(raw_df_dict)
+
+    if df.empty:
+        logger.error("DataFrame vide — raw_df absent ou mal transmis depuis import_graph")
+        return {
+            "status": "error",
+            "errors": ["raw_df vide dans cleaning_node — vérifier transmission import→agent graph"],
+        }
+
     cleaning_plan = state["cleaning_plan"]
     cleaning_log  = list(state.get("cleaning_log", []))
 

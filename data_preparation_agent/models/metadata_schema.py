@@ -27,7 +27,7 @@ class ColumnMeta:
     type: str  # "int", "float", "string", "date", "bool"
 
     # La colonne peut-elle contenir des nulls ?
-    nullable: bool = True
+    nullable: Optional[bool] = None
 
     # Est-ce un identifiant unique ? (vérifié pour Uniqueness)
     identifier: bool = False
@@ -117,7 +117,7 @@ def parse_metadata(raw: list[dict]) -> list[ColumnMeta]:
             column_name=col_dict["column_name"],
             business_name=col_dict.get("business_name", col_dict["column_name"]),
             type=col_dict["type"],
-            nullable=bool(col_dict.get("nullable", True)),
+            nullable=bool(col_dict["nullable"]) if "nullable" in col_dict else None,
             identifier=bool(col_dict.get("identifier", False)),
             pattern=col_dict.get("pattern"),
             min=float(col_dict["min"]) if col_dict.get("min") is not None else None,
