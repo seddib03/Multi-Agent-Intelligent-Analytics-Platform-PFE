@@ -1,0 +1,7 @@
+flight_id,delay_minutes,gate,satisfaction_score,route,passenger_count,departure_date,status
+1,15,A1,4.2,CMN-CDG,180,2026-01-15,on_time
+2,0,B2,4.8,CMN-MAD,150,2026-01-15,on_time
+3,-5,C3,3.1,CMN-LHR,200,2026-01-16,on_time
+4,120,A1,2.5,CMN-CDG,175,2026-01-16,delayed
+5,45,,4.0,CMN-MAD,160,2026-01-17,delayed
+6,999,B2,5.1,CMN-LHR,190,2026-01-17,delayed
