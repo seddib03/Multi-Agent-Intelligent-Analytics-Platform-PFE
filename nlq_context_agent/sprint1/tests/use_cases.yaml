@@ -1,0 +1,1055 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# BASE DE TEST — 100 Use Cases
+# PFE DXC Technology — Intelligence Analytics Platform
+# Remarque encadrant R3 : base de test pour évaluation LLM-as-judge
+#
+# Structure :
+#   sector    : secteur concerné
+#   id        : identifiant unique (SECTOR-XXX)
+#   intent    : intent attendu (ground truth)
+#   question  : question posée en langage naturel
+#   language  : langue de la question (fr | ar | en)
+#   expected  : éléments attendus dans la réponse (pour le juge LLM)
+#   tags      : catégories pour filtrage
+# ══════════════════════════════════════════════════════════════════════════════
+
+use_cases:
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # SECTEUR : TRANSPORT (20 cas)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  - id: TRP-001
+    sector: transport
+    intent: aggregation
+    language: fr
+    question: "Quel est le retard moyen sur l'ensemble des vols ce mois ?"
+    expected:
+      kpi: "Average Delay"
+      contains: ["retard", "moyen", "minutes"]
+      sql_hint: "AVG"
+      chart: ["kpi_card", "bar_chart"]
+    tags: [kpi, delay, monthly]
+
+  - id: TRP-002
+    sector: transport
+    intent: aggregation
+    language: en
+    question: "What is the on-time performance rate for this quarter?"
+    expected:
+      kpi: "On-Time Performance"
+      contains: ["on-time", "performance", "%"]
+      sql_hint: "AVG"
+      chart: ["kpi_card", "gauge"]
+    tags: [kpi, otp, quarterly]
+
+  - id: TRP-003
+    sector: transport
+    intent: sql
+    language: fr
+    question: "Donne-moi la liste des vols avec plus de 60 minutes de retard"
+    expected:
+      contains: ["SELECT", "WHERE", "delay_minutes", "60"]
+      sql_hint: "SELECT"
+      chart: ["table"]
+    tags: [sql, delay, filter]
+
+  - id: TRP-004
+    sector: transport
+    intent: comparison
+    language: fr
+    question: "Compare les taux de retard entre la route CMN-CDG et CMN-ORY"
+    expected:
+      contains: ["CMN-CDG", "CMN-ORY", "retard"]
+      chart: ["bar_chart", "grouped_bar"]
+    tags: [comparison, routes]
+
+  - id: TRP-005
+    sector: transport
+    intent: explanation
+    language: fr
+    question: "Pourquoi le taux de retard a augmenté la semaine dernière ?"
+    expected:
+      contains: ["retard", "cause", "facteur"]
+      no_sql: true
+    tags: [explanation, root_cause]
+
+  - id: TRP-006
+    sector: transport
+    intent: aggregation
+    language: ar
+    question: "ما هو متوسط وقت التأخير للرحلات الجوية هذا الشهر؟"
+    expected:
+      kpi: "Average Delay"
+      language_response: "Arabic"
+      contains_arabic: true
+    tags: [kpi, arabic, delay]
+
+  - id: TRP-007
+    sector: transport
+    intent: prediction
+    language: fr
+    question: "Prédis le taux de retard moyen pour le mois prochain"
+    expected:
+      requires_orchestrator: true
+      routing_target: "transport_agent"
+      sub_agent: "sector_prediction"
+    tags: [prediction, orchestrator]
+
+  - id: TRP-008
+    sector: transport
+    intent: sql
+    language: en
+    question: "List all flights departing from CMN airport today"
+    expected:
+      contains: ["SELECT", "CMN", "departure"]
+      chart: ["table"]
+    tags: [sql, airport, filter]
+
+  - id: TRP-009
+    sector: transport
+    intent: aggregation
+    language: fr
+    question: "Combien de vols ont atterri à l'heure ce trimestre ?"
+    expected:
+      kpi: "On-Time Performance"
+      contains: ["nombre", "vol", "heure"]
+      sql_hint: "COUNT"
+    tags: [kpi, count, otp]
+
+  - id: TRP-010
+    sector: transport
+    intent: comparison
+    language: en
+    question: "Compare this month's delay rate with last month"
+    expected:
+      contains: ["month", "delay", "comparison"]
+      chart: ["line_chart", "bar_chart"]
+    tags: [comparison, monthly, trend]
+
+  - id: TRP-011
+    sector: transport
+    intent: explanation
+    language: en
+    question: "What factors contribute most to flight delays in our network?"
+    expected:
+      contains: ["weather", "delay", "factor", "cause"]
+      no_sql: true
+    tags: [explanation, analysis]
+
+  - id: TRP-012
+    sector: transport
+    intent: anomaly
+    language: fr
+    question: "Y a-t-il des routes avec des retards anormalement élevés ?"
+    expected:
+      requires_orchestrator: true
+      routing_target: "generic_predictive_agent"
+    tags: [anomaly, orchestrator]
+
+  - id: TRP-013
+    sector: transport
+    intent: aggregation
+    language: fr
+    question: "Quel est le taux d'occupation moyen des avions ce mois ?"
+    expected:
+      kpi: "Load Factor"
+      contains: ["occupation", "taux", "%"]
+    tags: [kpi, load_factor]
+
+  - id: TRP-014
+    sector: transport
+    intent: sql
+    language: fr
+    question: "Montre-moi tous les vols annulés de la semaine"
+    expected:
+      contains: ["SELECT", "annul", "cancel"]
+      chart: ["table"]
+    tags: [sql, cancelled]
+
+  - id: TRP-015
+    sector: transport
+    intent: aggregation
+    language: ar
+    question: "كم عدد الرحلات المتأخرة هذا الأسبوع؟"
+    expected:
+      language_response: "Arabic"
+      contains_arabic: true
+      sql_hint: "COUNT"
+    tags: [arabic, count, delay]
+
+  - id: TRP-016
+    sector: transport
+    intent: kpi_chart
+    language: fr
+    question: "Génère un graphique des retards par route pour le tableau de bord"
+    expected:
+      requires_orchestrator: true
+      routing_target: "insight_agent"
+    tags: [chart, orchestrator, dashboard]
+
+  - id: TRP-017
+    sector: transport
+    intent: comparison
+    language: fr
+    question: "Quelle compagnie a le meilleur taux de ponctualité ce mois ?"
+    expected:
+      contains: ["compagnie", "ponctualité", "meilleur"]
+      chart: ["bar_chart", "ranking"]
+    tags: [comparison, airline, ranking]
+
+  - id: TRP-018
+    sector: transport
+    intent: aggregation
+    language: en
+    question: "What is the average turnaround time per aircraft?"
+    expected:
+      kpi: "Turnaround Time"
+      contains: ["average", "turnaround", "minutes"]
+    tags: [kpi, turnaround]
+
+  - id: TRP-019
+    sector: transport
+    intent: explanation
+    language: fr
+    question: "Comment améliorer la ponctualité sur les vols long-courrier ?"
+    expected:
+      contains: ["ponctualité", "améliorer", "recommandation"]
+      no_sql: true
+    tags: [explanation, recommendation]
+
+  - id: TRP-020
+    sector: transport
+    intent: sector_analysis
+    language: fr
+    question: "Génère un rapport complet de performance opérationnelle du réseau"
+    expected:
+      requires_orchestrator: true
+      routing_target: "transport_agent"
+      sub_agent: "sector_explanation"
+    tags: [report, orchestrator]
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # SECTEUR : FINANCE (20 cas)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  - id: FIN-001
+    sector: finance
+    intent: aggregation
+    language: fr
+    question: "Quel est le ratio de solvabilité moyen de notre portefeuille ce trimestre ?"
+    expected:
+      kpi: "Solvency Ratio"
+      contains: ["solvabilité", "ratio", "%"]
+      sql_hint: "AVG"
+    tags: [kpi, solvency, quarterly]
+
+  - id: FIN-002
+    sector: finance
+    intent: aggregation
+    language: en
+    question: "What is the current NPL ratio across all loan categories?"
+    expected:
+      kpi: "NPL Ratio"
+      contains: ["NPL", "ratio", "%"]
+    tags: [kpi, npl, credit]
+
+  - id: FIN-003
+    sector: finance
+    intent: sql
+    language: fr
+    question: "Liste les clients avec un score de crédit inférieur à 600"
+    expected:
+      contains: ["SELECT", "credit_score", "600"]
+      chart: ["table"]
+    tags: [sql, credit_score, filter]
+
+  - id: FIN-004
+    sector: finance
+    intent: comparison
+    language: fr
+    question: "Compare le ROE de nos deux principales divisions ce semestre"
+    expected:
+      kpi: "ROE"
+      contains: ["ROE", "division", "comparaison"]
+      chart: ["bar_chart"]
+    tags: [comparison, roe, division]
+
+  - id: FIN-005
+    sector: finance
+    intent: aggregation
+    language: ar
+    question: "ما هو متوسط نسبة الديون المتعثرة في المحفظة؟"
+    expected:
+      language_response: "Arabic"
+      contains_arabic: true
+    tags: [arabic, npl]
+
+  - id: FIN-006
+    sector: finance
+    intent: explanation
+    language: fr
+    question: "Pourquoi le ratio de liquidité a baissé ce mois ?"
+    expected:
+      contains: ["liquidité", "baisse", "cause"]
+      no_sql: true
+    tags: [explanation, liquidity]
+
+  - id: FIN-007
+    sector: finance
+    intent: prediction
+    language: en
+    question: "Forecast the NPL ratio for next quarter"
+    expected:
+      requires_orchestrator: true
+      routing_target: "finance_agent"
+      sub_agent: "sector_prediction"
+    tags: [prediction, orchestrator]
+
+  - id: FIN-008
+    sector: finance
+    intent: aggregation
+    language: fr
+    question: "Quel est le montant total des provisions pour créances douteuses ?"
+    expected:
+      contains: ["provision", "créance", "montant", "SUM"]
+    tags: [kpi, provisions]
+
+  - id: FIN-009
+    sector: finance
+    intent: sql
+    language: en
+    question: "Show me all transactions above 1 million MAD flagged for review"
+    expected:
+      contains: ["SELECT", "1000000", "flag"]
+      chart: ["table"]
+    tags: [sql, transactions, compliance]
+
+  - id: FIN-010
+    sector: finance
+    intent: anomaly
+    language: fr
+    question: "Détecte les transactions suspectes dans les 30 derniers jours"
+    expected:
+      requires_orchestrator: true
+      routing_target: "generic_predictive_agent"
+    tags: [anomaly, fraud, orchestrator]
+
+  - id: FIN-011
+    sector: finance
+    intent: comparison
+    language: en
+    question: "Compare our cost-to-income ratio with industry benchmark"
+    expected:
+      kpi: "Cost-to-Income Ratio"
+      contains: ["cost", "income", "benchmark"]
+    tags: [comparison, benchmark]
+
+  - id: FIN-012
+    sector: finance
+    intent: aggregation
+    language: fr
+    question: "Quel est le rendement moyen du portefeuille obligataire ?"
+    expected:
+      contains: ["rendement", "obligataire", "%"]
+    tags: [kpi, bonds, yield]
+
+  - id: FIN-013
+    sector: finance
+    intent: explanation
+    language: ar
+    question: "لماذا ارتفع معدل القروض المتعثرة هذا الشهر؟"
+    expected:
+      language_response: "Arabic"
+      contains_arabic: true
+      no_sql: true
+    tags: [arabic, explanation, npl]
+
+  - id: FIN-014
+    sector: finance
+    intent: sql
+    language: fr
+    question: "Affiche les 10 plus gros dépôts enregistrés cette semaine"
+    expected:
+      contains: ["SELECT", "ORDER BY", "LIMIT 10", "dépôt"]
+    tags: [sql, deposits, top10]
+
+  - id: FIN-015
+    sector: finance
+    intent: kpi_chart
+    language: en
+    question: "Create a chart showing NPL trend over the last 12 months"
+    expected:
+      requires_orchestrator: true
+      routing_target: "insight_agent"
+    tags: [chart, orchestrator, trend]
+
+  - id: FIN-016
+    sector: finance
+    intent: aggregation
+    language: fr
+    question: "Quel est le taux de couverture des provisions ce mois ?"
+    expected:
+      contains: ["couverture", "provision", "%"]
+    tags: [kpi, coverage]
+
+  - id: FIN-017
+    sector: finance
+    intent: comparison
+    language: fr
+    question: "Compare le coût du risque entre Q1 et Q2 de cette année"
+    expected:
+      contains: ["Q1", "Q2", "coût", "risque"]
+      chart: ["bar_chart", "line_chart"]
+    tags: [comparison, risk, quarterly]
+
+  - id: FIN-018
+    sector: finance
+    intent: aggregation
+    language: en
+    question: "What is the average loan-to-value ratio in our mortgage portfolio?"
+    expected:
+      kpi: "Loan-to-Value"
+      contains: ["LTV", "ratio", "mortgage"]
+    tags: [kpi, ltv, mortgage]
+
+  - id: FIN-019
+    sector: finance
+    intent: sector_analysis
+    language: fr
+    question: "Produis un rapport complet de santé du portefeuille de crédit"
+    expected:
+      requires_orchestrator: true
+      routing_target: "finance_agent"
+      sub_agent: "sector_explanation"
+    tags: [report, orchestrator]
+
+  - id: FIN-020
+    sector: finance
+    intent: explanation
+    language: fr
+    question: "Quelles actions recommandes-tu pour améliorer notre ratio de liquidité ?"
+    expected:
+      contains: ["recommandation", "liquidité", "action"]
+      no_sql: true
+    tags: [explanation, recommendation]
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # SECTEUR : RETAIL (20 cas)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  - id: RET-001
+    sector: retail
+    intent: aggregation
+    language: fr
+    question: "Quel est le chiffre d'affaires total du mois en cours ?"
+    expected:
+      kpi: "Revenue"
+      contains: ["chiffre", "affaires", "SUM"]
+    tags: [kpi, revenue, monthly]
+
+  - id: RET-002
+    sector: retail
+    intent: aggregation
+    language: en
+    question: "What is the average basket value per customer this week?"
+    expected:
+      kpi: "Average Basket Value"
+      contains: ["basket", "average", "customer"]
+    tags: [kpi, basket, weekly]
+
+  - id: RET-003
+    sector: retail
+    intent: sql
+    language: fr
+    question: "Liste les produits dont le stock est inférieur au seuil de réapprovisionnement"
+    expected:
+      contains: ["SELECT", "stock", "reorder_threshold"]
+      chart: ["table"]
+    tags: [sql, stock, inventory]
+
+  - id: RET-004
+    sector: retail
+    intent: comparison
+    language: fr
+    question: "Compare les ventes de cette semaine avec la même semaine l'an dernier"
+    expected:
+      contains: ["ventes", "semaine", "comparaison", "an dernier"]
+      chart: ["bar_chart", "line_chart"]
+    tags: [comparison, yoy, weekly]
+
+  - id: RET-005
+    sector: retail
+    intent: aggregation
+    language: ar
+    question: "ما هو معدل تحويل الزوار إلى مشترين هذا الشهر؟"
+    expected:
+      kpi: "Conversion Rate"
+      language_response: "Arabic"
+      contains_arabic: true
+    tags: [arabic, conversion]
+
+  - id: RET-006
+    sector: retail
+    intent: explanation
+    language: fr
+    question: "Pourquoi les ventes ont chuté de 15% ce week-end ?"
+    expected:
+      contains: ["ventes", "chute", "cause", "week-end"]
+      no_sql: true
+    tags: [explanation, sales_drop]
+
+  - id: RET-007
+    sector: retail
+    intent: prediction
+    language: fr
+    question: "Prédis les ventes pour les 7 prochains jours"
+    expected:
+      requires_orchestrator: true
+      routing_target: "retail_agent"
+      sub_agent: "sector_prediction"
+    tags: [prediction, orchestrator]
+
+  - id: RET-008
+    sector: retail
+    intent: aggregation
+    language: en
+    question: "What is the customer retention rate this quarter?"
+    expected:
+      kpi: "Customer Retention Rate"
+      contains: ["retention", "rate", "%"]
+    tags: [kpi, retention, quarterly]
+
+  - id: RET-009
+    sector: retail
+    intent: sql
+    language: en
+    question: "Show top 20 best-selling products by revenue this month"
+    expected:
+      contains: ["SELECT", "ORDER BY", "revenue", "LIMIT 20"]
+      chart: ["table", "bar_chart"]
+    tags: [sql, top_products]
+
+  - id: RET-010
+    sector: retail
+    intent: anomaly
+    language: fr
+    question: "Détecte les produits avec des ventes anormalement basses"
+    expected:
+      requires_orchestrator: true
+      routing_target: "generic_predictive_agent"
+    tags: [anomaly, orchestrator]
+
+  - id: RET-011
+    sector: retail
+    intent: comparison
+    language: en
+    question: "Compare online vs in-store sales performance this month"
+    expected:
+      contains: ["online", "in-store", "comparison"]
+      chart: ["bar_chart", "pie_chart"]
+    tags: [comparison, channel]
+
+  - id: RET-012
+    sector: retail
+    intent: aggregation
+    language: fr
+    question: "Quel est le taux de retour produit ce mois ?"
+    expected:
+      kpi: "Return Rate"
+      contains: ["retour", "taux", "%"]
+    tags: [kpi, returns]
+
+  - id: RET-013
+    sector: retail
+    intent: explanation
+    language: ar
+    question: "ما هي الأسباب الرئيسية لانخفاض معدل التحويل؟"
+    expected:
+      language_response: "Arabic"
+      contains_arabic: true
+      no_sql: true
+    tags: [arabic, explanation, conversion]
+
+  - id: RET-014
+    sector: retail
+    intent: sql
+    language: fr
+    question: "Montre-moi les clients n'ayant pas acheté depuis 90 jours"
+    expected:
+      contains: ["SELECT", "last_purchase", "90"]
+      chart: ["table"]
+    tags: [sql, churn, inactive]
+
+  - id: RET-015
+    sector: retail
+    intent: aggregation
+    language: fr
+    question: "Quel est le nombre moyen d'articles par commande ce mois ?"
+    expected:
+      contains: ["articles", "commande", "moyenne", "AVG"]
+    tags: [kpi, basket_size]
+
+  - id: RET-016
+    sector: retail
+    intent: kpi_chart
+    language: en
+    question: "Generate a sales dashboard with weekly trend charts"
+    expected:
+      requires_orchestrator: true
+      routing_target: "insight_agent"
+    tags: [chart, orchestrator, dashboard]
+
+  - id: RET-017
+    sector: retail
+    intent: comparison
+    language: fr
+    question: "Compare le panier moyen entre les catégories Électronique et Mode"
+    expected:
+      contains: ["panier", "électronique", "mode", "catégorie"]
+      chart: ["bar_chart"]
+    tags: [comparison, category]
+
+  - id: RET-018
+    sector: retail
+    intent: aggregation
+    language: en
+    question: "What is the gross margin percentage for this month?"
+    expected:
+      kpi: "Gross Margin"
+      contains: ["margin", "%", "gross"]
+    tags: [kpi, margin]
+
+  - id: RET-019
+    sector: retail
+    intent: explanation
+    language: fr
+    question: "Comment améliorer le taux de conversion sur notre site e-commerce ?"
+    expected:
+      contains: ["conversion", "améliorer", "recommandation", "e-commerce"]
+      no_sql: true
+    tags: [explanation, recommendation]
+
+  - id: RET-020
+    sector: retail
+    intent: sector_analysis
+    language: fr
+    question: "Génère un rapport complet de performance commerciale du mois"
+    expected:
+      requires_orchestrator: true
+      routing_target: "retail_agent"
+      sub_agent: "sector_explanation"
+    tags: [report, orchestrator]
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # SECTEUR : MANUFACTURING (20 cas)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  - id: MFG-001
+    sector: manufacturing
+    intent: aggregation
+    language: fr
+    question: "Quel est le taux d'efficacité globale des équipements (OEE) ce mois ?"
+    expected:
+      kpi: "OEE"
+      contains: ["OEE", "efficacité", "%"]
+    tags: [kpi, oee, monthly]
+
+  - id: MFG-002
+    sector: manufacturing
+    intent: aggregation
+    language: en
+    question: "What is the current defect rate on production line 3?"
+    expected:
+      kpi: "Defect Rate"
+      contains: ["defect", "rate", "%", "line 3"]
+    tags: [kpi, quality, defect]
+
+  - id: MFG-003
+    sector: manufacturing
+    intent: sql
+    language: fr
+    question: "Liste les équipements en panne depuis plus de 24 heures"
+    expected:
+      contains: ["SELECT", "panne", "downtime", "24"]
+      chart: ["table"]
+    tags: [sql, downtime, maintenance]
+
+  - id: MFG-004
+    sector: manufacturing
+    intent: comparison
+    language: fr
+    question: "Compare le taux de rebut entre l'atelier A et l'atelier B"
+    expected:
+      contains: ["rebut", "atelier", "comparaison"]
+      chart: ["bar_chart"]
+    tags: [comparison, scrap, workshop]
+
+  - id: MFG-005
+    sector: manufacturing
+    intent: aggregation
+    language: ar
+    question: "ما هو معدل الإنتاجية الإجمالية هذا الأسبوع؟"
+    expected:
+      language_response: "Arabic"
+      contains_arabic: true
+    tags: [arabic, productivity]
+
+  - id: MFG-006
+    sector: manufacturing
+    intent: explanation
+    language: fr
+    question: "Pourquoi le taux de pannes a augmenté sur la ligne 2 ?"
+    expected:
+      contains: ["panne", "ligne 2", "cause"]
+      no_sql: true
+    tags: [explanation, maintenance, root_cause]
+
+  - id: MFG-007
+    sector: manufacturing
+    intent: prediction
+    language: en
+    question: "Predict when machine M-07 will require maintenance"
+    expected:
+      requires_orchestrator: true
+      routing_target: "manufacturing_agent"
+      sub_agent: "sector_prediction"
+    tags: [prediction, predictive_maintenance, orchestrator]
+
+  - id: MFG-008
+    sector: manufacturing
+    intent: aggregation
+    language: fr
+    question: "Quel est le temps moyen entre deux pannes (MTBF) ?"
+    expected:
+      kpi: "MTBF"
+      contains: ["MTBF", "panne", "heures"]
+    tags: [kpi, mtbf, reliability]
+
+  - id: MFG-009
+    sector: manufacturing
+    intent: sql
+    language: en
+    question: "Show all production orders delayed by more than 2 days"
+    expected:
+      contains: ["SELECT", "production_order", "delay", "2"]
+      chart: ["table"]
+    tags: [sql, production, delay]
+
+  - id: MFG-010
+    sector: manufacturing
+    intent: anomaly
+    language: fr
+    question: "Détecte les anomalies de qualité sur la ligne de production principale"
+    expected:
+      requires_orchestrator: true
+      routing_target: "generic_predictive_agent"
+    tags: [anomaly, quality, orchestrator]
+
+  - id: MFG-011
+    sector: manufacturing
+    intent: comparison
+    language: en
+    question: "Compare OEE performance across all 4 production lines this week"
+    expected:
+      kpi: "OEE"
+      contains: ["OEE", "lines", "comparison"]
+      chart: ["bar_chart"]
+    tags: [comparison, oee, lines]
+
+  - id: MFG-012
+    sector: manufacturing
+    intent: aggregation
+    language: fr
+    question: "Quel est le taux d'utilisation des machines ce trimestre ?"
+    expected:
+      kpi: "Machine Utilization"
+      contains: ["utilisation", "%", "machine"]
+    tags: [kpi, utilization, quarterly]
+
+  - id: MFG-013
+    sector: manufacturing
+    intent: explanation
+    language: ar
+    question: "ما هي أسباب انخفاض الكفاءة الإنتاجية هذا الأسبوع؟"
+    expected:
+      language_response: "Arabic"
+      contains_arabic: true
+      no_sql: true
+    tags: [arabic, explanation, efficiency]
+
+  - id: MFG-014
+    sector: manufacturing
+    intent: sql
+    language: fr
+    question: "Affiche les 5 équipements avec le plus grand nombre d'arrêts non planifiés"
+    expected:
+      contains: ["SELECT", "ORDER BY", "LIMIT 5", "arrêt"]
+    tags: [sql, downtime, ranking]
+
+  - id: MFG-015
+    sector: manufacturing
+    intent: aggregation
+    language: en
+    question: "What is the average cycle time per unit on production line 1?"
+    expected:
+      kpi: "Cycle Time"
+      contains: ["cycle time", "average", "unit"]
+    tags: [kpi, cycle_time]
+
+  - id: MFG-016
+    sector: manufacturing
+    intent: kpi_chart
+    language: fr
+    question: "Crée un tableau de bord OEE pour la direction"
+    expected:
+      requires_orchestrator: true
+      routing_target: "insight_agent"
+    tags: [chart, orchestrator, dashboard]
+
+  - id: MFG-017
+    sector: manufacturing
+    intent: comparison
+    language: fr
+    question: "Compare les coûts de maintenance préventive vs corrective"
+    expected:
+      contains: ["préventive", "corrective", "coût", "comparaison"]
+      chart: ["bar_chart", "pie_chart"]
+    tags: [comparison, maintenance_cost]
+
+  - id: MFG-018
+    sector: manufacturing
+    intent: aggregation
+    language: en
+    question: "What is the scrap rate for product family X this month?"
+    expected:
+      kpi: "Scrap Rate"
+      contains: ["scrap", "rate", "%"]
+    tags: [kpi, scrap, quality]
+
+  - id: MFG-019
+    sector: manufacturing
+    intent: explanation
+    language: fr
+    question: "Quelles améliorations peut-on apporter pour réduire le taux de rebut ?"
+    expected:
+      contains: ["rebut", "amélioration", "recommandation"]
+      no_sql: true
+    tags: [explanation, recommendation, quality]
+
+  - id: MFG-020
+    sector: manufacturing
+    intent: sector_analysis
+    language: en
+    question: "Generate a full production performance report for this quarter"
+    expected:
+      requires_orchestrator: true
+      routing_target: "manufacturing_agent"
+      sub_agent: "sector_explanation"
+    tags: [report, orchestrator]
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # SECTEUR : PUBLIC (20 cas)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  - id: PUB-001
+    sector: public
+    intent: aggregation
+    language: fr
+    question: "Quel est le taux de satisfaction des citoyens ce semestre ?"
+    expected:
+      kpi: "Citizen Satisfaction"
+      contains: ["satisfaction", "citoyen", "%"]
+    tags: [kpi, satisfaction, semester]
+
+  - id: PUB-002
+    sector: public
+    intent: aggregation
+    language: en
+    question: "What is the average processing time for administrative requests?"
+    expected:
+      kpi: "Processing Time"
+      contains: ["processing time", "average", "days"]
+    tags: [kpi, processing, admin]
+
+  - id: PUB-003
+    sector: public
+    intent: sql
+    language: fr
+    question: "Liste les demandes administratives en attente depuis plus de 30 jours"
+    expected:
+      contains: ["SELECT", "demande", "30", "pending"]
+      chart: ["table"]
+    tags: [sql, backlog, admin]
+
+  - id: PUB-004
+    sector: public
+    intent: comparison
+    language: fr
+    question: "Compare le taux de résolution des plaintes entre les régions Nord et Sud"
+    expected:
+      contains: ["plainte", "résolution", "Nord", "Sud", "région"]
+      chart: ["bar_chart"]
+    tags: [comparison, complaints, region]
+
+  - id: PUB-005
+    sector: public
+    intent: aggregation
+    language: ar
+    question: "ما هو متوسط وقت معالجة طلبات المواطنين هذا الشهر؟"
+    expected:
+      language_response: "Arabic"
+      contains_arabic: true
+    tags: [arabic, processing_time]
+
+  - id: PUB-006
+    sector: public
+    intent: explanation
+    language: fr
+    question: "Pourquoi le délai de traitement des permis de construire a augmenté ?"
+    expected:
+      contains: ["délai", "permis", "construire", "cause"]
+      no_sql: true
+    tags: [explanation, permits, delay]
+
+  - id: PUB-007
+    sector: public
+    intent: prediction
+    language: fr
+    question: "Prédis le volume de demandes citoyennes pour le prochain trimestre"
+    expected:
+      requires_orchestrator: true
+      routing_target: "public_agent"
+      sub_agent: "sector_prediction"
+    tags: [prediction, orchestrator, volume]
+
+  - id: PUB-008
+    sector: public
+    intent: aggregation
+    language: fr
+    question: "Quel est le taux de numérisation des services publics ?"
+    expected:
+      kpi: "Digitization Rate"
+      contains: ["numérisation", "%", "service"]
+    tags: [kpi, digital, services]
+
+  - id: PUB-009
+    sector: public
+    intent: sql
+    language: en
+    question: "Show all public projects with budget overrun exceeding 10%"
+    expected:
+      contains: ["SELECT", "budget", "overrun", "10"]
+      chart: ["table"]
+    tags: [sql, budget, projects]
+
+  - id: PUB-010
+    sector: public
+    intent: anomaly
+    language: fr
+    question: "Détecte les services avec des temps de traitement anormalement longs"
+    expected:
+      requires_orchestrator: true
+      routing_target: "generic_predictive_agent"
+    tags: [anomaly, orchestrator, processing]
+
+  - id: PUB-011
+    sector: public
+    intent: comparison
+    language: en
+    question: "Compare service delivery efficiency across 5 municipalities"
+    expected:
+      contains: ["municipality", "efficiency", "comparison"]
+      chart: ["bar_chart", "heatmap"]
+    tags: [comparison, municipalities]
+
+  - id: PUB-012
+    sector: public
+    intent: aggregation
+    language: fr
+    question: "Quel est le budget moyen consommé par projet ce trimestre ?"
+    expected:
+      kpi: "Budget Consumption"
+      contains: ["budget", "consommé", "projet"]
+    tags: [kpi, budget, quarterly]
+
+  - id: PUB-013
+    sector: public
+    intent: explanation
+    language: ar
+    question: "ما هي أسباب انخفاض رضا المواطنين عن الخدمات الإلكترونية؟"
+    expected:
+      language_response: "Arabic"
+      contains_arabic: true
+      no_sql: true
+    tags: [arabic, explanation, satisfaction]
+
+  - id: PUB-014
+    sector: public
+    intent: sql
+    language: fr
+    question: "Affiche tous les projets d'infrastructure dont le délai est dépassé"
+    expected:
+      contains: ["SELECT", "infrastructure", "délai", "deadline"]
+      chart: ["table"]
+    tags: [sql, infrastructure, deadline]
+
+  - id: PUB-015
+    sector: public
+    intent: aggregation
+    language: en
+    question: "What percentage of citizen requests are resolved within SLA?"
+    expected:
+      kpi: "SLA Compliance"
+      contains: ["SLA", "%", "resolved"]
+    tags: [kpi, sla, compliance]
+
+  - id: PUB-016
+    sector: public
+    intent: kpi_chart
+    language: fr
+    question: "Génère un tableau de bord de performance des services publics"
+    expected:
+      requires_orchestrator: true
+      routing_target: "insight_agent"
+    tags: [chart, orchestrator, dashboard]
+
+  - id: PUB-017
+    sector: public
+    intent: comparison
+    language: fr
+    question: "Compare l'évolution du budget alloué vs consommé sur 3 ans"
+    expected:
+      contains: ["budget", "alloué", "consommé", "3 ans"]
+      chart: ["line_chart", "bar_chart"]
+    tags: [comparison, budget, yoy]
+
+  - id: PUB-018
+    sector: public
+    intent: aggregation
+    language: en
+    question: "How many digital service transactions were processed this month?"
+    expected:
+      contains: ["digital", "transactions", "COUNT"]
+    tags: [kpi, digital, count]
+
+  - id: PUB-019
+    sector: public
+    intent: explanation
+    language: fr
+    question: "Comment réduire les délais de traitement des dossiers administratifs ?"
+    expected:
+      contains: ["réduire", "délai", "traitement", "recommandation"]
+      no_sql: true
+    tags: [explanation, recommendation, admin]
+
+  - id: PUB-020
+    sector: public
+    intent: sector_analysis
+    language: fr
+    question: "Génère un rapport de performance globale des services de l'administration"
+    expected:
+      requires_orchestrator: true
+      routing_target: "public_agent"
+      sub_agent: "sector_explanation"
+    tags: [report, orchestrator]

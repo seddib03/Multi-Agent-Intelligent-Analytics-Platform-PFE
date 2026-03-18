@@ -42,6 +42,12 @@ FIX 5 — NLQAgent.chat() : historique sauvegardé pour TOUS les intents
          (NLQ direct + Orchestrateur)
          → contexte conversationnel complet pour les questions de suivi
 
+NOUVEAU Sprint 2 — Memory Layer (Redis)
+----------------------------------------
+L'historique des conversations est persisté dans Redis (illimité).
+Si Redis est indisponible → fallback automatique dict RAM (session courante).
+Variable d'environnement : REDIS_URL (défaut: redis://localhost:6379)
+
 Note data_profile
 -----------------
 L'Orchestrateur transforme le JSON du Data Prep Agent en format plat
@@ -82,6 +88,49 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 
 from agents.context_sector_agent import SectorContext
+
+
+# ══════════════════════════════════════════════════════════════════
+# REMARQUE ENCADRANT R4 — DÉTECTION DE LANGUE
+# La réponse est systématiquement dans la langue de la question.
+# FR→FR | AR→AR | EN→EN — détecté à chaque appel, sans configuration.
+# ══════════════════════════════════════════════════════════════════
+
+import re as _re
+
+_LANG_AR = _re.compile(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]')
+_LANG_FR = _re.compile(
+    r'\b(je|tu|il|elle|nous|vous|ils|elles|le|la|les|de|du|des|un|une|'
+    r'quel|quelle|quels|quelles|est|sont|avoir|faire|aller|comment|'
+    r'pourquoi|combien|quand|où|bonjour|merci|avec|pour|dans|sur|par|'
+    r'que|qui|dont|mais|ou|et|donc|car|même|tout|très|bien|ici|là|'
+    r'retard|moyen|taux|nombre|montant|secteur|analyse|données|résultat)\b',
+    _re.IGNORECASE
+)
+_LANG_EN = _re.compile(
+    r'\b(i|you|he|she|we|they|the|a|an|is|are|was|were|have|has|do|does|'
+    r'what|which|who|where|when|why|how|show|give|list|find|get|'
+    r'please|thank|yes|no|and|or|but|with|for|in|on|by|to|from|of|at|'
+    r'this|that|my|your|our|their|can|could|would|should|'
+    r'delay|average|rate|number|amount|sector|analysis|data|result)\b',
+    _re.IGNORECASE
+)
+
+
+def detect_language(text: str) -> str:
+    """
+    Détecte la langue principale du texte (R4 — encadrant).
+
+    Priorité : Arabe (Unicode) > Français (mots-clés) > Anglais.
+    Retourne "French" | "Arabic" | "English".
+    """
+    if _LANG_AR.search(text):
+        return "Arabic"
+    fr = len(_LANG_FR.findall(text))
+    en = len(_LANG_EN.findall(text))
+    if fr >= en:
+        return "French"
+    return "English"
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -259,8 +308,12 @@ def _make_node_classify_intent(llm: ChatOpenAI):
             cols = data_profile["columns"][:10]  # max 10 pour ne pas surcharger
             columns_hint = f"AVAILABLE COLUMNS: {', '.join(cols)}\n\n"
 
+        # R4 — langue de la question (info pour le classifieur)
+        q_lang = detect_language(question)
+
         prompt = f"""You are the Intent Classifier of an analytics platform.
 Classify the user's question to determine which agent handles it.
+NOTE: User is writing in {q_lang}. Classify by semantic meaning regardless of language.
 
 SECTOR : {sector_context.sector}
 KPIs   : {kpi_list}
@@ -446,11 +499,11 @@ def _make_node_generate_answer(llm: ChatOpenAI):
     """Factory → Nœud : generate_answer. Chemin NLQ direct."""
 
     def node_generate_answer(state: NLQAgentState) -> NLQAgentState:
-        intent         = state["intent_result"]
-        sector_context = state["sector_context"]
-        data_profile   = state.get("data_profile")
-        history        = state["history"]
-        question       = state["question"]
+        intent            = state["intent_result"]
+        sector_context    = state["sector_context"]
+        data_profile      = state.get("data_profile")
+        history           = state["history"]
+        question          = state["question"]
 
         # System prompt
         kpi_block = "\n".join(
@@ -498,6 +551,18 @@ UPLOADED DATASET PROFILE (source: Data Prep Agent):
 ⚠ SQL: Use ONLY exact column names listed above. Prefer numeric columns for AVG/SUM/COUNT.
 """
 
+        # ── Remarque encadrant R4 — Langue dynamique ─────────────────────────
+        # La réponse est systématiquement dans la langue de la question courante.
+        # Cette règle prime sur le profil CustomerAdapter (détection immédiate
+        # vs historique) et garantit : FR→FR, AR→AR, EN→EN sans configuration.
+        detected_lang    = detect_language(question)
+        lang_instruction = (
+            f"\nLANGUAGE RULE (mandatory — overrides all other instructions):\n"
+            f"  The user asked in {detected_lang}.\n"
+            f"  You MUST write your entire 'answer' field in {detected_lang}.\n"
+            f"  Do NOT mix languages. Do NOT answer in English if the question was in French or Arabic.\n"
+        )
+
         system_prompt = f"""You are a specialized analytics chatbot for the {sector_context.sector.upper()} sector.
 
 CONTEXT:
@@ -511,7 +576,7 @@ AVAILABLE KPIs:
 INTENT     : {intent.intent}
 ENTITIES   : {json.dumps(intent.extracted_entities, ensure_ascii=False)}
 FOLLOW-UP  : {intent.is_follow_up}
-{data_section}
+{data_section}{lang_instruction}
 RULES:
 1. Answer based on intent "{intent.intent}"
 2. Generate SQL when intent is "sql" or "aggregation"
@@ -806,40 +871,27 @@ class NLQAgent:
         """
         history = self._get_history(user_id)   # ← Redis ou RAM
 
-        if self.verbose:
-            print(f"\n{'─'*60}")
-            print(f"[NLQLayer] user='{user_id}' | history={len(history)} | q='{question}'")
-
         initial_state: NLQAgentState = {
-            "user_id"       : user_id,
-            "question"      : question,
-            "sector_context": sector_context,
-            "data_profile"  : data_profile,
-            "history"       : history,
-            "intent_result" : None,
-            "nlq_response"  : None,
-            "verbose"       : self.verbose,
+            "user_id"          : user_id,
+            "question"         : question,
+            "sector_context"   : sector_context,
+            "data_profile"     : data_profile,
+            "history"          : history,
+            "intent_result"    : None,
+            "nlq_response"     : None,
+            "verbose"          : self.verbose,
         }
 
         final_state = self.graph.invoke(initial_state)
         result      = final_state["nlq_response"]
 
         # ── FIX 5 — sauvegarder l'historique pour TOUS les intents ───────────
-        # Avant : if result and not result.requires_orchestrator
-        # → les tours routés vers l'Orchestrateur n'étaient PAS sauvegardés
-        #
-        # Exemple du bug :
-        #   Tour 1 : "Prédis le retard du mois prochain"
-        #            → requires_orchestrator=True → NON sauvegardé ❌
-        #   Tour 2 : "Et pour la route CMN-CDG ?"
-        #            → history=[] → LLM perd le contexte
-        #
-        # Après : tous les tours sauvegardés, NLQ direct ET Orchestrateur ✅
         if result:
-            self._append_history(user_id, {   # ← Redis ou RAM
+            self._append_history(user_id, {
                 "user"     : question,
                 "assistant": result.answer,
             })
+
             if self.verbose:
                 orch = " [→ Orchestrateur]" if result.requires_orchestrator else ""
                 print(f"  ✅ intent={result.intent}{orch} | history={self.history_length(user_id)}")
