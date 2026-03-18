@@ -1,0 +1,179 @@
+from app.graph.state import (
+    ExecutionTypeEnum, OrchestratorState, RouteEnum, SectorEnum, IntentEnum
+)
+from app.utils.logger import log_routing_decision
+from app.clients.nlq_client import ROUTING_TARGET_MAP
+
+# Confidence thresholds
+CONFIDENCE_MIN_SECTOR = 0.60
+CONFIDENCE_MIN_INTENT = 0.50
+
+# Sector → Route mapping
+sector_to_route = {
+    SectorEnum.TRANSPORT:     RouteEnum.TRANSPORT_AGENT,
+    SectorEnum.FINANCE:       RouteEnum.FINANCE_AGENT,
+    SectorEnum.RETAIL:        RouteEnum.RETAIL_AGENT,
+    SectorEnum.MANUFACTURING: RouteEnum.MANUFACTURING_AGENT,
+    SectorEnum.PUBLIC:        RouteEnum.PUBLIC_AGENT,
+}
+
+KNOWN_SECTORS = set(sector_to_route.keys())
+
+
+def routing_node(state: OrchestratorState) -> OrchestratorState:
+    """
+    Core of the orchestrator.
+    Decides which route to take based on sector + intent.
+    """
+    sector         = state.sector
+    intent         = state.intent
+    sector_conf    = state.sector_confidence
+    intent_conf    = state.intent_confidence
+    execution_type = state.execution_type
+    routing_target = state.routing_target
+
+    # ✅ NOUVEAU — passer requires_orchestrator + sub_agent à _decide_route
+    route, reason = _decide_route(
+        sector, intent, sector_conf, intent_conf,
+        execution_type, routing_target,
+        requires_orchestrator=state.requires_orchestrator,
+        sub_agent=state.sub_agent,
+    )
+
+    # Fallback route
+    fallback = _decide_fallback(sector, route)
+
+    # Log decision
+    log_routing_decision(
+        query=state.query_raw,
+        sector=sector.value,
+        sector_confidence=sector_conf,
+        intent=intent.value,
+        route=route.value,
+        reason=reason
+    )
+
+    # Update state
+    state.route        = route
+    state.route_reason = reason
+    state.fallback_route = fallback
+    state.needs_clarification = (route == RouteEnum.CLARIFICATION)
+    state.processing_steps.append(f"routing_node → {route.value}")
+
+    return state
+
+
+def _decide_route(
+    sector: SectorEnum,
+    intent: IntentEnum,
+    sector_conf: float,
+    intent_conf: float,
+    execution_type: ExecutionTypeEnum,
+    routing_target: str = "",
+    requires_orchestrator: bool = False,  # ✅ NOUVEAU
+    sub_agent: str = "",                  # ✅ NOUVEAU
+) -> tuple[RouteEnum, str]:
+    """
+    Routing logic with 7 priority levels.
+    Returns (route, reason).
+    """
+
+    # ── Niveau 0 — routing_target de /detect-sector ───────────────
+    # Signal direct du Sector Detection Agent, haute confiance
+    if routing_target and sector_conf >= 0.80:
+        route = ROUTING_TARGET_MAP.get(routing_target)
+        if route:
+            return (
+                route,
+                f"Niveau 0 — routing_target='{routing_target}' fourni par "
+                f"Context Agent ({sector_conf:.0%} confiance) → route directe."
+            )
+
+    #Level 1: Confidence too low → Clarification
+
+    if sector_conf < CONFIDENCE_MIN_SECTOR and sector == SectorEnum.UNKNOWN:
+        return (
+            RouteEnum.CLARIFICATION,
+            f"Niveau 1 — Secteur inconnu et confiance trop faible "
+            f"({sector_conf:.0%}). Clarification requise."
+        )
+    if intent_conf < CONFIDENCE_MIN_INTENT and intent == IntentEnum.UNKNOWN:
+        return (
+            RouteEnum.CLARIFICATION,
+            f"Niveau 1 — Intent non reconnu et confiance trop faible "
+            f"({intent_conf:.0%}). Clarification requise."
+        )
+    
+    # Level 2: execution type is insight → Insight Agent (even if sector is known, we want to prioritize insights)
+    if execution_type == ExecutionTypeEnum.INSIGHT:
+        return (
+            RouteEnum.INSIGHT_AGENT,
+            "Niveau 2 — execution_type='insight' → Insight Agent prioritized."
+        )
+
+    # ── Niveau 3 — execution_type = prediction ────────────────────
+    if execution_type == ExecutionTypeEnum.PREDICTION:
+        if sector in KNOWN_SECTORS:
+            return (
+                sector_to_route[sector],
+                f"Niveau 3 — Sectorial prediction → agent '{sector.value}'."
+            )
+        return (
+            RouteEnum.GENERIC_ML_AGENT,
+            "Niveau 3 — Prediction with unknown sector → Generic ML Agent."
+        )
+
+    # ── Niveau 4 — execution_type = sql ───────────────────────────
+    if execution_type == ExecutionTypeEnum.SQL:
+        if sector in sector_to_route:
+            return (
+                sector_to_route[sector],
+                f"Niveau 4 — SQL query with known sector → agent '{sector.value}'."
+            )
+        return (
+            RouteEnum.GENERIC_ML_AGENT,
+            "Niveau 4 — SQL query with unknown sector → Generic ML Agent."
+        )
+
+    # ── Niveau 5 — Intent connu ───────────────────────────────────
+    if intent in [IntentEnum.DASHBOARD, IntentEnum.COMPARISON,
+                  IntentEnum.KPI_CHART, IntentEnum.INSIGHT]:
+        return (
+            RouteEnum.INSIGHT_AGENT,
+            f"Niveau 5 — Intent '{intent.value}' → Insight Agent."
+        )
+    
+    if intent in [IntentEnum.KPI_REQUEST, IntentEnum.PREDICTION]:
+        if sector in KNOWN_SECTORS:
+            return (
+                sector_to_route[sector],
+                f"Niveau 5 — Intent '{intent.value}' + secteur connu "
+                f"→ agent '{sector.value}'."
+            )
+        return (
+            RouteEnum.GENERIC_ML_AGENT,
+            f"Niveau 5 — Intent '{intent.value}' + secteur inconnu "
+            "→ Generic ML Agent."
+        )
+    
+    # Default: Clarification (we don't have a clear rule to route, we need clarification to avoid wrong answers)
+    return RouteEnum.CLARIFICATION, "No clear routing rule matched → Clarification required."
+
+
+def _decide_fallback(sector: SectorEnum, primary_route: RouteEnum) -> RouteEnum:
+    """
+    Defines the fallback route if the primary agent fails.
+    """
+    if primary_route == RouteEnum.GENERIC_ML_AGENT:
+        return RouteEnum.CLARIFICATION
+
+    if primary_route in [
+        RouteEnum.TRANSPORT_AGENT,
+        RouteEnum.FINANCE_AGENT,
+        RouteEnum.RETAIL_AGENT,
+        RouteEnum.MANUFACTURING_AGENT,
+        RouteEnum.PUBLIC_AGENT,
+    ]:
+        return RouteEnum.GENERIC_ML_AGENT
+
+    return RouteEnum.CLARIFICATION

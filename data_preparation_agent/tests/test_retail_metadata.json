@@ -1,0 +1,152 @@
+{
+    "sector": "retail",
+    "columns": [
+        {
+            "column_name": "order_id",
+            "business_name": "Order ID",
+            "type": "string",
+            "nullable": false,
+            "identifier": true,
+            "pattern": "^ORD-\\d{5}$",
+            "description": "Identifiant unique de la commande"
+        },
+        {
+            "column_name": "customer_id",
+            "business_name": "Customer ID",
+            "type": "string",
+            "nullable": false,
+            "identifier": false,
+            "pattern": "^CUST-\\d{4}$",
+            "description": "Identifiant du client"
+        },
+        {
+            "column_name": "product_name",
+            "business_name": "Product Name",
+            "type": "string",
+            "nullable": false,
+            "description": "Nom du produit"
+        },
+        {
+            "column_name": "category",
+            "business_name": "Category",
+            "type": "string",
+            "nullable": false,
+            "enum": [
+                "Electronics",
+                "Clothing",
+                "Food",
+                "Home",
+                "Beauty",
+                "Sports",
+                "Books",
+                "Toys"
+            ],
+            "description": "Catégorie du produit"
+        },
+        {
+            "column_name": "quantity",
+            "business_name": "Quantity",
+            "type": "int",
+            "nullable": false,
+            "min": 1,
+            "max": 100,
+            "description": "Quantité commandée"
+        },
+        {
+            "column_name": "unit_price",
+            "business_name": "Unit Price",
+            "type": "float",
+            "nullable": false,
+            "min": 1.0,
+            "max": 500.0,
+            "description": "Prix unitaire en EUR"
+        },
+        {
+            "column_name": "total_amount",
+            "business_name": "Total Amount",
+            "type": "float",
+            "nullable": false,
+            "min": 0.0,
+            "description": "Montant total de la ligne"
+        },
+        {
+            "column_name": "discount_pct",
+            "business_name": "Discount Percentage",
+            "type": "float",
+            "nullable": false,
+            "min": 0.0,
+            "max": 30.0,
+            "description": "Pourcentage de remise appliquée"
+        },
+        {
+            "column_name": "order_date",
+            "business_name": "Order Date",
+            "type": "date",
+            "nullable": false,
+            "format": "YYYY-MM-DD",
+            "description": "Date de la commande"
+        },
+        {
+            "column_name": "delivery_date",
+            "business_name": "Delivery Date",
+            "type": "date",
+            "nullable": true,
+            "format": "YYYY-MM-DD",
+            "description": "Date de livraison prévue"
+        },
+        {
+            "column_name": "payment_method",
+            "business_name": "Payment Method",
+            "type": "string",
+            "nullable": false,
+            "enum": [
+                "Credit Card",
+                "Cash",
+                "Debit Card",
+                "PayPal",
+                "Gift Card"
+            ],
+            "description": "Mode de paiement utilisé"
+        },
+        {
+            "column_name": "store_id",
+            "business_name": "Store ID",
+            "type": "string",
+            "nullable": false,
+            "pattern": "^STORE-\\d{3}$",
+            "description": "Identifiant du magasin"
+        },
+        {
+            "column_name": "region",
+            "business_name": "Region",
+            "type": "string",
+            "nullable": false,
+            "enum": [
+                "North",
+                "South",
+                "East",
+                "West",
+                "Central"
+            ],
+            "description": "Région géographique"
+        },
+        {
+            "column_name": "status",
+            "business_name": "Order Status",
+            "type": "string",
+            "nullable": false,
+            "enum": [
+                "delivered",
+                "shipped",
+                "processing",
+                "returned",
+                "cancelled"
+            ],
+            "description": "Statut de la commande"
+        }
+    ],
+    "business_rules": [
+        "delivery_date must always be after order_date",
+        "if status is cancelled then discount_pct must be 0"
+    ]
+}

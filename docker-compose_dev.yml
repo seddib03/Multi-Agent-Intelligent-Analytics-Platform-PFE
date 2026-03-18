@@ -1,0 +1,235 @@
+services:
+
+  # ─── PostgreSQL ────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dxc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dxcpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-dxc_insight}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dxc} -d ${POSTGRES_DB:-dxc_insight}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - nexora_net
+
+  # ─── MinIO ─────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"   # API S3
+      - "9001:9001"   # Console web
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - nexora_net
+
+  # ─── MinIO Init ────────────────────────────────────────
+  # Crée le bucket dxc-datasets au démarrage, puis s'arrête
+  minio_init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-dxc-datasets}
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
+        mc mb --ignore-existing local/$${MINIO_BUCKET};
+        mc anonymous set none local/$${MINIO_BUCKET};
+        echo 'Bucket $${MINIO_BUCKET} ready';
+        exit 0;
+      "
+    networks:
+      - nexora_net
+
+  # ─── API ───────────────────────────────────────────────
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0
+    container_name: nexora_keycloak
+    restart: unless-stopped
+    command: start-dev          # mode dev — utiliser start en prod
+    environment:
+      KEYCLOAK_ADMIN:          ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin123}
+      KC_DB:                   postgres
+      KC_DB_URL:               jdbc:postgresql://postgres:5432/${POSTGRES_DB:-dxc_insight}
+      KC_DB_USERNAME:          ${POSTGRES_USER:-dxc}
+      KC_DB_PASSWORD:          ${POSTGRES_PASSWORD:-dxcpassword}
+      KC_HOSTNAME_STRICT:      false
+      KC_HTTP_ENABLED:         true
+    ports:
+      - "8081:8080"             # Console admin Keycloak (host 8081 to keep frontend on 8080)
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - nexora_net
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8080'"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-dxc}:${POSTGRES_PASSWORD:-dxcpassword}@postgres:5432/${POSTGRES_DB:-dxc_insight}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-dxc-datasets}
+      MINIO_SECURE: "false"
+      KEYCLOAK_URL: ${KEYCLOAK_URL:-http://keycloak:8080}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-dxc}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dxc_frontend}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-0TEEu2mA9sOIY3YHZhMIMBfseUImh3WY}
+      KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:-dxc_backend}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-sbZ2ol7kpC6uUrZbmmO1zTn1C8TcrIzB}
+      SECRET_KEY: ${SECRET_KEY:-changeme-in-production-32chars-min}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1200}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    ports:
+      - "8005:8000"
+    volumes:
+      - ./backend/app:/app/app   
+      - ./backend/feature3:/app/feature3
+      - ./backend/alembic:/app/alembic
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - nexora_net
+
+  # ─── NLQ Context API (Sprint 1) ───────────────────────
+  nlq_context_api:
+    build:
+      context: ./nlq_context_agent/sprint1
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./nlq_context_agent/sprint1/.env
+    ports:
+      - "8000:8000"
+    networks:
+      - nexora_net
+
+  # ─── Data Preparation Agent ─────────────────────────
+  data_preparation_agent:
+    build:
+      context: ./data_preparation_agent
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+    env_file:
+      - ./data_preparation_agent/.env
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_SECURE: "false"
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./data_preparation_agent:/app
+    networks:
+      - nexora_net
+
+  # ─── Orchestrator ────────────────────────────────────
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+      nlq_context_api:
+        condition: service_started
+      data_preparation_agent:
+        condition: service_started
+      insight_agent:
+        condition: service_started
+    environment:
+      NLQ_API_URL: ${NLQ_API_URL:-http://nlq_context_api:8000}
+      DATA_PREP_API_URL: ${DATA_PREP_API_URL:-http://data_preparation_agent:8001}
+      INSIGHT_API_URL: ${INSIGHT_API_URL:-http://insight_agent:8002}
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./orchestrator/app:/app/app
+    networks:
+      - nexora_net
+
+  # ─── Insight Agent API ───────────────────────────────
+  insight_agent:
+    build:
+      context: ./insight_agent
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./insight_agent:/app
+    networks:
+      - nexora_net
+
+  # ─── Frontend (Vite Dev) ─────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+      VITE_BACKEND_API_URL: http://localhost:8005
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - nexora_net
+
+volumes:
+  postgres_data:
+  minio_data:
+
+networks:
+  nexora_net:
+    driver: bridge
