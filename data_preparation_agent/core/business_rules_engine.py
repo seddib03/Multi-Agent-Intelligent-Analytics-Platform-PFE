@@ -1,3 +1,4 @@
+# BusinessRulesEngine : moteur de traduction des business rules en tests dbt via LLM.
 """
 Moteur de traduction des business rules en tests dbt via LLM.
 

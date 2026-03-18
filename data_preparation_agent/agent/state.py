@@ -1,3 +1,4 @@
+# AgentState : structure de données centrale pour stocker l'état du job à travers les différentes étapes du pipeline.
 from __future__ import annotations
 
 from typing import Any, Optional
@@ -12,7 +13,7 @@ from models.quality_dimensions import QualityDimensionsReport
 
 class AgentState(TypedDict, total=False):
     """
-    State complet qui voyage entre tous les nodes.
+    State complet qui voyage entre tous les nodes. 
 
     total=False → Aucun champ n'est obligatoire dans le dict.
     Les nodes retournent uniquement les champs qu'ils modifient,

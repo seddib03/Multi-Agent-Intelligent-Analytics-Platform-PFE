@@ -1,3 +1,4 @@
+# profiling_report.py : modèles de données pour représenter le rapport de profiling du dataset, incluant les statistiques par colonne et les anomalies détectées.
 from __future__ import annotations
 
 from dataclasses import dataclass, field

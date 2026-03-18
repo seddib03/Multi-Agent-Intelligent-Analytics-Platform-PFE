@@ -13,5 +13,5 @@ target/
 dbt_packages/
 logs/
 *.log
-/storage/
+storage/
 .vscode/

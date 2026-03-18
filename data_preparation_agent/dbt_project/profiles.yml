@@ -6,3 +6,4 @@ default:
       path: "{{ env_var('DBT_DUCKDB_PATH', ':memory:') }}"
       # On configurera le path dynamiquement en Python si besoin,
       # ou on l'attachera en exécution via des variables dbt.
+

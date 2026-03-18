@@ -1,5 +1,5 @@
 """
-Prompts pour la traduction des business rules en tests dbt via LLM.
+Prompts pour la traduction des business rules en tests dbt via LLM. 
 """
 from __future__ import annotations
 

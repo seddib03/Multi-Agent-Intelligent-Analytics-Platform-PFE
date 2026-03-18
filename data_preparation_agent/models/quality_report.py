@@ -1,3 +1,4 @@
+# quality_report.py : modèles de données pour représenter les scores de qualité par colonne et le rapport global de qualité du dataset.
 from __future__ import annotations
 
 from dataclasses import dataclass, field

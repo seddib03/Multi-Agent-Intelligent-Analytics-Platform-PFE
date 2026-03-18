@@ -1,3 +1,4 @@
+# anomaly_report.py : modèles de données pour représenter les anomalies détectées et les plans de nettoyage proposés.
 from __future__ import annotations
 
 from dataclasses import dataclass, field

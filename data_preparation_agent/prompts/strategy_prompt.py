@@ -5,7 +5,7 @@ from __future__ import annotations
 
 
 DIMENSION_SYSTEM_PROMPT = """
-Tu es un expert en qualité des données (Data Quality Engineer).
+Tu es un expert en qualité des données (Data Quality Engineer). 
 Tu analyses des métadonnées de datasets pour identifier les règles
 de qualité applicables selon les 5 dimensions standards :
 

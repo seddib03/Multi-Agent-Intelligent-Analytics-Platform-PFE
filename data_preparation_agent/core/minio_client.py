@@ -1,3 +1,4 @@
+# MinioClient : wrapper pour interagir avec MinIO de manière structurée et réutilisable.
 from __future__ import annotations
 
 import io

@@ -1,3 +1,4 @@
+# Fichier de configuration centralisé pour l'application Data Preparation Agent.
 from __future__ import annotations
 
 from functools import lru_cache

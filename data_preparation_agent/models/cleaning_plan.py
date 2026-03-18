@@ -1,3 +1,4 @@
+# cleaning_plan.py : modèles de données pour représenter les plans de nettoyage proposés par le LLM et validés par l'utilisateur.
 from __future__ import annotations
 
 from dataclasses import dataclass, field

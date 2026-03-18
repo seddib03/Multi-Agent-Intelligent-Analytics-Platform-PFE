@@ -1,3 +1,4 @@
+# quality_dimensions.py : modèles de données pour représenter les scores des 5 dimensions de qualité et le rapport global.
 from __future__ import annotations
 
 from dataclasses import dataclass, field

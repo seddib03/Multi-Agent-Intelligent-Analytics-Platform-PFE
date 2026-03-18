@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Minimal OS dependencies for healthcheck and possible wheel builds
+# Minimal OS dependencies for healthcheck and possible wheel building
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gcc \

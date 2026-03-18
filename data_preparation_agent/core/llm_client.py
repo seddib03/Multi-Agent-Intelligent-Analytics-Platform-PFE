@@ -1,3 +1,4 @@
+# LLMClient : wrapper pour appeler le LLM via OpenRouter de manière structurée et robuste.
 from __future__ import annotations
 
 import json

@@ -1,3 +1,4 @@
+-- test_regex_pattern.sql : macro de test dbt pour vérifier que les valeurs d'une colonne correspondent à un motif regex spécifié."
 {% test regex_pattern(model, column_name, pattern) %}
 
 with validation as (

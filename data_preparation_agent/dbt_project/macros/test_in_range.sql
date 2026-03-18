@@ -1,3 +1,4 @@
+-- test_in_range.sql : macro de test dbt pour vérifier que les valeurs d'une colonne sont dans une plage donnée."
 {% test in_range(model, column_name, min_value=None, max_value=None) %}
 
 with validation as (

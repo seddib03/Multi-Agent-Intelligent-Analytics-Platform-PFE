@@ -1,3 +1,4 @@
+-- test_row_not_duplicate.sql : macro de test dbt pour vérifier qu'il n'y a pas de lignes entièrement dupliquées dans le dataset, en excluant la colonne __row_ids."
 {% test row_not_duplicate(model) %}
 
 {#

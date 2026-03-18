@@ -1,3 +1,4 @@
+-- test_is_type.sql : macro de test dbt pour vérifier que les valeurs d'une colonne sont du type spécifié."
 {% test is_type(model, column_name, type_str) %}
 
 with validation as (

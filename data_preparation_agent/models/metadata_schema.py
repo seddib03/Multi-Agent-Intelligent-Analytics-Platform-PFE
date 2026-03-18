@@ -1,3 +1,4 @@
+# metadata_schema.py : modèles de données pour représenter le metadata des colonnes défini par l'utilisateur dans le formulaire UI.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
