@@ -1,3 +1,4 @@
+# quality_engine.py : moteur de calcul des qualités dbt + DuckDB
 """
 Moteur de calcul des qualités dbt + DuckDB.
 
