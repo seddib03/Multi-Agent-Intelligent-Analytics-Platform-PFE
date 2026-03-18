@@ -33,12 +33,20 @@ Flux dans le pipeline global
             │
             ▼
     [Sector Detection Graph]   ← CE MODULE
-            │  SectorContext
+            │  SectorContext { sector, kpis, kpi_thresholds, routing_target }
             ▼
-    [Orchestrateur Graph]      ← Sprint 2
+    [Orchestrateur Graph]      ← Sprint 2 (opérationnel)
             │
             ▼
     [Agent Sectoriel Graph]    ← Sprint 3
+
+Changements Sprint 2
+---------------------
+    - SectorContext : ajout kpi_thresholds (seuils rouge/orange/vert par KPI)
+    - node_map_kpis : lit thresholds + direction depuis kpi_config.yaml
+    - kpi_config.yaml : ajout thresholds + direction pour les 5 secteurs
+    - Consommé par Insight Agent (Sprint 5) et Frontend (Panel 3)
+      pour afficher les zones colorées sans hardcoder les seuils
 """
 
 import json
@@ -50,7 +58,6 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 
 from langgraph.graph import StateGraph, END
-#test
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -81,10 +88,23 @@ class SectorContext(BaseModel):
 
     Champs clés
     -----------
-    sector         : secteur détecté
-    confidence     : 0.9+ clair | 0.7–0.9 probable | <0.7 ambigu
-    routing_target : "{sector}_agent" — utilisé par l'Orchestrateur
-    kpis           : 3–5 KPIs priorisés
+    sector          : secteur détecté
+    confidence      : 0.9+ clair | 0.7–0.9 probable | <0.7 ambigu
+    routing_target  : "{sector}_agent" — utilisé par l'Orchestrateur
+    kpis            : 3–5 KPIs priorisés
+    kpi_thresholds  : seuils rouge/orange/vert par KPI — Sprint 2
+                      Consommé par Insight Agent (Sprint 5) + Frontend (Panel 3)
+                      Format :
+                      {
+                        "On-Time Performance": {
+                          "red": 70, "orange": 85,
+                          "direction": "higher_is_better"
+                        },
+                        "Average Delay": {
+                          "red": 40, "orange": 25,
+                          "direction": "lower_is_better"
+                        }
+                      }
     """
     sector            : str
     confidence        : float
@@ -95,6 +115,17 @@ class SectorContext(BaseModel):
     recommended_charts: list[str]
     routing_target    : str
     explanation       : str
+    # ── Sprint 2 ──────────────────────────────────────────────────────
+    kpi_thresholds    : dict = {}
+    # { kpi_name: { "red": val, "orange": val, "direction": str } }
+    # ── Sprint 3 — Sector override ────────────────────────────────
+    is_overridden     : bool = False
+    # True si l'utilisateur a choisi manuellement le secteur via POST /sector/override
+    # → court-circuite la détection LLM, confidence forcée à 1.0
+
+
+# Secteurs disponibles — source de vérité pour le sector override
+AVAILABLE_SECTORS: list[str] = ["transport", "finance", "retail", "manufacturing", "public"]
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -290,6 +321,22 @@ def node_map_kpis(state: SectorAgentState) -> SectorAgentState:
 
     data["kpis"] = [k.model_dump() for k in validated]
 
+    # ── Sprint 2 — extraire kpi_thresholds depuis kpi_config.yaml ────────────
+    # Parcourt TOUS les KPIs du secteur pour que le Frontend/Insight Agent
+    # ait les seuils complets disponibles (pas seulement les KPIs sélectionnés).
+    kpi_thresholds: dict = {}
+    if sector in config.get("sectors", {}):
+        for kpi in config["sectors"][sector]["kpis"]:
+            if "thresholds" in kpi:
+                kpi_thresholds[kpi["name"]] = {
+                    "red"      : kpi["thresholds"].get("red"),
+                    "orange"   : kpi["thresholds"].get("orange"),
+                    "direction": kpi.get("direction", "higher_is_better"),
+                    "unit"     : kpi.get("unit", ""),
+                }
+    data["kpi_thresholds"] = kpi_thresholds
+    # ─────────────────────────────────────────────────────────────────────────
+
     try:
         ctx = SectorContext(**data)
     except Exception as e:
@@ -297,6 +344,8 @@ def node_map_kpis(state: SectorAgentState) -> SectorAgentState:
 
     if state.get("verbose"):
         print(f"  [Node:map_kpis] ✅ {ctx.sector.upper()} ({ctx.confidence:.0%}) → {ctx.routing_target}")
+        if kpi_thresholds:
+            print(f"  [Node:map_kpis] 📊 Thresholds: {len(kpi_thresholds)} KPIs configurés")
 
     return {**state, "sector_context": ctx}
 
@@ -461,8 +510,72 @@ class ContextSectorAgent:
         print(f"  📊 KPIs ({len(r.kpis)}):")
         for kpi in r.kpis:
             icon = {"high": "🔴", "medium": "🟡", "low": "⚪"}.get(kpi.priority, "⚪")
-            print(f"       {icon} [{kpi.priority:<6}] {kpi.name} ({kpi.unit})")
+            thresh = r.kpi_thresholds.get(kpi.name, {})
+            t_str  = (f" | 🟠≥{thresh['orange']} 🔴{'≤' if thresh['direction']=='lower_is_better' else '≤'}{thresh['red']}"
+                      if thresh else "")
+            print(f"       {icon} [{kpi.priority:<6}] {kpi.name} ({kpi.unit}){t_str}")
         print(f"  💬 Reason    : {r.explanation}")
+        if r.kpi_thresholds:
+            print(f"  🎚 Thresholds: {len(r.kpi_thresholds)} KPIs configurés (rouge/orange/vert)")
+
+
+    def override_sector(
+        self,
+        user_query   : str,
+        sector       : str,
+        columns      : Optional[list["ColumnMetadata"]] = None,
+    ) -> SectorContext:
+        """
+        Remarque encadrant R1 — Sector Override.
+
+        Permet à l'utilisateur de corriger la détection automatique.
+        Le secteur est forcé ; seuls les KPIs sont détectés via le graph normal.
+
+        Parameters
+        ----------
+        user_query : str  — query originale de l'utilisateur
+        sector     : str  — secteur choisi manuellement (doit être dans AVAILABLE_SECTORS)
+        columns    : list[ColumnMetadata], optional
+
+        Returns
+        -------
+        SectorContext avec is_overridden=True et confidence=1.0
+
+        Raises
+        ------
+        ValueError si sector n'est pas dans AVAILABLE_SECTORS
+        """
+        if sector not in AVAILABLE_SECTORS:
+            raise ValueError(
+                f"Secteur '{sector}' invalide. "
+                f"Secteurs disponibles : {AVAILABLE_SECTORS}"
+            )
+
+        # On détecte normalement (pour obtenir les KPIs et le dashboard_focus)
+        # puis on force le secteur et confidence=1.0
+        enriched_query = (
+            f"[SECTOR OVERRIDE: {sector}] {user_query} "
+            f"(focus strictly on {sector} sector KPIs)"
+        )
+        ctx = self.detect(enriched_query, columns=columns)
+
+        # Force le secteur et routing_target
+        return SectorContext(
+            sector             = sector,
+            confidence         = 1.0,
+            use_case           = ctx.use_case,
+            metadata_used      = ctx.metadata_used,
+            kpis               = ctx.kpis,
+            dashboard_focus    = ctx.dashboard_focus,
+            recommended_charts = ctx.recommended_charts,
+            routing_target     = f"{sector}_agent",
+            explanation        = (
+                f"Secteur '{sector}' sélectionné manuellement par l'utilisateur. "
+                f"Détection automatique remplacée."
+            ),
+            kpi_thresholds     = ctx.kpi_thresholds,
+            is_overridden      = True,
+        )
 
 
 # Alias rétrocompatibilité (ancienne codebase utilisait SectorDetectionAgent)
