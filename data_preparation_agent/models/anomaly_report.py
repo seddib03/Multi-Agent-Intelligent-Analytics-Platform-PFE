@@ -29,6 +29,7 @@ class CleaningAction(str, Enum):
     REPLACE_ENUM      = "replace_enum"       # Remplacer par valeur enum la plus proche
     FLAG_ONLY         = "flag_only"          # Signaler sans modifier
     PARSE_DATE        = "parse_date"         # Parser la date selon le format
+    CORRECT_VALUE     = "correct_value"      # Corriger la valeur selon la règle métier
 
 
 class UserDecision(str, Enum):

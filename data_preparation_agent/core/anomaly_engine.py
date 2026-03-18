@@ -46,8 +46,8 @@ def _make_generic_br_anomaly(
         justification_1="Signaler la violation pour investigation manuelle",
         action_2=CleaningAction.DROP_ROWS,
         justification_2="Supprimer les lignes ne respectant pas la règle métier",
-        action_3=CleaningAction.FLAG_ONLY,
-        justification_3="Conserver sans modification",
+        action_3=CleaningAction.CORRECT_VALUE,
+        justification_3="Corriger automatiquement la valeur selon la règle métier",
     )
 
 
@@ -71,12 +71,12 @@ def _make_generic_validity_anomaly(
         affected_rows=[], # On n'a pas pu les récupérer par type précis
         affected_count=count,
         affected_pct=float(count / total * 100) if total else 0.0,
-        action_1=CleaningAction.FLAG_ONLY,
-        justification_1="Signaler pour investigation — le type d'erreur n'a pas pu être catégorisé",
-        action_2=CleaningAction.DROP_ROWS,
-        justification_2="Supprimer les lignes avec valeurs invalides",
-        action_3=CleaningAction.FLAG_ONLY,
-        justification_3="Conserver sans modification",
+        action_1=CleaningAction.CAST_TYPE,
+        justification_1=f"Forcer la conversion en {meta.type} (les non-convertibles → NaN)",
+        action_2=CleaningAction.FLAG_ONLY,
+        justification_2="Signaler sans modifier — vérifier si le type metadata est correct",
+        action_3=CleaningAction.DROP_ROWS,
+        justification_3="Supprimer les lignes avec valeurs invalides",
     )
 
 
@@ -281,8 +281,8 @@ def detect_anomalies(
             justification_1="Signaler la violation pour investigation",
             action_2=CleaningAction.DROP_ROWS,
             justification_2="Supprimer les lignes invalides",
-            action_3=CleaningAction.FLAG_ONLY,
-            justification_3="Conserver sans modification",
+            action_3=CleaningAction.CORRECT_VALUE,
+            justification_3="Corriger automatiquement la valeur selon la règle métier",
         ))
 
     plan = CleaningPlan(
@@ -313,21 +313,39 @@ def _make_null_anomaly(
 ) -> AnomalyItem:
     """Anomalie : valeurs nulles sur colonne nullable=false."""
 
-    # Choisir les actions selon le type de la colonne
-    if meta.type in ("int", "float"):
+    # Choisir les actions selon le rôle et le type de la colonne
+    if meta.identifier:
+        # NULL identifiant : FLAG_ONLY → DROP_ROWS → CAST_TYPE
+        a1, j1 = CleaningAction.FLAG_ONLY, \
+            "Signaler sans modifier — vérifier si l'identifiant manquant est récupérable"
+        a2, j2 = CleaningAction.DROP_ROWS, \
+            "Supprimer les lignes sans identifiant — données inexploitables"
+        a3, j3 = CleaningAction.CAST_TYPE, \
+            f"Forcer la conversion en {meta.type} pour tenter de récupérer la valeur"
+    elif meta.type in ("int", "float"):
+        # NULL numérique : IMPUTE_MEDIAN → IMPUTE_MODE → DROP_ROWS
         a1, j1 = CleaningAction.IMPUTE_MEDIAN, \
             "Imputer la médiane — robuste aux outliers, préserve la distribution"
         a2, j2 = CleaningAction.IMPUTE_MODE, \
             "Imputer la valeur la plus fréquente — adapté si distribution unimodale"
         a3, j3 = CleaningAction.DROP_ROWS, \
             "Supprimer les lignes — si les nulls représentent < 5% du dataset"
+    elif meta.type == "date":
+        # NULL date : FLAG_ONLY → IMPUTE_MODE → DROP_ROWS
+        a1, j1 = CleaningAction.FLAG_ONLY, \
+            "Signaler sans modifier — vérifier si la date manquante est récupérable"
+        a2, j2 = CleaningAction.IMPUTE_MODE, \
+            "Imputer la date la plus fréquente — adapté si concentration temporelle"
+        a3, j3 = CleaningAction.DROP_ROWS, \
+            "Supprimer les lignes sans date — si la date est essentielle à l'analyse"
     else:
+        # NULL string : IMPUTE_MODE → FLAG_ONLY → DROP_ROWS
         a1, j1 = CleaningAction.IMPUTE_MODE, \
             "Imputer la valeur la plus fréquente — conserve la cohérence catégorielle"
         a2, j2 = CleaningAction.FLAG_ONLY, \
             "Signaler sans modifier — si la valeur inconnue est significative"
         a3, j3 = CleaningAction.DROP_ROWS, \
-            "Supprimer les lignes — si l'identifiant est manquant"
+            "Supprimer les lignes — si la donnée manquante rend la ligne inutilisable"
 
     return AnomalyItem(
         anomaly_id=f"anomaly_{uuid.uuid4().hex[:6]}",
@@ -469,8 +487,8 @@ def _make_pattern_anomaly(
         params={"pattern": meta.pattern},
         action_1=CleaningAction.FLAG_ONLY,
         justification_1="Signaler — vérifier si le pattern est correct avant de modifier",
-        action_2=CleaningAction.IMPUTE_MODE,
-        justification_2="Remplacer par la valeur la plus fréquente (qui respecte le pattern)",
+        action_2=CleaningAction.CAST_TYPE,
+        justification_2=f"Forcer la conversion en {meta.type} pour tenter de corriger le format",
         action_3=CleaningAction.DROP_ROWS,
         justification_3="Supprimer les lignes avec pattern invalide",
     )
@@ -482,6 +500,25 @@ def _make_type_anomaly(
     total:      int,
 ) -> AnomalyItem:
     """Anomalie : valeurs non castables dans le type attendu."""
+
+    # Choisir les actions selon le rôle de la colonne
+    if meta.identifier:
+        # WRONG_TYPE identifiant : FLAG_ONLY → DROP_ROWS → CAST_TYPE
+        a1, j1 = CleaningAction.FLAG_ONLY, \
+            "Signaler sans modifier — vérifier si le type metadata est correct"
+        a2, j2 = CleaningAction.DROP_ROWS, \
+            "Supprimer les lignes avec type invalide sur l'identifiant"
+        a3, j3 = CleaningAction.CAST_TYPE, \
+            f"Forcer la conversion en {meta.type} (les non-convertibles → NaN)"
+    else:
+        # WRONG_TYPE valeur : CAST_TYPE → FLAG_ONLY → DROP_ROWS
+        a1, j1 = CleaningAction.CAST_TYPE, \
+            f"Forcer la conversion en {meta.type} (les non-convertibles → NaN)"
+        a2, j2 = CleaningAction.FLAG_ONLY, \
+            "Signaler sans modifier — vérifier si le type metadata est correct"
+        a3, j3 = CleaningAction.DROP_ROWS, \
+            "Supprimer les lignes avec type invalide"
+
     return AnomalyItem(
         anomaly_id=f"anomaly_{uuid.uuid4().hex[:6]}",
         column_name=meta.column_name,
@@ -495,12 +532,9 @@ def _make_type_anomaly(
         affected_rows=type_rows,
         affected_count=len(type_rows),
         affected_pct=float(len(type_rows) / total * 100),
-        action_1=CleaningAction.CAST_TYPE,
-        justification_1=f"Forcer la conversion en {meta.type} (les non-convertibles → NaN)",
-        action_2=CleaningAction.FLAG_ONLY,
-        justification_2="Signaler sans modifier — vérifier si le type metadata est correct",
-        action_3=CleaningAction.DROP_ROWS,
-        justification_3="Supprimer les lignes avec type invalide",
+        action_1=a1, justification_1=j1,
+        action_2=a2, justification_2=j2,
+        action_3=a3, justification_3=j3,
     )
 
 
@@ -565,6 +599,6 @@ def _make_business_rule_anomaly(
         justification_1="Signaler la violation pour investigation manuelle",
         action_2=CleaningAction.DROP_ROWS,
         justification_2="Supprimer les lignes ne respectant pas la règle métier",
-        action_3=CleaningAction.FLAG_ONLY, # Fallback
-        justification_3="Conserver en isolant",
+        action_3=CleaningAction.CORRECT_VALUE,
+        justification_3="Corriger automatiquement la valeur selon la règle métier",
     )
