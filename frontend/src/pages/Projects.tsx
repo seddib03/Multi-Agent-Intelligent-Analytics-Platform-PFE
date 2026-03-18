@@ -19,6 +19,8 @@ import { useDarkMode } from "@/hooks/useDarkMode";
 import { t } from "@/lib/i18n";
 import BrandLogo from "@/components/BrandLogo";
 import {
+  getProjectStoredMessages,
+  isProjectDashboardGenerated,
   listProjects,
   deleteProject as apiDeleteProject,
   getProjectSectorContext,
@@ -73,6 +75,7 @@ export default function Projects() {
 
   const handleContinueProject = (project: Project) => {
     // Reprendre un projet affiche d'abord le dashboard, puis le chat si demandé.
+    const restoredMessages = getProjectStoredMessages(project);
     useAppStore.setState((state) => ({
       currentProjectId: project.id,
       currentPhase: 2,  // dashboard
@@ -86,7 +89,10 @@ export default function Projects() {
         ...state.dataset,
         detectedSector: normalizeSector(project.detected_sector),
         businessRules: project.business_rules ?? state.dataset.businessRules,
+        dashboardGenerated: isProjectDashboardGenerated(project),
       },
+      messages: restoredMessages,
+      pinnedInsights: restoredMessages.filter((m) => m.pinned),
     }));
     navigate("/app");
   };

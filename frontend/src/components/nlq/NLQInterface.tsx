@@ -6,11 +6,11 @@ import {
   AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useAppStore } from "@/stores/appStore";
-import { SECTOR_LABELS, getSuggestedQuestions, generateMockResponse } from "@/lib/mockData";
+import { SECTOR_LABELS, getSuggestedQuestions } from "@/lib/mockData";
 import { DXC_CHART_COLORS } from "@/types/app";
 import {
   Send, Download, BarChart3, Pin, Plus, MessageSquare,
-  Lightbulb, History, Menu, X, User, Settings,
+  Lightbulb, History, Loader2, Menu, X, User, Settings,
 } from "lucide-react";
 import { ChatHistoryDrawer } from "@/components/chat/ChatHistoryDrawer";
 import { AccountMenu } from "@/components/ui/AccountMenu";
@@ -24,6 +24,8 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import type { ChartData, Message, Entity } from "@/types/app";
+import { callOrchestrator, parseOrchestratorResponse } from "@/lib/orchestratorApi";
+import { updateProject } from "@/lib/projectsApi";
 
 // ── Chart renderer ─────────────────────────────────────────────────────────
 function DXCChart({ chart, style }: { chart: ChartData; style: string }) {
@@ -155,7 +157,7 @@ function ProcessingIndicator() {
 // ── Main component ──────────────────────────────────────────────────────────
 export function NLQInterface() {
   const {
-    dataset, onboarding, messages, addMessage, togglePin,
+    currentProjectId, dataset, onboarding, messages, addMessage, togglePin,
     setPhase, userPreferences, resetProject, clearMessages,
   } = useAppStore();
   const navigate   = useNavigate();
@@ -199,6 +201,44 @@ export function NLQInterface() {
     })),
   });
 
+  const persistConversation = async (nextMessages: Message[], dashboardGenerated: boolean) => {
+    if (!currentProjectId) return;
+
+    const nowIso = new Date().toISOString();
+    const serialized = nextMessages.slice(-100).map((msg) => ({
+      id: msg.id,
+      role: msg.role,
+      content: msg.content,
+      kpis: msg.kpis,
+      charts: msg.charts,
+      predictions: msg.predictions,
+      pinned: msg.pinned,
+      timestamp: msg.timestamp.toISOString(),
+    }));
+
+    await updateProject(currentProjectId, {
+      use_case: onboarding.useCaseDescription,
+      detected_sector: dataset.detectedSector,
+      business_rules: dataset.businessRules,
+      status: dashboardGenerated ? "READY" : "METADATA_CONFIGURED",
+      visual_preferences: {
+        darkMode: userPreferences.darkMode,
+        chartStyle: userPreferences.chartStyle,
+        density: userPreferences.density,
+        accentTheme: userPreferences.accentTheme,
+        dashboardLayout: userPreferences.dashboardLayout,
+        visibleKPIs: userPreferences.visibleKPIs,
+        language: userPreferences.language,
+        sectorContext: onboarding.sectorContext,
+        dashboardGenerated,
+        conversation: {
+          updatedAt: nowIso,
+          messages: serialized,
+        },
+      },
+    });
+  };
+
   // ── Send handler ──────────────────────────────────────────────────────────
   const handleSend = async (text: string) => {
     if (!text.trim() || processing) return;
@@ -212,6 +252,7 @@ export function NLQInterface() {
     addMessage(userMsg);
     setInput("");
     setProcessing(true);
+    const userSideSnapshot = [...useAppStore.getState().messages, userMsg];
 
     try {
       const csvPath = (
@@ -219,28 +260,46 @@ export function NLQInterface() {
       ).filePath ?? null;
       const raw    = await callOrchestrator(text.trim(), buildMetadata(), csvPath);
       const parsed = parseOrchestratorResponse(raw);
+      const hasDashboardPayload = Boolean(
+        (parsed.charts?.length ?? 0) > 0 ||
+        (parsed.predictions?.length ?? 0) > 0 ||
+        (parsed.kpis?.length ?? 0) > 0,
+      );
+      if (hasDashboardPayload) {
+        useAppStore.getState().updateDataset({ dashboardGenerated: true });
+      }
 
       // Si l'orchestrateur demande une clarification, afficher la question
       const content = parsed.needsClarification && parsed.clarificationQuestion
         ? `${parsed.text}\n\n❓ ${parsed.clarificationQuestion}`
         : parsed.text;
 
-      addMessage({
+      const systemMsg: Message = {
         id:          `s-${Date.now()}`,
         role:        "system",
         content,
+        kpis:        parsed.kpis,
         charts:      parsed.charts,
         predictions: parsed.predictions,
         timestamp:   new Date(),
-      });
+      };
+      addMessage(systemMsg);
+
+      await persistConversation([...userSideSnapshot, systemMsg], hasDashboardPayload || Boolean(dataset.dashboardGenerated));
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Erreur de connexion à l'orchestrateur";
-      addMessage({
+      const errorSystemMsg: Message = {
         id:        `e-${Date.now()}`,
         role:      "system",
         content:   `⚠️ ${errorMsg}`,
         timestamp: new Date(),
-      });
+      };
+      addMessage(errorSystemMsg);
+      try {
+        await persistConversation([...userSideSnapshot, errorSystemMsg], Boolean(dataset.dashboardGenerated));
+      } catch {
+        // no-op: chat remains available locally even if backend persistence fails
+      }
       toast.error("Orchestrateur indisponible");
     } finally {
       setProcessing(false);
@@ -316,7 +375,20 @@ export function NLQInterface() {
         </div>
 
         <div className="p-4 space-y-2">
-          <button onClick={() => { clearMessages(); toast.success(t("newChatStarted", lang)); }} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-dxc-melon text-dxc-white rounded-lg text-xs font-medium hover:bg-dxc-red transition-colors min-h-[36px]">
+          <button
+            onClick={async () => {
+              clearMessages();
+              if (currentProjectId) {
+                try {
+                  await persistConversation([], Boolean(dataset.dashboardGenerated));
+                } catch {
+                  // ignore remote sync errors, local state is already reset
+                }
+              }
+              toast.success(t("newChatStarted", lang));
+            }}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-dxc-melon text-dxc-white rounded-lg text-xs font-medium hover:bg-dxc-red transition-colors min-h-[36px]"
+          >
             <Plus size={12} /> {t("newChat", lang)}
           </button>
           <AlertDialog>
@@ -352,7 +424,21 @@ export function NLQInterface() {
             <button onClick={() => setHistoryOpen(true)} className="p-2 rounded-lg bg-dxc-royal/20 text-dxc-white min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label={t("chatHistory", lang)}>
               <History size={14} />
             </button>
-            <button onClick={() => { clearMessages(); toast.success(t("newChatStarted", lang)); }} className="p-2 rounded-lg bg-dxc-royal/20 text-dxc-white min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label={t("newChat", lang)}>
+            <button
+              onClick={async () => {
+                clearMessages();
+                if (currentProjectId) {
+                  try {
+                    await persistConversation([], Boolean(dataset.dashboardGenerated));
+                  } catch {
+                    // ignore remote sync errors, local state is already reset
+                  }
+                }
+                toast.success(t("newChatStarted", lang));
+              }}
+              className="p-2 rounded-lg bg-dxc-royal/20 text-dxc-white min-w-[36px] min-h-[36px] flex items-center justify-center"
+              aria-label={t("newChat", lang)}
+            >
               <Plus size={14} />
             </button>
             <button onClick={() => navigate("/profile")} className="p-2 rounded-lg bg-dxc-royal/20 text-dxc-white min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label={t("myAccount", lang)}>
@@ -432,7 +518,6 @@ export function NLQInterface() {
             </div>
           ))}
 
-          {processing && <div className="max-w-3xl animate-fade-in"><ProcessingIndicator /></div>}
           <div ref={chatEndRef} />
         </div>
 
@@ -460,6 +545,8 @@ export function NLQInterface() {
             {isMobile ? t("enterToSend", lang) : t("ctrlEnterSend", lang)}
           </p>
         </div>
+
+
       </div>
     </div>
   );

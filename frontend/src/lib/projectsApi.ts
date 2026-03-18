@@ -1,5 +1,6 @@
 import { ensureValidSession } from "./mockAuth";
 import type { SectorDetectionContext } from "@/types/app";
+import type { Message, ChartData, Entity } from "@/types/app";
 
 const API_BASE_URL =
   (import.meta.env.VITE_BACKEND_API_URL as string | undefined)?.replace(/\/$/, "") ||
@@ -128,7 +129,18 @@ export function parseProjectVisualPreferences(raw: string | null): Record<string
     const parsed = JSON.parse(raw);
     return isRecord(parsed) ? parsed : null;
   } catch {
-    return null;
+    // Legacy compatibility: backend previously stored Python-style dict strings.
+    try {
+      const normalized = raw
+        .replace(/\bNone\b/g, "null")
+        .replace(/\bTrue\b/g, "true")
+        .replace(/\bFalse\b/g, "false")
+        .replace(/'/g, '"');
+      const parsed = JSON.parse(normalized);
+      return isRecord(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -146,4 +158,74 @@ export function getProjectSectorContext(project: Project): SectorDetectionContex
   }
 
   return context as unknown as SectorDetectionContext;
+}
+
+export function isProjectDashboardGenerated(project: Project): boolean {
+  const visualPreferences = parseProjectVisualPreferences(project.visual_preferences);
+  if (!visualPreferences) return false;
+
+  const directFlag = visualPreferences.dashboardGenerated;
+  if (typeof directFlag === "boolean") return directFlag;
+
+  const dashboard = visualPreferences.dashboard;
+  if (isRecord(dashboard) && typeof dashboard.generated === "boolean") {
+    return dashboard.generated;
+  }
+
+  return false;
+}
+
+export function getProjectStoredMessages(project: Project): Message[] {
+  const visualPreferences = parseProjectVisualPreferences(project.visual_preferences);
+  if (!visualPreferences) return [];
+
+  const conversation = visualPreferences.conversation;
+  if (!isRecord(conversation)) return [];
+
+  const rawMessages = conversation.messages;
+  if (!Array.isArray(rawMessages)) return [];
+
+  const safeMessages: Message[] = [];
+
+  for (const raw of rawMessages) {
+    if (!isRecord(raw)) continue;
+    if (typeof raw.id !== "string") continue;
+    if (raw.role !== "user" && raw.role !== "system") continue;
+    if (typeof raw.content !== "string") continue;
+
+    const charts = Array.isArray(raw.charts) ? (raw.charts as ChartData[]) : undefined;
+    const predictions = Array.isArray(raw.predictions) ? (raw.predictions as Entity[]) : undefined;
+    const kpis = Array.isArray(raw.kpis)
+      ? (raw.kpis
+          .filter((kpi): kpi is { name: string; value: number; unit?: string } => (
+            isRecord(kpi) &&
+            typeof kpi.name === "string" &&
+            typeof kpi.value === "number"
+          ))
+          .map((kpi) => ({
+            name: kpi.name,
+            value: kpi.value,
+            unit: typeof kpi.unit === "string" ? kpi.unit : "",
+          })))
+      : undefined;
+
+    let timestamp = new Date();
+    if (typeof raw.timestamp === "string" || raw.timestamp instanceof Date) {
+      const parsed = new Date(raw.timestamp);
+      if (!Number.isNaN(parsed.getTime())) timestamp = parsed;
+    }
+
+    safeMessages.push({
+      id: raw.id,
+      role: raw.role,
+      content: raw.content,
+      kpis,
+      charts,
+      predictions,
+      timestamp,
+      pinned: typeof raw.pinned === "boolean" ? raw.pinned : undefined,
+    });
+  }
+
+  return safeMessages;
 }

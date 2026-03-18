@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { SECTOR_LABELS, SECTOR_KPIS } from "@/lib/mockData";
 import { ACCENT_THEMES, DXC_CHART_COLORS } from "@/types/app";
-import type { AccentTheme, ChartStyle, Density, Language } from "@/types/app";
+import type { AccentTheme, ChartData, ChartStyle, Density, Entity, Language } from "@/types/app";
 import { RefreshCw, Download, Settings, X, ArrowUp, ArrowDown, MessageSquare, Check, Globe } from "lucide-react";
 import { AccountMenu } from "@/components/ui/AccountMenu";
 import BrandLogo from "@/components/BrandLogo";
@@ -34,7 +34,17 @@ function Sparkline({ color }: { color: string }) {
   );
 }
 
-function DashboardChart({ chartStyle, primaryColor, lang }: { chartStyle: ChartStyle; primaryColor: string; lang: Language }) {
+function DashboardChart({
+  chartStyle,
+  primaryColor,
+  lang,
+  providedCharts,
+}: {
+  chartStyle: ChartStyle;
+  primaryColor: string;
+  lang: Language;
+  providedCharts?: ChartData[];
+}) {
   const featureImportance = useAppStore((s) => s.modelResults.featureImportance).slice(0, 6);
   const timeData = Array.from({ length: 8 }, (_, i) => ({ name: `S${i + 1}`, [t("current", lang)]: Math.round(Math.random() * 25 + 65), [t("predicted", lang)]: Math.round(Math.random() * 25 + 60) }));
 
@@ -58,6 +68,29 @@ function DashboardChart({ chartStyle, primaryColor, lang }: { chartStyle: ChartS
     );
   };
 
+  if (providedCharts && providedCharts.length > 0) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {providedCharts.slice(0, 2).map((chart, idx) => (
+          <div key={`${chart.title}-${idx}`} className="bg-card rounded-xl p-4 border border-border">
+            <h4 className="text-xs font-semibold mb-3" style={{ color: primaryColor }}>{chart.title}</h4>
+            <ResponsiveContainer width="100%" height={220}>
+              {chart.type === "bar" ? (
+                <BarChart data={chart.data}><CartesianGrid strokeDasharray="3 3" className="stroke-border" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} /><Tooltip />{chart.dataKeys.map((k, i) => (<Bar key={k} dataKey={k} fill={DXC_CHART_COLORS[i % DXC_CHART_COLORS.length]} radius={[4, 4, 0, 0]} />))}</BarChart>
+              ) : chart.type === "line" ? (
+                <LineChart data={chart.data}><CartesianGrid strokeDasharray="3 3" className="stroke-border" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} /><Tooltip /><Legend />{chart.dataKeys.map((k, i) => (<Line key={k} type="monotone" dataKey={k} stroke={DXC_CHART_COLORS[i % DXC_CHART_COLORS.length]} strokeWidth={2} dot={false} />))}</LineChart>
+              ) : chart.type === "area" ? (
+                <AreaChart data={chart.data}><CartesianGrid strokeDasharray="3 3" className="stroke-border" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} /><Tooltip />{chart.dataKeys.map((k, i) => (<Area key={k} type="monotone" dataKey={k} fill={DXC_CHART_COLORS[i % DXC_CHART_COLORS.length]} fillOpacity={0.3} stroke={DXC_CHART_COLORS[i % DXC_CHART_COLORS.length]} />))}</AreaChart>
+              ) : (
+                <PieChart><Pie data={chart.data} dataKey={chart.dataKeys[0]} nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={80}>{chart.data.map((_, i) => (<Cell key={i} fill={DXC_CHART_COLORS[i % DXC_CHART_COLORS.length]} />))}</Pie><Tooltip /><Legend /></PieChart>
+              )}
+            </ResponsiveContainer>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {renderChart(featureImportance.map((f) => ({ name: f.feature, importance: f.importance })), ["importance"], t("factorImportance", lang))}
@@ -67,7 +100,7 @@ function DashboardChart({ chartStyle, primaryColor, lang }: { chartStyle: ChartS
 }
 
 export function Dashboard() {
-  const { dataset, modelResults, userPreferences, updatePreferences, pinnedInsights, togglePin, setPhase, onboarding } = useAppStore();
+  const { dataset, modelResults, messages, userPreferences, updatePreferences, pinnedInsights, togglePin, setPhase, onboarding } = useAppStore();
   const [drawerOpen, setDrawerOpen] = useState(false);
   useDarkMode();
 
@@ -85,11 +118,62 @@ export function Dashboard() {
   const visibleKPIList = kpis.filter((k) => safeVisibleKPIs.includes(k.key));
   const kpiCount = density === "simplified" ? 4 : density === "standard" ? 6 : 8;
   const displayKPIs = visibleKPIList.slice(0, kpiCount);
+  const latestDashboardMessage = [...messages].reverse().find((msg) => (
+    msg.role === "system" && (
+      (msg.kpis?.length ?? 0) > 0 ||
+      (msg.charts?.length ?? 0) > 0 ||
+      (msg.predictions?.length ?? 0) > 0
+    )
+  ));
+  const persistedKpis = latestDashboardMessage?.kpis ?? [];
+  const persistedCharts = latestDashboardMessage?.charts ?? [];
+  const persistedPredictions = latestDashboardMessage?.predictions ?? [];
+  const entitiesForTable: Entity[] = persistedPredictions.length > 0
+    ? persistedPredictions
+    : modelResults.topRiskyEntities;
   const gridCols = density === "simplified" ? "grid-cols-1 sm:grid-cols-2" : density === "standard" ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2 sm:grid-cols-4";
 
   const now = new Date();
   const timeStr = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
   const CHART_STYLES = getChartStyles(language);
+  const hasMessageDashboardPayload = Boolean(latestDashboardMessage);
+  const hasGeneratedDashboard = Boolean(
+    dataset.dashboardGenerated ||
+    hasMessageDashboardPayload ||
+    modelResults.featureImportance.length > 0 ||
+    modelResults.topRiskyEntities.length > 0,
+  );
+
+  if (!hasGeneratedDashboard) {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <div className="h-16 bg-dxc-midnight px-4 md:px-6 flex items-center justify-between flex-wrap gap-2">
+          <div className="min-w-0">
+            <BrandLogo logoClassName="h-7" subtitleClassName="text-[13px] font-semibold" className="mb-0.5" />
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => setPhase(3)} className="text-xs border border-dxc-sky text-dxc-sky px-3 py-1.5 rounded-lg hover:bg-dxc-sky/10 transition-colors flex items-center gap-1"><MessageSquare size={12} /> {t("chat", language)}</button>
+            <AccountMenu variant="dark" position="top" />
+          </div>
+        </div>
+
+        <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-6">
+          <div className="w-full max-w-xl rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
+            <p className="text-lg font-bold text-foreground">{t("dashboardUnavailableTitle", language)}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{t("dashboardUnavailableBody", language)}</p>
+            <div className="mt-5 flex items-center justify-center gap-3">
+              <button onClick={() => setPhase(3)} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity">
+                {t("chat", language)}
+              </button>
+              <button onClick={() => setPhase(1)} className="rounded-lg border border-primary px-4 py-2 text-sm font-medium text-primary hover:bg-primary/5 transition-colors">
+                {t("modifySettings", language)}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -110,20 +194,30 @@ export function Dashboard() {
 
       <div className="p-4 md:p-6 space-y-6">
         <div className={`grid ${gridCols} gap-4`}>
-          {displayKPIs.map((kpi) => (
-            <div key={kpi.key} className="bg-card rounded-xl p-4 border-l-4 transition-all" style={{ borderColor: primaryColor }}>
-              <p className="text-xs uppercase tracking-wider font-semibold" style={{ color: primaryColor }}>{kpi.label}</p>
-              <p className="text-3xl font-bold mt-1" style={{ color: primaryColor }}>{kpi.value}</p>
-              <div className="flex items-center gap-1 mt-1">
-                {kpi.variation > 0 ? <ArrowUp size={12} className="text-dxc-gold" /> : <ArrowDown size={12} className="text-destructive" />}
-                <span className={`text-xs font-semibold ${kpi.variation > 0 ? "text-dxc-gold" : "text-destructive"}`}>{Math.abs(kpi.variation)}%</span>
+          {persistedKpis.length > 0 ? (
+            persistedKpis.slice(0, kpiCount).map((kpi) => (
+              <div key={kpi.name} className="bg-card rounded-xl p-4 border-l-4 transition-all" style={{ borderColor: primaryColor }}>
+                <p className="text-xs uppercase tracking-wider font-semibold" style={{ color: primaryColor }}>{kpi.name}</p>
+                <p className="text-3xl font-bold mt-1" style={{ color: primaryColor }}>{kpi.value} {kpi.unit}</p>
+                <div className="mt-2"><Sparkline color={secondaryColor} /></div>
               </div>
-              <div className="mt-2"><Sparkline color={secondaryColor} /></div>
-            </div>
-          ))}
+            ))
+          ) : (
+            displayKPIs.map((kpi) => (
+              <div key={kpi.key} className="bg-card rounded-xl p-4 border-l-4 transition-all" style={{ borderColor: primaryColor }}>
+                <p className="text-xs uppercase tracking-wider font-semibold" style={{ color: primaryColor }}>{kpi.label}</p>
+                <p className="text-3xl font-bold mt-1" style={{ color: primaryColor }}>{kpi.value}</p>
+                <div className="flex items-center gap-1 mt-1">
+                  {kpi.variation > 0 ? <ArrowUp size={12} className="text-dxc-gold" /> : <ArrowDown size={12} className="text-destructive" />}
+                  <span className={`text-xs font-semibold ${kpi.variation > 0 ? "text-dxc-gold" : "text-destructive"}`}>{Math.abs(kpi.variation)}%</span>
+                </div>
+                <div className="mt-2"><Sparkline color={secondaryColor} /></div>
+              </div>
+            ))
+          )}
         </div>
 
-        <DashboardChart chartStyle={chartStyle} primaryColor={primaryColor} lang={language} />
+        <DashboardChart chartStyle={chartStyle} primaryColor={primaryColor} lang={language} providedCharts={persistedCharts} />
 
         {density === "expert" && (
           <div className="bg-card rounded-xl p-5 border border-border space-y-3">
@@ -151,7 +245,7 @@ export function Dashboard() {
                   <th className="px-3 py-2 text-left text-dxc-peach font-bold">{t("trend", language)}</th>
                 </tr></thead>
                 <tbody>
-                  {modelResults.topRiskyEntities.slice(0, density === "expert" ? 10 : 5).map((e, i) => (
+                  {entitiesForTable.slice(0, density === "expert" ? 10 : 5).map((e, i) => (
                     <tr key={e.id} className={i % 2 === 0 ? "bg-card" : "bg-background"}>
                       <td className="px-3 py-2 font-medium">{e.name}</td>
                       <td className="px-3 py-2"><div className="flex items-center gap-2"><div className="w-16 h-1.5 bg-background rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${e.riskScore}%`, background: e.riskScore > 80 ? "#D14600" : "#FF7E51" }} /></div><span className="font-semibold">{e.riskScore}%</span></div></td>

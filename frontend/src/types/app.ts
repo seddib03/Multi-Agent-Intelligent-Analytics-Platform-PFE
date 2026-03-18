@@ -14,10 +14,17 @@ export interface Entity {
   trend: "up" | "down" | "stable";
 }
 
+export interface InsightKpi {
+  name: string;
+  value: number;
+  unit: string;
+}
+
 export interface Message {
   id: string;
   role: "user" | "system";
   content: string;
+  kpis?: InsightKpi[];
   charts?: ChartData[];
   predictions?: Entity[];
   timestamp: Date;
@@ -100,6 +107,7 @@ export interface AppState {
     qualityScore: number;
     businessRules: string;
     detectedSector: Sector;
+    dashboardGenerated?: boolean;
     previewData: Record<string, unknown>[];
     sourceCsvFile?: File | null;
     sourceCsvPath?: string;

@@ -25,7 +25,7 @@ services:
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     volumes:
       - minio_data:/data
     ports:
@@ -46,7 +46,7 @@ services:
         condition: service_healthy
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-dxc-datasets}
     entrypoint: >
       /bin/sh -c "
@@ -102,7 +102,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-dxc}:${POSTGRES_PASSWORD:-dxcpassword}@postgres:5432/${POSTGRES_DB:-dxc_insight}
       MINIO_ENDPOINT: minio:9000
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin1}
       MINIO_BUCKET: ${MINIO_BUCKET:-dxc-datasets}
       MINIO_SECURE: "false"
       KEYCLOAK_URL: ${KEYCLOAK_URL:-http://keycloak:8080}
@@ -116,7 +116,7 @@ services:
       ENVIRONMENT: ${ENVIRONMENT:-development}
       TEMP_UPLOAD_DIR: /shared/uploads
     ports:
-      - "8000:8000"
+      - "8005:8000"
     volumes:
       - ./backend/app:/app/app
       - ./backend/feature3:/app/feature3
@@ -134,7 +134,7 @@ services:
     env_file:
       - ./nlq_context_agent/sprint1/.env
     ports:
-      - "8002:8000"
+      - "8000:8000"
     networks:
       - nexora_net
 
@@ -180,7 +180,7 @@ services:
       NLQ_API_URL: http://nlq_context_api:8000
       DATA_PREP_URL: ${DATA_PREP_URL:-http://data_preparation_agent:8001}
       INSIGHT_URL: ${INSIGHT_URL:-http://insight_agent:8004}
-      INSIGHT_API_URL: http://insight_agent:8004
+      INSIGHT_API_URL: http://insight_agent:8002
       SHARED_UPLOAD_DIR: /shared/uploads
     ports:
       - "8003:8003"
@@ -196,7 +196,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "8004:8002"
+      - "8002:8002"
     volumes:
       - uploads_shared:/shared/uploads
     networks:
@@ -213,6 +213,7 @@ services:
     environment:
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
+      VITE_BACKEND_API_URL: http://localhost:8005
     ports:
       - "5173:5173"
     volumes:

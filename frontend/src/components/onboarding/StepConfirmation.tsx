@@ -18,7 +18,8 @@ import { callOrchestrator, parseOrchestratorResponse } from "@/lib/orchestratorA
 import type { OrchestratorMeta } from "@/lib/orchestratorApi";
 import { toast } from "sonner";
 import {  type OrchestratorResponse, type ParsedOrchestratorResult } from "@/lib/orchestratorApi";
-import type { ChartData } from "@/types/app";
+import type { ChartData, Message } from "@/types/app";
+import { updateProject } from "@/lib/projectsApi";
 
 interface LaunchStep {
   label: string;
@@ -30,7 +31,7 @@ interface LaunchStep {
 export function StepConfirmation() {
   const {
     onboarding, dataset, userPreferences, currentProjectId,
-    setOnboardingStep, setPhase, updateModelResults, updatePreferences, addMessage,
+    setOnboardingStep, setPhase, updateDataset, updateModelResults, updatePreferences, addMessage,
   } = useAppStore();
   const lang = userPreferences.language;
   const [launching, setLaunching]     = useState(false);
@@ -77,25 +78,84 @@ export function StepConfirmation() {
     try {
       const raw    = await callOrchestrator(onboarding.useCaseDescription, meta, csvPath);
       const parsed = parseOrchestratorResponse(raw);
+      const hasDashboardPayload = Boolean(
+        (parsed.charts?.length ?? 0) > 0 ||
+        (parsed.predictions?.length ?? 0) > 0 ||
+        (parsed.kpis?.length ?? 0) > 0,
+      );
 
       setCurrentStep(1);
       await new Promise((r) => setTimeout(r, 1800));
 
-      // Résultats ML
-      const fi       = generateFeatureImportance(dataset.columns);
-      const entities = generateEntities(safeSector);
-      updateModelResults({ featureImportance: fi, topRiskyEntities: entities });
-      const kpis = SECTOR_KPIS[safeSector] ?? [];
-      updatePreferences({ visibleKPIs: kpis.map((k) => k.key) });
+      if (hasDashboardPayload) {
+        const fi       = generateFeatureImportance(dataset.columns);
+        const entities = generateEntities(safeSector);
+        updateModelResults({ featureImportance: fi, topRiskyEntities: entities });
+        const kpis = SECTOR_KPIS[safeSector] ?? [];
+        updatePreferences({ visibleKPIs: kpis.map((k) => k.key) });
+      } else {
+        updateModelResults({ featureImportance: [], topRiskyEntities: [] });
+      }
+
+      updateDataset({ dashboardGenerated: hasDashboardPayload });
 
       // Premier message de l'orchestrateur dans le chat
+      let systemMsg: Message | null = null;
       if (parsed.text) {
-        addMessage({
+        systemMsg = {
           id:        `orch-${Date.now()}`,
           role:      "system",
           content:   parsed.text,
+          kpis:      parsed.kpis,
           charts:    parsed.charts,
+          predictions: parsed.predictions,
           timestamp: new Date(),
+        };
+        addMessage(systemMsg);
+      }
+
+      if (currentProjectId) {
+        const nowIso = new Date().toISOString();
+        const currentMessages = useAppStore.getState().messages;
+        const mergedMessages = [...currentMessages, ...(systemMsg ? [systemMsg] : [])]
+          .slice(-100)
+          .map((msg) => ({
+            id: msg.id,
+            role: msg.role,
+            content: msg.content,
+            kpis: msg.kpis,
+            charts: msg.charts,
+            predictions: msg.predictions,
+            pinned: msg.pinned,
+            timestamp: msg.timestamp.toISOString(),
+          }));
+
+        await updateProject(currentProjectId, {
+          use_case: onboarding.useCaseDescription,
+          detected_sector: dataset.detectedSector,
+          business_rules: dataset.businessRules,
+          status: hasDashboardPayload ? "READY" : "METADATA_CONFIGURED",
+          visual_preferences: {
+            darkMode: userPreferences.darkMode,
+            chartStyle: userPreferences.chartStyle,
+            density: userPreferences.density,
+            accentTheme: userPreferences.accentTheme,
+            dashboardLayout: userPreferences.dashboardLayout,
+            visibleKPIs: userPreferences.visibleKPIs,
+            language: userPreferences.language,
+            sectorContext,
+            dashboardGenerated: hasDashboardPayload,
+            dashboard: {
+              generated: hasDashboardPayload,
+              hasCharts: (parsed.charts?.length ?? 0) > 0,
+              hasPredictions: (parsed.predictions?.length ?? 0) > 0,
+              generatedAt: nowIso,
+            },
+            conversation: {
+              updatedAt: nowIso,
+              messages: mergedMessages,
+            },
+          },
         });
       }
 
@@ -103,15 +163,37 @@ export function StepConfirmation() {
       setTimeout(() => setPhase(2), 1500);
 
     } catch (err) {
+      updateDataset({ dashboardGenerated: false });
+      updateModelResults({ featureImportance: [], topRiskyEntities: [] });
+
+      if (currentProjectId) {
+        try {
+          await updateProject(currentProjectId, {
+            use_case: onboarding.useCaseDescription,
+            detected_sector: dataset.detectedSector,
+            business_rules: dataset.businessRules,
+            status: "METADATA_CONFIGURED",
+            visual_preferences: {
+              darkMode: userPreferences.darkMode,
+              chartStyle: userPreferences.chartStyle,
+              density: userPreferences.density,
+              accentTheme: userPreferences.accentTheme,
+              dashboardLayout: userPreferences.dashboardLayout,
+              visibleKPIs: userPreferences.visibleKPIs,
+              language: userPreferences.language,
+              sectorContext,
+              dashboardGenerated: false,
+            },
+          });
+        } catch {
+          // nothing to do, we keep local fallback state
+        }
+      }
+
       // Fallback silencieux si orchestrateur down
       console.warn("Orchestrateur indisponible — fallback mock", err);
       setCurrentStep(1);
       await new Promise((r) => setTimeout(r, 1800));
-      const fi       = generateFeatureImportance(dataset.columns);
-      const entities = generateEntities(safeSector);
-      updateModelResults({ featureImportance: fi, topRiskyEntities: entities });
-      const kpis = SECTOR_KPIS[safeSector] ?? [];
-      updatePreferences({ visibleKPIs: kpis.map((k) => k.key) });
       setDone(true);
       setTimeout(() => setPhase(2), 1500);
     }

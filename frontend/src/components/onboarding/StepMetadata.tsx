@@ -1,5 +1,5 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight, FileUp, Info, Maximize2, Minimize2, RotateCcw, X } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight, FileUp, Info, Loader2, Maximize2, Minimize2, RotateCcw, X } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { SECTOR_LABELS } from "@/lib/mockData";
 import type { ColumnMetadata, Sector } from "@/types/app";
@@ -451,8 +451,12 @@ export function StepMetadata() {
     setActiveDsIdx((idx) => Math.min(idx, Math.max(0, uploadedDatasets.length - 1)));
   }, [uploadedDatasets]);
 
-  const selectedSector = normalizeSector(detectedSector) ?? "finance";
-  const recommendedSector = normalizeSector(sectorContext?.sector) ?? selectedSector;
+  const contextDetectedSector = normalizeSector(sectorContext?.sector);
+  const persistedSector = normalizeSector(detectedSector);
+  const selectedSector = contextDetectedSector
+    ? (persistedSector && persistedSector !== contextDetectedSector ? persistedSector : contextDetectedSector)
+    : (persistedSector ?? "public");
+  const recommendedSector = contextDetectedSector ?? selectedSector;
   const selectedSectorInfo = SECTOR_LABELS[selectedSector] ?? { icon: "📊", label: selectedSector };
   const recommendedSectorInfo = SECTOR_LABELS[recommendedSector] ?? { icon: "📊", label: recommendedSector };
   const hasManualSectorOverride = selectedSector !== recommendedSector;
@@ -552,14 +556,9 @@ export function StepMetadata() {
     entries: DictionaryEntry[],
     targetDatasetIndex: number,
   ): { matched: number; remaining: number; backup: UploadedDataset[] | null } => {
-    const dictionaryByOriginalName = new Map<string, DictionaryEntry>();
-    for (const entry of entries) {
-      dictionaryByOriginalName.set(normalizeText(entry.originalName), entry);
-    }
 
     let matched = 0;
     let updated = 0;
-    let added = 0;
     let remaining = 0;
     let backup: UploadedDataset[] | null = null;
 
@@ -571,6 +570,14 @@ export function StepMetadata() {
       if (datasetIndex !== targetDatasetIndex) return ds;
 
       const existingByKey = new Set(ds.columns.map((column) => normalizeText(column.originalName)));
+      const dictionaryByOriginalName = new Map<string, DictionaryEntry>();
+
+      // Verification step: only keep dictionary rows that map to an existing dataset column.
+      for (const entry of entries) {
+        const key = normalizeText(entry.originalName);
+        if (!key || !existingByKey.has(key)) continue;
+        dictionaryByOriginalName.set(key, entry);
+      }
 
       const updatedColumns = ds.columns.map((column) => {
         const match = dictionaryByOriginalName.get(normalizeText(column.originalName));
@@ -608,33 +615,6 @@ export function StepMetadata() {
         return nextColumn;
       });
 
-      for (const entry of entries) {
-        const originalName = entry.originalName.trim();
-        const key = normalizeText(originalName);
-        if (!key || existingByKey.has(key) || isUnnamedColumn(originalName)) {
-          continue;
-        }
-
-        updatedColumns.push({
-          originalName,
-          businessName: entry.businessName?.trim() || originalName,
-          semanticType: entry.semanticType ?? "category",
-          description: entry.description?.trim() ?? "",
-          missingPercent: 0,
-        });
-
-        if (entry.extras) {
-          for (const [extraKey, extraValue] of Object.entries(entry.extras)) {
-            if (!isExtraMetadataKey(extraKey)) continue;
-            (updatedColumns[updatedColumns.length - 1] as unknown as Record<string, unknown>)[extraKey] = extraValue;
-          }
-        }
-
-        existingByKey.add(key);
-        matched += 1;
-        added += 1;
-      }
-
       return { ...ds, columns: updatedColumns };
     });
 
@@ -651,7 +631,7 @@ export function StepMetadata() {
     setLocalDatasets(next);
     persistDatasets(next);
 
-    const affected = updated + added;
+    const affected = updated;
     const toastCount = affected > 0 ? affected : matched;
     toast.success(`${t("dictionaryApplied", lang)} ${toastCount}.`);
     return { matched, remaining, backup };
@@ -842,6 +822,16 @@ export function StepMetadata() {
       await updateProject(currentProjectId, {
         business_rules: businessRules,
         detected_sector: selectedSector,
+        visual_preferences: {
+          darkMode: userPreferences.darkMode,
+          chartStyle: userPreferences.chartStyle,
+          density: userPreferences.density,
+          accentTheme: userPreferences.accentTheme,
+          dashboardLayout: userPreferences.dashboardLayout,
+          visibleKPIs: userPreferences.visibleKPIs,
+          language: userPreferences.language,
+          sectorContext,
+        },
         status: "METADATA_CONFIGURED",
       });
     } catch (error) {
@@ -1306,6 +1296,8 @@ export function StepMetadata() {
           {t("next", lang)} →
         </button>
       </div>
+
+
     </div>
   );
 }

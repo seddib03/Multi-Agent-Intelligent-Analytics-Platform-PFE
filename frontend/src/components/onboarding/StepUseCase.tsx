@@ -130,6 +130,7 @@ export function StepUseCase() {
       }
 
       updateDataset({ detectedSector: normalizedSector });
+      updateDataset({ dashboardGenerated: false });
       useAppStore.setState({ currentProjectId: project.id });
       setOnboardingStep(2);
 
@@ -284,6 +285,7 @@ export function StepUseCase() {
           {saving ? "Création..." : `${t("next", lang)} →`}
         </button>
       </div>
+
     </div>
   );
 }
