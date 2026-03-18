@@ -88,6 +88,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 
 from agents.context_sector_agent import SectorContext
+from agents.customer_adapter import CustomerAdapter, UserProfile, UserBehavior
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -258,6 +259,10 @@ class NLQAgentState(TypedDict):
     # Historique (injecté par NLQAgent depuis self._histories)
     history: list[dict]
 
+    # Customer Adapter
+    customer_profile  : Optional[UserProfile]
+    customer_behavior : Optional[UserBehavior]
+
     # Intermédiaires
     intent_result: Optional[IntentClassification]
 
@@ -283,7 +288,7 @@ def _make_node_classify_intent(llm: ChatOpenAI):
         # ── FIX 2 — lire data_profile pour injecter les colonnes ─────────────
         # Sans les colonnes dans le prompt, le LLM confond souvent
         # "aggregation" (colonne connue) et "explanation" (question vague)
-        data_profile = state.get("data_profile") or {}
+        data_profile      = state.get("data_profile") or {}
 
         kpi_list = ", ".join(k.name for k in sector_context.kpis)
 
@@ -304,7 +309,7 @@ def _make_node_classify_intent(llm: ChatOpenAI):
         # Aide à distinguer sql (colonne citée explicitement)
         # vs aggregation (métrique calculée sans colonne précise)
         columns_hint = ""
-        if data_profile.get("columns"):
+        if data_profile and data_profile.get("columns"):
             cols = data_profile["columns"][:10]  # max 10 pour ne pas surcharger
             columns_hint = f"AVAILABLE COLUMNS: {', '.join(cols)}\n\n"
 
@@ -502,6 +507,8 @@ def _make_node_generate_answer(llm: ChatOpenAI):
         intent            = state["intent_result"]
         sector_context    = state["sector_context"]
         data_profile      = state.get("data_profile")
+        customer_profile  = state.get("customer_profile")   # COUCHE 1
+        customer_behavior = state.get("customer_behavior")  # COUCHE 2
         history           = state["history"]
         question          = state["question"]
 
@@ -551,6 +558,12 @@ UPLOADED DATASET PROFILE (source: Data Prep Agent):
 ⚠ SQL: Use ONLY exact column names listed above. Prefer numeric columns for AVG/SUM/COUNT.
 """
 
+        # ── Customer Adapter COUCHE 3 — profile_context ──────────────────────
+        profile_context = ""
+        if customer_profile is not None and customer_behavior is not None:
+            _tmp = CustomerAdapter.__new__(CustomerAdapter)
+            profile_context = _tmp.build_prompt_context(customer_profile, customer_behavior)
+
         # ── Remarque encadrant R4 — Langue dynamique ─────────────────────────
         # La réponse est systématiquement dans la langue de la question courante.
         # Cette règle prime sur le profil CustomerAdapter (détection immédiate
@@ -576,7 +589,7 @@ AVAILABLE KPIs:
 INTENT     : {intent.intent}
 ENTITIES   : {json.dumps(intent.extracted_entities, ensure_ascii=False)}
 FOLLOW-UP  : {intent.is_follow_up}
-{data_section}{lang_instruction}
+{data_section}{profile_context}{lang_instruction}
 RULES:
 1. Answer based on intent "{intent.intent}"
 2. Generate SQL when intent is "sql" or "aggregation"
@@ -745,6 +758,12 @@ class NLQAgent:
             },
         )
 
+        # ── Customer Adapter ─────────────────────────────────────────────────
+        self.customer_adapter = CustomerAdapter(
+            redis_client = self._redis,
+            verbose      = self.verbose,
+        )
+
         self.graph = self._build_graph()
 
     # ── Méthodes internes Memory Layer ───────────────────────────────────────
@@ -871,12 +890,30 @@ class NLQAgent:
         """
         history = self._get_history(user_id)   # ← Redis ou RAM
 
+        # ── Customer Adapter — COUCHE 1+2+3 AVANT le LLM ────────────────────
+        customer_profile, customer_behavior, _ = (
+            self.customer_adapter.process_before_chat(
+                user_id  = user_id,
+                question = question,
+                sector   = sector_context.sector if sector_context else "",
+                history  = history,
+            )
+        )
+
+        if self.verbose:
+            print(f"\n{chr(8212)*60}")
+            print(f"[NLQLayer] user='{user_id}' | history={len(history)} | q='{question}'")
+            print(f"  [Profiling]  lang={customer_profile.langue} | niveau={customer_profile.niveau} | style={customer_profile.style}")
+            print(f"  [Behavior]   top_kpis={customer_behavior.top_kpis[:2]} | confidence={customer_behavior.confidence}")
+
         initial_state: NLQAgentState = {
             "user_id"          : user_id,
             "question"         : question,
             "sector_context"   : sector_context,
             "data_profile"     : data_profile,
             "history"          : history,
+            "customer_profile" : customer_profile,
+            "customer_behavior": customer_behavior,
             "intent_result"    : None,
             "nlq_response"     : None,
             "verbose"          : self.verbose,
@@ -892,6 +929,17 @@ class NLQAgent:
                 "assistant": result.answer,
             })
 
+            # ── Customer Adapter — COUCHE 1+2 APRÈS le LLM ───────────────────
+            self.customer_adapter.process_after_chat(
+                user_id         = user_id,
+                question        = question,
+                intent          = result.intent,
+                kpi_referenced  = result.kpi_referenced,
+                suggested_chart = result.suggested_chart,
+                sector          = sector_context.sector if sector_context else "",
+                history         = history,
+            )
+
             if self.verbose:
                 orch = " [→ Orchestrateur]" if result.requires_orchestrator else ""
                 print(f"  ✅ intent={result.intent}{orch} | history={self.history_length(user_id)}")
@@ -904,6 +952,18 @@ class NLQAgent:
         if cleared and self.verbose:
             print(f"[NLQLayer] Cleared '{user_id}'.")
         return cleared
+
+    def reset_profile(self, user_id: str) -> bool:
+        """Supprime profil + behavior CustomerAdapter."""
+        result  = self.customer_adapter.delete_all(user_id)
+        deleted = result["profile_deleted"] or result["behavior_deleted"]
+        if deleted and self.verbose:
+            print(f"[NLQLayer] Profile reset for '{user_id}'.")
+        return deleted
+
+    def get_profile_summary(self, user_id: str) -> dict:
+        """Résumé complet. Utilisé par GET /profile/{user_id}."""
+        return self.customer_adapter.full_summary(user_id)
 
     def history_length(self, user_id: str) -> int:
         return len(self._get_history(user_id))    # ← Redis ou RAM

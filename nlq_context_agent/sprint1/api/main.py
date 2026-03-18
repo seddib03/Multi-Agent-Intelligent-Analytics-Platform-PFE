@@ -506,3 +506,51 @@ def reset_chat(body: ResetRequest) -> ResetResponse:
             else f"No active session found for user '{body.user_id}'."
         ),
     )
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CUSTOMER ADAPTER ENDPOINTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get(
+    "/profile/{user_id}",
+    summary = "Profil utilisateur (Customer Adapter)",
+    tags    = ["Customer Adapter"],
+)
+def get_profile(user_id: str) -> dict:
+    """
+    Retourne le profil Customer Adapter d'un utilisateur.
+
+    Construit automatiquement au fil des conversations :
+    - `langue`          : fr / ar / en
+    - `niveau`          : debutant / intermediaire / expert
+    - `style`           : court / detaille
+    - `preferred_chart` : visualisation preferee
+    - `top_kpis`        : KPIs les plus consultes
+    - `dominant_intent` : intent le plus utilise
+    - `confidence`      : low / medium / high
+    """
+    _, na = _get_agents()
+    return na.get_profile_summary(user_id)
+
+
+@app.delete(
+    "/profile/{user_id}",
+    summary = "Reinitialise le profil utilisateur",
+    tags    = ["Customer Adapter"],
+)
+def reset_profile(user_id: str) -> dict:
+    """
+    Supprime le profil Customer Adapter d'un utilisateur.
+    Le profil sera reconstruit automatiquement a la prochaine conversation.
+    """
+    _, na = _get_agents()
+    deleted = na.reset_profile(user_id)
+    return {
+        "user_id"        : user_id,
+        "profile_deleted": deleted,
+        "message"        : (
+            f"Profile reset for user '{user_id}'."
+            if deleted
+            else f"No profile found for user '{user_id}'."
+        ),
+    }
