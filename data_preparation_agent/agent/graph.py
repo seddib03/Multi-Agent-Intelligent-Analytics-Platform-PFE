@@ -39,11 +39,29 @@ checkpointer = PostgresSaver(pool)
 checkpointer.setup()
 
 
+# ── Import Graph (NODE 1 → NODE 2 → END) ─────────────────────────────────────
+# Graph léger utilisé par POST /import : ingestion + profiling uniquement.
+# Retourne profiling_summary immédiatement pour le NLQ agent.
+
+def build_import_graph():
+    wf = StateGraph(AgentState)
+    wf.add_node("ingestion", ingestion_node)
+    wf.add_node("profiling", profiling_node)
+    wf.set_entry_point("ingestion")
+    wf.add_edge("ingestion", "profiling")
+    wf.add_edge("profiling", END)
+    return wf.compile(checkpointer=checkpointer)
+
+import_graph = build_import_graph()
+
+
+# ── Prep Graph (NODE 3 → … → NODE 8) ─────────────────────────────────────────
+# Graph complet utilisé par POST /prepare/{job_id} : quality → delivery.
+# Reprend le state existant (raw_df, duckdb_path, profiling_summary, etc.)
+# et y ajoute metadata + business_rules fournis par l'utilisateur.
+
 def build_graph():
     wf = StateGraph(AgentState)
-
-    wf.add_node("ingestion",  ingestion_node)
-    wf.add_node("profiling",  profiling_node)
     wf.add_node("quality",    quality_node)
     wf.add_node("anomaly",    anomaly_node)
     wf.add_node("strategy",   strategy_node)
@@ -51,9 +69,7 @@ def build_graph():
     wf.add_node("rescoring",  rescoring_node)
     wf.add_node("delivery",   delivery_node)
 
-    wf.set_entry_point("ingestion")
-    wf.add_edge("ingestion", "profiling")
-    wf.add_edge("profiling", "quality")
+    wf.set_entry_point("quality")
     wf.add_edge("quality",   "anomaly")
     wf.add_edge("anomaly",   "strategy")
 
