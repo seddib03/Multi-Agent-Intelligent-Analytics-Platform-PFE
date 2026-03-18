@@ -1,1 +1,0 @@
-{"columns": [{"column_name": "client_id", "type": "Integer"}, {"column_name": "age", "type": "Integer"}, {"column_name": "region", "type": "Categorical"}, {"column_name": "prime", "type": "Numeric"}, {"column_name": "sinistres", "type": "Integer"}, {"column_name": "montant_sinistre", "type": "Numeric"}]}
