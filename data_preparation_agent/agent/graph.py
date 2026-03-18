@@ -1,8 +1,11 @@
 from __future__ import annotations
 import logging
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
+from langgraph.checkpoint.postgres import PostgresSaver
+from psycopg_pool import ConnectionPool
+
 from agent.state import AgentState
+from config.settings import get_settings
 from agent.nodes.ingestion_node  import ingestion_node
 from agent.nodes.profiling_node  import profiling_node
 from agent.nodes.quality_node    import quality_node
@@ -14,13 +17,51 @@ from agent.nodes.delivery_node   import delivery_node
 
 logger = logging.getLogger(__name__)
 
-checkpointer = MemorySaver()
+settings = get_settings()
+
+# Création du pool de connexions PostgreSQL pour LangGraph
+connection_kwargs = {
+    "autocommit": True,
+    "prepare_threshold": 0,
+}
+# Si un schema spécifique est défini, l'ajouter au search_path
+if settings.agent_schema:
+    connection_kwargs["options"] = f"-c search_path={settings.agent_schema},public"
+
+pool = ConnectionPool(
+    conninfo=settings.database_url,
+    max_size=20,
+    kwargs=connection_kwargs,
+)
+
+checkpointer = PostgresSaver(pool)
+# Auto-créer les tables nécessaires si elles n'existent pas
+checkpointer.setup()
+
+
+# ── Import Graph (NODE 1 → NODE 2 → END) ─────────────────────────────────────
+# Graph léger utilisé par POST /import : ingestion + profiling uniquement.
+# Retourne profiling_summary immédiatement pour le NLQ agent.
+
+def build_import_graph():
+    wf = StateGraph(AgentState)
+    wf.add_node("ingestion", ingestion_node)
+    wf.add_node("profiling", profiling_node)
+    wf.set_entry_point("ingestion")
+    wf.add_edge("ingestion", "profiling")
+    wf.add_edge("profiling", END)
+    return wf.compile(checkpointer=checkpointer)
+
+import_graph = build_import_graph()
+
+
+# ── Prep Graph (NODE 3 → … → NODE 8) ─────────────────────────────────────────
+# Graph complet utilisé par POST /prepare/{job_id} : quality → delivery.
+# Reprend le state existant (raw_df, duckdb_path, profiling_summary, etc.)
+# et y ajoute metadata + business_rules fournis par l'utilisateur.
 
 def build_graph():
     wf = StateGraph(AgentState)
-
-    wf.add_node("ingestion",  ingestion_node)
-    wf.add_node("profiling",  profiling_node)
     wf.add_node("quality",    quality_node)
     wf.add_node("anomaly",    anomaly_node)
     wf.add_node("strategy",   strategy_node)
@@ -28,9 +69,7 @@ def build_graph():
     wf.add_node("rescoring",  rescoring_node)
     wf.add_node("delivery",   delivery_node)
 
-    wf.set_entry_point("ingestion")
-    wf.add_edge("ingestion", "profiling")
-    wf.add_edge("profiling", "quality")
+    wf.set_entry_point("quality")
     wf.add_edge("quality",   "anomaly")
     wf.add_edge("anomaly",   "strategy")
 

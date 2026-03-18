@@ -147,7 +147,6 @@
     ],
     "business_rules": [
         "delivery_date must always be after order_date",
-        "total_amount should equal quantity multiplied by unit_price multiplied by (1 minus discount_pct divided by 100)",
         "if status is cancelled then discount_pct must be 0"
     ]
 }

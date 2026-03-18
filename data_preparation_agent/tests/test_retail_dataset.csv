@@ -1,6 +1,6 @@
 order_id,customer_id,product_name,category,quantity,unit_price,total_amount,discount_pct,order_date,delivery_date,payment_method,store_id,region,status
-ORD-00001,CUST-0082,T-Shirt,Clothing,9,126.22,1088.27,4.2,2025-02-22,2025-03-05,Gift Card,STORE-002,Central,returned
-ORD-00002,CUST-0012,Cushion,Home,17,303.0,4285.63,16.8,2025-11-29,2025-12-11,Gift Card,STORE-007,South,returned
+,CUST-0082,T-Shirt,Clothing,9,126.22,1088.27,4.2,2025-02-22,2025-03-05,Gift Card,STORE-002,Central,returned
+ORD-00002,,Cushion,Home,17,303.0,4285.63,16.8,2025-11-29,2025-12-11,Gift Card,STORE-007,South,returned
 ORD-00003,CUST-0104,Smartphone,Electronics,14,173.42,2313.77,4.7,2025-06-22,2025-06-24,Credit Card,STORE-007,North,processing
 ORD-00004,CUST-0078,Shampoo,Beauty,15,270.43,2871.97,29.2,2025-07-13,2025-07-15,Gift Card,STORE-005,Central,processing
 ORD-00005,CUST-0091,T-Shirt,Clothing,8,387.67,2183.36,29.6,2025-04-30,2025-05-14,Credit Card,STORE-007,East,returned

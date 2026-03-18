@@ -15,12 +15,18 @@ class SectorEnum(str, Enum):
 #Definition of intent
 
 class IntentEnum(str, Enum):
-    KPI_REQUEST = "kpi_request"
-    PREDICTION = "prediction"
-    EXPLANATION = "explanation"
-    COMPARISON = "comparison"
-    DASHBOARD = "dashboard"
-    UNKNOWN = "unknown"
+    SQL             = "sql"
+    AGGREGATION     = "aggregation"
+    COMPARISON      = "comparison"
+    EXPLANATION     = "explanation"
+    PREDICTION      = "prediction"
+    SECTOR_ANALYSIS = "sector_analysis"
+    ANOMALY         = "anomaly"
+    DASHBOARD       = "dashboard"
+    KPI_REQUEST     = "kpi_request"
+    KPI_CHART       = "kpi_chart"
+    INSIGHT         = "insight"
+    UNKNOWN         = "unknown"
 
 #Definition of routing
 
@@ -45,6 +51,7 @@ class ExecutionTypeEnum(str, Enum):
 # Data preparation for agent execution
 class DataPrepStatusEnum(str, Enum):
     NOT_STARTED        = "not_started"
+    IMPORTED           = "imported"
     RUNNING            = "running"
     WAITING_VALIDATION = "waiting_validation"  # Human-in-the-Loop
     COMPLETED          = "completed"
@@ -63,8 +70,9 @@ class OrchestratorState(BaseModel):
     #Sector detection result
     sector: SectorEnum = SectorEnum.UNKNOWN
     sector_confidence: float = 0.0
-   # kpi_mapping: list[str] = Field(default_factory=list)  
-    kpi_mapping: list[dict] = Field(default_factory=list)  # List of dicts with KPI details
+    # kpi_mapping: list[str] = Field(default_factory=list)  
+    kpi_mapping: list[dict] = Field(default_factory=list)
+
     domain_constraints: dict = Field(default_factory=dict)
     
 
@@ -74,8 +82,15 @@ class OrchestratorState(BaseModel):
     entities: dict = Field(default_factory=dict)           
     query_structured: dict = Field(default_factory=dict)
 
+    requires_orchestrator: bool = False
+# True = le NLQ agent demande à l'orchestrateur de prendre la main
+
+    sub_agent: str = ""
+# "sector_prediction" ou "sector_explanation"
+# précise la TÂCHE que l'agent sectoriel doit faire
+
     # From context Agent
-    canonical_metrics: str = ""
+    canonical_metric: str = ""
     execution_type: ExecutionTypeEnum = ExecutionTypeEnum.UNKNOWN
     data_source: dict = Field(default_factory=dict)
     metric_raw: str = ""

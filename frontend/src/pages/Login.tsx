@@ -9,6 +9,16 @@ import { useAppStore } from "@/stores/appStore";
 import { useAuth } from "@/hooks/useAuth";
 import { t } from "@/lib/i18n";
 import BrandLogo from "@/components/BrandLogo";
+import { listProjects, type Project } from "@/lib/projectsApi";
+
+const SUPPORTED_SECTORS = ["finance", "transport", "retail", "manufacturing", "public"] as const;
+
+function normalizeSector(value: string | null | undefined): (typeof SUPPORTED_SECTORS)[number] {
+  if (value && (SUPPORTED_SECTORS as readonly string[]).includes(value)) {
+    return value as (typeof SUPPORTED_SECTORS)[number];
+  }
+  return "public";
+}
 
 const Login = () => {
   const navigate = useNavigate();
@@ -23,11 +33,68 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
     const { error } = await signInWithPassword({ email, password });
-    setLoading(false);
     if (error) {
+      setLoading(false);
       toast.error(error.message);
     } else {
       toast.success(t("loginSuccess", lang));
+
+      try {
+        const projects = await listProjects();
+        const state = useAppStore.getState();
+        const byUpdatedAtDesc = [...projects].sort(
+          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        );
+
+        const targetProject: Project | undefined =
+          byUpdatedAtDesc.find((p) => p.id === state.currentProjectId) ?? byUpdatedAtDesc[0];
+
+        if (targetProject) {
+          useAppStore.setState((s) => ({
+            currentProjectId: targetProject.id,
+            // show dashboard first after login
+            currentPhase: 2,
+            onboardingStep: 4,
+            onboarding: {
+              ...s.onboarding,
+              useCaseDescription: targetProject.use_case ?? s.onboarding.useCaseDescription,
+            },
+            dataset: {
+              ...s.dataset,
+              detectedSector: normalizeSector(targetProject.detected_sector),
+              businessRules: targetProject.business_rules ?? s.dataset.businessRules,
+            },
+          }));
+        } else {
+          useAppStore.setState((s) => ({
+            currentProjectId: null,
+            currentPhase: 1,
+            onboardingStep: 1,
+            onboarding: {
+              ...s.onboarding,
+              useCaseDescription: "",
+              sectorContext: null,
+            },
+            dataset: {
+              ...s.dataset,
+              fileName: "",
+              rowCount: 0,
+              columnCount: 0,
+              columns: [],
+              qualityScore: 0,
+              businessRules: "",
+              detectedSector: "finance",
+              previewData: [],
+            },
+            messages: [],
+            pinnedInsights: [],
+          }));
+        }
+      } catch {
+        // If project listing fails, fallback to regular app route.
+      }
+
+      setLoading(false);
       navigate("/app");
     }
   };

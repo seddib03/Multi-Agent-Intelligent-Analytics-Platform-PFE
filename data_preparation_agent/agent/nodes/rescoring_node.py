@@ -48,14 +48,26 @@ def rescoring_node(state: AgentState) -> dict:
     df       = _load_df(state["clean_df"])
     metadata = _load_metadata(state["metadata"])
     business_rules = state.get("business_rules", [])
+    br_tests = state.get("business_rule_tests")
 
-    quality_after = compute_quality_report(
+    logger.info("clean_df reçu — %d lignes x %d colonnes", len(df), len(df.columns))
+
+    # ── Mettre à jour DuckDB avec les données nettoyées ───────────────────
+    import duckdb
+    with duckdb.connect(state["duckdb_path"]) as conn:
+        conn.execute("DROP TABLE IF EXISTS raw_data")
+        conn.execute("CREATE TABLE raw_data AS SELECT * FROM df")
+    
+    logger.info("DuckDB mis à jour avec clean_df avant rescoring")
+
+    quality_after, _ = compute_quality_report(
         metadata=metadata,
         label="APRÈS",
         sector=state.get("sector", "unknown"),
         job_id=state["job_id"],
         duckdb_path=state["duckdb_path"],
         business_rules=business_rules,
+        precomputed_br_tests=br_tests,
     )
 
     # Calculer le gain par rapport au score AVANT

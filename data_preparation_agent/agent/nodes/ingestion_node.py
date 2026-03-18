@@ -17,30 +17,36 @@ def ingestion_node(state: AgentState) -> dict:
     logger.info(">>> NODE 1 : Ingestion")
     settings = get_settings()
 
-    # Charger le metadata JSON
-    with open(state["metadata_path"], encoding="utf-8") as f:
-        raw_meta = json.load(f)
+    metadata_path = state.get("metadata_path", "")
 
-    # Parser le metadata (liste ou dict avec clé "columns")
-    if isinstance(raw_meta, list):
-        meta_list = raw_meta
-    elif isinstance(raw_meta, dict) and "columns" in raw_meta:
-        meta_list = raw_meta["columns"]
+    # ── Metadata optionnel (absent en mode Import léger) ──────────────────
+    if metadata_path and Path(metadata_path).exists():
+        with open(metadata_path, encoding="utf-8") as f:
+            raw_meta = json.load(f)
+
+        if isinstance(raw_meta, list):
+            meta_list = raw_meta
+        elif isinstance(raw_meta, dict) and "columns" in raw_meta:
+            meta_list = raw_meta["columns"]
+        else:
+            meta_list = raw_meta
+
+        metadata = parse_metadata(meta_list)
+        sector = "unknown"
+        business_rules = []
+        if isinstance(raw_meta, dict):
+            sector = raw_meta.get("sector", raw_meta.get("secteur", "unknown"))
+            business_rules = raw_meta.get("business_rules", [])
     else:
-        meta_list = raw_meta
-
-    metadata = parse_metadata(meta_list)
+        logger.info("Pas de metadata fourni — mode Import léger")
+        raw_meta = {}
+        metadata = []
+        business_rules = []
+        sector = state.get("sector", "unknown")
 
     # Charger le CSV avec Pandas
     df = pd.read_csv(state["dataset_path"], dtype=str, keep_default_na=True)
     logger.info("Dataset chargé — %d lignes x %d colonnes", len(df), len(df.columns))
-
-    # Détecter le secteur et les business rules depuis le metadata si présent
-    sector = "unknown"
-    business_rules = []
-    if isinstance(raw_meta, dict):
-        sector = raw_meta.get("sector", raw_meta.get("secteur", "unknown"))
-        business_rules = raw_meta.get("business_rules", [])
 
     # Upload Bronze MinIO
     minio = MinioClient()
@@ -56,15 +62,16 @@ def ingestion_node(state: AgentState) -> dict:
     duckdb_dir.mkdir(parents=True, exist_ok=True)
     duckdb_path = str(duckdb_dir / "db.duckdb")
 
+    # Ajouter l'ID de ligne pour le tracking
+    df["__row_id"] = range(len(df))
+
     with duckdb.connect(duckdb_path) as conn:
-        # Créer la table raw_data avec le contenu de df + un ID de ligne
-        df_duck = df.copy()
-        df_duck["__row_id"] = range(len(df_duck))
-        conn.execute("CREATE TABLE raw_data AS SELECT * FROM df_duck")
+        # Créer la table raw_data avec le contenu de df
+        conn.execute("CREATE TABLE raw_data AS SELECT * FROM df")
     
     logger.info("Données ingérées dans DuckDB: %s", duckdb_path)
 
-    # Sérialiser le DataFrame pour le state LangGraph
+    # Sérialiser le DataFrame pour le state LangGraph (inclut __row_id)
     raw_df_dict = {
         "columns": df.columns.tolist(),
         "data":    df.where(pd.notnull(df), None).values.tolist(),

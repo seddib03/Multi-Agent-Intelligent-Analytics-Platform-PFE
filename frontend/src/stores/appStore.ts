@@ -10,8 +10,7 @@ const EMPTY_PROJECT = {
   currentProjectId: null,
   onboarding: {
     useCaseDescription: "",
-    analysisTypes: [] as string[],
-    timeHorizon: "30 jours",
+    sectorContext: null,
   },
   dataset: {
     fileName: "",
@@ -22,6 +21,8 @@ const EMPTY_PROJECT = {
     businessRules: "",
     detectedSector: "finance" as const,
     previewData: [],
+    sourceCsvFile: null,
+    sourceCsvPath: "",
   },
   modelResults: {
     algorithm: "XGBoost",

@@ -1,58 +1,80 @@
-import asyncio
 import time
 from app.graph.state import OrchestratorState, DataPrepStatusEnum
 from app.clients.data_prep_client import (
-    call_prepare,
+    call_import,
+    call_prepare_v2,
     call_get_status,
     call_get_data_profile
 )
+from app.utils.async_utils import run_async
 
-MAX_WAIT_SECONDS = 300   # 5 minutes max pour la validation utilisateur
-POLL_INTERVAL    = 5     # vérifier le statut toutes les 5 secondes
+MAX_WAIT_SECONDS = 300
+POLL_INTERVAL    = 5
+
 
 def data_prep_node(state: OrchestratorState) -> OrchestratorState:
+    """state.processing_steps.append("data_prep_node → bypassed")
+    return state"""
     """
-    Node 3 of the LangGraph graph — Data Preparation Agent.
+    Node 3 — Data Preparation Agent (Collègue 2).
 
-    Role: prepares and cleans data before analysis.
-
-    Flow:
-    1. If no CSV → skip (data already in Data Lake)
-    2. Launches POST /prepare → job_id + anomalies plan
-    3. Polling GET /jobs/{id}/status
-       → "waiting_validation": waits for user validation in UI
-       → "completed": continue
-       → "failed": error, continue without data
-    4. Retrieves data_profile via /profiling-json
-       → will be passed to NLQ /chat to generate precise SQL
+    Flux en 2 étapes (restructuration Sprint 2) :
+    1. POST /import          → CSV uniquement → job_id + profiling disponible
+    2. POST /prepare/{id}    → metadata + règles métier → anomalies + plan LLM
+    3. Polling /status       → waiting_validation (Human-in-the-Loop côté UI)
+    4. GET /profiling-json   → data_profile pour NLQ Agent
     """
 
-    # ── Case 1: no CSV provided → skip ──────────────────────────
+    # ── Pas de CSV → skip ─────────────────────────────────────────
     if not state.csv_path:
-        state.processing_steps.append(
-            "data_prep_node → skipped (no CSV provided)"
-        )
+        state.processing_steps.append("data_prep_node → skipped (no CSV)")
         return state
 
-    # ── Case 2: CSV provided → launch pipeline ───────────────────
-    state = asyncio.run(call_prepare(state))
+    # ── Étape 1 : Import CSV ───────────────────────────────────────
+    try:
+        state = run_async(call_import(state))
+    except Exception as e:
+        state.errors.append(f"Data Prep /import error: {e}")
+        state.data_prep_status = DataPrepStatusEnum.FAILED
+        state.processing_steps.append("data_prep_node → ERREUR /import")
+        return state
 
-    # If connection error → continue without prepared data
     if state.data_prep_status == DataPrepStatusEnum.FAILED:
-        state.errors.append(
-            "Data Prep Agent unavailable — continuing without prepared data"
-        )
+        state.errors.append("Data Prep /import failed — continuing without prep")
         return state
 
-    # ── Polling — wait for job to complete ───────────────
-    # The job pauses (waiting_validation) and waits
-    # for the user to validate the cleaning plan in the UI.
+    # IMPORTED = succès de l'étape 1
+    if state.data_prep_status == DataPrepStatusEnum.IMPORTED:
+        state.data_prep_status = DataPrepStatusEnum.RUNNING
+
+    # ── Étape 2 : Qualité + metadata ──────────────────────────────
+    # Seulement si la metadata est disponible
+    if state.metadata:
+        try:
+            state = run_async(call_prepare_v2(state))
+        except Exception as e:
+            state.errors.append(f"Data Prep /prepare error: {e}")
+            # On continue — le CSV brut est déjà disponible via /import
+            state.processing_steps.append(
+                "data_prep_node → /prepare échoué, CSV brut disponible"
+            )
+
+    if state.data_prep_status == DataPrepStatusEnum.FAILED:
+        state.errors.append("Data Prep /prepare failed — continuing without prep")
+        return state
+
+    # ── Étape 3 : Polling — attendre fin du job ───────────────────
+    # Le job se met en waiting_validation si des anomalies sont détectées
+    # L'UI doit appeler /validate pour débloquer
     elapsed = 0
     while elapsed < MAX_WAIT_SECONDS:
+        try:
+            status_result = run_async(call_get_status(state.data_prep_job_id))
+        except Exception as e:
+            state.errors.append(f"Data Prep polling error: {e}")
+            state.data_prep_status = DataPrepStatusEnum.FAILED
+            break
 
-        status_result  = asyncio.run(
-            call_get_status(state.data_prep_job_id)
-        )
         current_status = status_result.get("status", "")
 
         if current_status == "completed":
@@ -62,35 +84,32 @@ def data_prep_node(state: OrchestratorState) -> OrchestratorState:
 
         if current_status == "failed":
             state.data_prep_status = DataPrepStatusEnum.FAILED
-            state.data_prep_error  = str(
-                status_result.get("errors", [])
-            )
-            state.errors.append(
-                f"Data Prep failed: {state.data_prep_error}"
-            )
+            state.data_prep_error  = str(status_result.get("errors", []))
+            state.errors.append(f"Data Prep failed: {state.data_prep_error}")
             return state
 
-        # En attente validation → on logue et on attend
+        # waiting_validation ou running → on attend
         state.data_prep_status = DataPrepStatusEnum.WAITING_VALIDATION
         state.processing_steps.append(
-            f"data_prep_node → waiting_validation "
-            f"({elapsed}s elapsed)"
+            f"data_prep_node → {current_status} ({elapsed}s elapsed)"
         )
         time.sleep(POLL_INTERVAL)
         elapsed += POLL_INTERVAL
 
-    # ── Retrieve data_profile for NLQ Agent ───────────────
+    # ── Étape 4 : Récupération du data_profile ────────────────────
     if state.data_prep_status == DataPrepStatusEnum.COMPLETED:
-        state = asyncio.run(call_get_data_profile(state))
+        try:
+            state = run_async(call_get_data_profile(state))
+        except Exception as e:
+            state.errors.append(f"Data Prep profiling error: {e}")
+
         state.processing_steps.append(
             f"data_prep_node → COMPLETED | "
             f"silver={state.data_prep_paths.get('silver', 'N/A')}"
         )
     else:
-        # Timeout exceeded
-        state.data_prep_status = DataPrepStatusEnum.FAILED
-        state.errors.append(
-            f"Data Prep timeout after {MAX_WAIT_SECONDS}s"
-        )
+        if state.data_prep_status != DataPrepStatusEnum.FAILED:
+            state.data_prep_status = DataPrepStatusEnum.FAILED
+            state.errors.append(f"Data Prep timeout after {MAX_WAIT_SECONDS}s")
 
     return state
