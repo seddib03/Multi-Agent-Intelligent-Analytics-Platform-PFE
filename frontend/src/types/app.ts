@@ -2,7 +2,7 @@ export interface ColumnMetadata {
   originalName: string;
   businessName: string;
   semanticType: "target" | "date" | "numeric" | "category" | "identifier" | "ignore";
-  unit: string;
+  description?: string;
   missingPercent: number;
 }
 
@@ -49,6 +49,25 @@ export const DXC_CHART_COLORS = ["#004AAC", "#FF7E51", "#FFAE41", "#4995FF", "#F
 
 export type Language = "fr" | "en";
 
+export interface SectorKpi {
+  name: string;
+  description: string;
+  unit: string;
+  priority: string;
+}
+
+export interface SectorDetectionContext {
+  sector: string;
+  confidence: number;
+  use_case: string;
+  metadata_used: boolean;
+  kpis: SectorKpi[];
+  dashboard_focus: string;
+  recommended_charts: string[];
+  routing_target: string;
+  explanation: string;
+}
+
 export interface SavedProject {
   id: string;
   name: string;
@@ -71,8 +90,7 @@ export interface AppState {
   savedProjects: SavedProject[];
   onboarding: {
     useCaseDescription: string;
-    analysisTypes: string[];
-    timeHorizon: string;
+    sectorContext: SectorDetectionContext | null;
   };
   dataset: {
     fileName: string;
@@ -83,6 +101,8 @@ export interface AppState {
     businessRules: string;
     detectedSector: Sector;
     previewData: Record<string, unknown>[];
+    sourceCsvFile?: File | null;
+    sourceCsvPath?: string;
   };
   modelResults: {
     algorithm: string;

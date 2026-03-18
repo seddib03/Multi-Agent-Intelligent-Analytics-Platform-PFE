@@ -1,26 +1,39 @@
 from app.graph.state import OrchestratorState, SectorEnum, RouteEnum
 from app.clients.nlq_client import call_detect_sector
-import asyncio
+from app.utils.async_utils import run_async
 
-# Mapping routing_target → RouteEnum
-ROUTING_TARGET_MAP = {
-    "transport_agent":     RouteEnum.TRANSPORT_AGENT,
-    "finance_agent":       RouteEnum.FINANCE_AGENT,
-    "retail_agent":        RouteEnum.RETAIL_AGENT,
-    "manufacturing_agent": RouteEnum.MANUFACTURING_AGENT,
-    "public_agent":        RouteEnum.PUBLIC_AGENT,
+SECTOR_ROUTE_MAP = {
+    "finance":       "finance_agent",
+    "healthcare":    "insight_agent",
+    "retail":        "retail_agent",
+    "manufacturing": "manufacturing_agent",
+    "telecom":       "insight_agent",
+    "transport":     "transport_agent",
+    "public":        "public_agent",
+    "general":       "generic_predictive_agent",
 }
 
 def sector_detection_node(state: OrchestratorState) -> OrchestratorState:
-    """
-    Sprint 1 mock (mots-clés) → remplacé par l'API réelle de la collègue.
-    Appelle POST /detect-sector et remplit le state avec le SectorContext.
-    """
-    # Appel à l'API de ta collègue
-    state, suggested_route = asyncio.run(call_detect_sector(state))
+    # ── Utiliser le secteur déjà détecté dans les metadata ──────────────
+    sector_from_meta = state.metadata.get("sector", "").lower()
+    if sector_from_meta and sector_from_meta != "unknown":
+        try:
+            state.sector = SectorEnum(sector_from_meta.capitalize())
+        except ValueError:
+            state.sector = SectorEnum.UNKNOWN
 
-    # Si elle suggère une route → on la stocke dans le state
-    if suggested_route:
-        state.routing_target = suggested_route.value
+        state.sector_confidence = 0.90
+        state.routing_target    = SECTOR_ROUTE_MAP.get(sector_from_meta, "generic_predictive_agent")
+        state.processing_steps.append(
+            f"sector_detection → from_metadata: {sector_from_meta} "
+            f"| routing_target={state.routing_target}"
+        )
+        return state
 
+    # ── Fallback : appel NLQ /detect-sector ─────────────────────────────
+    try:
+        state, _ = run_async(call_detect_sector(state))
+    except Exception as e:
+        state.errors.append(f"sector_detection → erreur: {e}")
+        state.processing_steps.append("sector_detection → ERREUR")
     return state

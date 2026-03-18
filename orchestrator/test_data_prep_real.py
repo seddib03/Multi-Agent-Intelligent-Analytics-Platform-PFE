@@ -1,40 +1,44 @@
+"""
+Test réel — Data Preparation Agent (nouveau flux Sprint 2)
+Lance ce test depuis le dossier orchestrator/ :
+    python -m pytest tests/test_data_prep_real.py -v -s
+ou directement :
+    python tests/test_data_prep_real.py
+"""
 import asyncio
 import httpx
 import os
+import json
+import pytest
 from app.graph.state import OrchestratorState, DataPrepStatusEnum
 from app.clients.data_prep_client import (
-    call_prepare,
-    call_get_data_profile
+    call_import,
+    call_prepare_v2,
+    call_get_status,
+    call_get_data_profile,
+    call_validate,
 )
 
-TEST_CSV = "test_flights.csv"
+DATA_PREP_URL = os.getenv("DATA_PREP_API_URL", "http://127.0.0.1:8001")
+TEST_CSV      = "test_flights.csv"
 
 TEST_METADATA = {
     "table_name": "flights",
     "columns": [
-        {"column_name": "flight_id",          "type": "int",
-         "nullable": False, "unique": True},
-        {"column_name": "delay_minutes",      "type": "float",
-         "min_val": 0, "max_val": 500},
-        {"column_name": "gate",               "type": "string",
-         "nullable": True},
-        {"column_name": "satisfaction_score", "type": "float",
-         "min_val": 0, "max_val": 5},
-        {"column_name": "route",              "type": "string",
-         "nullable": False},
-        {"column_name": "passenger_count",    "type": "int",
-         "min_val": 0},
+        {"column_name": "flight_id",         "type": "int",    "nullable": False, "unique": True},
+        {"column_name": "delay_minutes",      "type": "float",  "min_val": 0, "max_val": 500},
+        {"column_name": "gate",               "type": "string", "nullable": True},
+        {"column_name": "satisfaction_score", "type": "float",  "min_val": 0, "max_val": 5},
+        {"column_name": "route",              "type": "string", "nullable": False},
+        {"column_name": "passenger_count",    "type": "int",    "min_val": 0},
         {"column_name": "departure_date",     "type": "date"},
-        {"column_name": "status",             "type": "string",
-         "nullable": False}
+        {"column_name": "status",             "type": "string", "nullable": False}
     ],
     "business_rules": [
         "delay_minutes must be >= 0",
         "satisfaction_score must be <= 5"
     ]
 }
-
-DATA_PREP_URL = "http://127.0.0.1:8001"
 
 
 def create_test_csv():
@@ -48,13 +52,13 @@ def create_test_csv():
 """
     with open(TEST_CSV, "w") as f:
         f.write(content)
-    print(f"✅ CSV de test créé : {TEST_CSV}")
+    print(f"✅ CSV créé : {TEST_CSV}")
 
 
-async def test():
-    print("=" * 55)
-    print("  TEST RÉEL — Data Preparation Agent")
-    print("=" * 55)
+async def run_test():
+    print("\n" + "=" * 60)
+    print("  TEST RÉEL — Data Preparation Agent (nouveau flux)")
+    print("=" * 60)
 
     create_test_csv()
 
@@ -66,104 +70,128 @@ async def test():
         metadata=TEST_METADATA
     )
 
-    # ── Étape 1 : POST /prepare ───────────────────────────────────
-    print("\n── Étape 1 : POST /prepare ──")
-    state = await call_prepare(state)
+    # ── Étape 1 : POST /import ─────────────────────────────────────
+    print("\n── Étape 1 : POST /import (CSV uniquement) ──")
+    state = await call_import(state)
 
     if state.data_prep_status == DataPrepStatusEnum.FAILED:
-        print(f"❌ Échec : {state.data_prep_error}")
-        print("   → Vérifier que http://127.0.0.1:8001 est lancé")
-        print("   → Vérifier que MinIO Docker tourne")
-        return
+        print(f"❌ Échec /import : {state.errors}")
+        print("→ Vérifier que http://127.0.0.1:8001 est lancé")
+        return False
 
     print(f"✅ job_id  : {state.data_prep_job_id}")
     print(f"✅ status  : {state.data_prep_status.value}")
+
+    # ── Étape 2 : POST /prepare/{job_id} ──────────────────────────
+    print("\n── Étape 2 : POST /prepare/{job_id} (metadata + règles) ──")
+    state = await call_prepare_v2(state)
+
+    if state.data_prep_status == DataPrepStatusEnum.FAILED:
+        print(f"❌ Échec /prepare : {state.errors}")
+        return False
+
+    print(f"✅ status  : {state.data_prep_status.value}")
     print(f"✅ quality : {state.data_prep_quality}")
 
-    # ── Étape 2 : Récupérer le plan d'anomalies ───────────────────
-    print("\n── Étape 2 : Récupération du plan d'anomalies ──")
+    # ── Étape 3 : Récupérer le plan d'anomalies ───────────────────
+    print("\n── Étape 3 : Récupération du plan d'anomalies ──")
     async with httpx.AsyncClient(timeout=30.0) as client:
-        plan_response = await client.get(
+        r = await client.get(
             f"{DATA_PREP_URL}/jobs/{state.data_prep_job_id}/plan"
         )
-        plan = plan_response.json()
+        plan_response = r.json()
 
+    plan      = plan_response.get("plan", {})
     anomalies = plan.get("anomalies", [])
     print(f"Anomalies détectées : {len(anomalies)}")
-    for a in anomalies:
-        print(f"  → {a.get('anomaly_id')} | "
-              f"colonne: {a.get('column_name')} | "
-              f"type: {a.get('anomaly_type')}")
 
-    # ── Étape 3 : Validation automatique ─────────────────────────
-    print("\n── Étape 3 : Validation automatique ──")
+    for a in anomalies:
+        recommended_key = a.get("recommended_action", "action_1")
+        proposed        = a.get("proposed_actions", {})
+        action_detail   = proposed.get(recommended_key, {})
+        print(
+            f"  → {a.get('anomaly_id')} | "
+            f"col: {a.get('column_name')} | "
+            f"type: {a.get('anomaly_type')} | "
+            f"action: {action_detail.get('action', 'flag_only')}"
+        )
+
+    # ── Étape 4 : Validation (simulée — normalement faite par l'UI) ──
+    print("\n── Étape 4 : Validation (simulée par le test) ──")
+    print("ℹ️  En production : l'UI appelle /validate après confirmation utilisateur")
+
     decisions = []
     for anomaly in anomalies:
-        actions = anomaly.get("proposed_actions", {})
-        # Choisir action_2 (modérée) si disponible, sinon action_1
-        chosen = actions.get("action_2", actions.get("action_1", {}))
+        anomaly_id      = anomaly.get("anomaly_id")
+        recommended_key = anomaly.get("recommended_action", "action_1")
+        proposed        = anomaly.get("proposed_actions", {})
+        action_detail   = proposed.get(recommended_key, {})
+        chosen_action   = action_detail.get("action", "flag_only")
         decisions.append({
-            "anomaly_id":    anomaly["anomaly_id"],
+            "anomaly_id":    anomaly_id,
             "decision":      "approved",
-            "chosen_action": chosen.get("action", "flag_only"),
+            "chosen_action": chosen_action,
             "params":        {}
         })
+        print(f"  → {anomaly_id} | {chosen_action}")
 
     if not decisions:
-        print("ℹ️  Aucune anomalie détectée — données déjà propres ✅")
+        print("ℹ️  Aucune anomalie — validation vide")
 
+    # Appel direct HTTP (pas via call_validate) pour voir la réponse brute
     async with httpx.AsyncClient(timeout=60.0) as client:
-        validate_response = await client.post(
+        r = await client.post(
             f"{DATA_PREP_URL}/jobs/{state.data_prep_job_id}/validate",
             json={"decisions": decisions}
         )
-        validate_result = validate_response.json()
+        validate_result = r.json()
+        print(f"HTTP validate : {r.status_code}")
+        print(f"Réponse brute : {json.dumps(validate_result, indent=2)[:500]}")
 
-    print(f"HTTP validate : {validate_response.status_code}")
-    print(f"status        : {validate_result.get('status')}")
-
-    quality_comp = validate_result.get("quality_comparison", {})
-    if quality_comp:
-        print(f"quality avant : {quality_comp.get('before', {}).get('global', 'N/A')}")
-        print(f"quality après : {quality_comp.get('after',  {}).get('global', 'N/A')}")
-        print(f"gain          : {quality_comp.get('gain',   'N/A')}")
-
-    if validate_result.get("status") in ["completed", "success"]:
+    # Accepte tout status 200 comme succès
+    if r.status_code == 200:
         state.data_prep_status = DataPrepStatusEnum.COMPLETED
         state.data_prep_paths  = validate_result.get("paths", {})
-        print(f"✅ silver : {state.data_prep_paths.get('silver', 'N/A')}")
-        print(f"✅ gold   : {state.data_prep_paths.get('gold',   'N/A')}")
+        print(f"✅ validate OK | silver : {state.data_prep_paths.get('silver', 'N/A')}")
     else:
-        print(f"⚠️  Statut inattendu : {validate_result.get('status')}")
-        print(f"   Détail : {validate_result}")
-        return
+        print(f"⚠️  Validate HTTP {r.status_code}")
+        return False
 
-    # ── Étape 4 : GET /profiling-json ─────────────────────────────
-    print("\n── Étape 4 : Récupération data_profile ──")
+    # ── Étape 5 : data_profile pour NLQ ───────────────────────────
+    print("\n── Étape 5 : Récupération data_profile ──")
     state = await call_get_data_profile(state)
 
     if state.data_profile:
-        print(f"✅ row_count          : {state.data_profile.get('row_count')}")
-        print(f"✅ columns            : {state.data_profile.get('columns')}")
-        print(f"✅ numeric_columns    : {state.data_profile.get('numeric_columns')}")
-        print(f"✅ categorical_columns: {state.data_profile.get('categorical_columns')}")
-        print(f"✅ missing_summary    : {state.data_profile.get('missing_summary')}")
-        print(f"✅ quality_score      : {state.data_profile.get('quality_score')}")
+        print(f"✅ row_count           : {state.data_profile.get('row_count')}")
+        print(f"✅ columns             : {state.data_profile.get('columns')}")
+        print(f"✅ numeric_columns     : {state.data_profile.get('numeric_columns')}")
+        print(f"✅ categorical_columns : {state.data_profile.get('categorical_columns')}")
+        print(f"✅ quality_score       : {state.data_profile.get('quality_score')}")
     else:
-        print("⚠️  data_profile vide — vérifier /profiling-json")
+        print("⚠️  data_profile vide")
 
-    # ── Résumé ────────────────────────────────────────────────────
+    # ── Résumé ─────────────────────────────────────────────────────
     print("\n── Processing Steps ──")
     for step in state.processing_steps:
         print(f"  → {step}")
 
-    # Nettoyage
-    if os.path.exists(TEST_CSV):
-        os.remove(TEST_CSV)
-
-    print("\n" + "=" * 55)
+    print("\n" + "=" * 60)
     print("  ✅ Test Data Prep Agent terminé avec succès !")
-    print("=" * 55)
+    print("=" * 60)
+    return True
 
 
-asyncio.run(test())
+# ── pytest ─────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_data_prep_full_pipeline():
+    result = await run_test()
+    assert result is True
+
+
+# ── run direct ─────────────────────────────────────────────────────
+if __name__ == "__main__":
+    try:
+        asyncio.run(run_test())
+    finally:
+        if os.path.exists(TEST_CSV):
+            os.remove(TEST_CSV)

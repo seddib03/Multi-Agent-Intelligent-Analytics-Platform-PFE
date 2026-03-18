@@ -1,20 +1,21 @@
 """
-main.py — FastAPI V3
+main.py — FastAPI V4 (Import + Check Quality)
 """
 from __future__ import annotations
-import logging, shutil, uuid
+import dataclasses, json, logging, shutil, uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
-from agent.graph import agent_graph
-from agent.state import build_initial_state
+from agent.graph import import_graph, agent_graph
+from agent.state import build_import_state
 from config.settings import get_settings
 from core.minio_client import MinioClient
 from models.anomaly_report import CleaningAction, UserDecision
+from models.metadata_schema import parse_metadata
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,7 +23,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app      = FastAPI(title="Data Preparation Agent V3", version="3.0.0")
+app      = FastAPI(title="Data Preparation Agent V4", version="4.0.0")
 settings = get_settings()
 
 
@@ -37,6 +38,12 @@ class AnomalyDecision(BaseModel):
 class ValidationRequest(BaseModel):
     decisions: list[AnomalyDecision]
 
+from datetime import datetime, date
+
+def _serial(obj):
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    raise TypeError(f"Type {type(obj)} non sérialisable")
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 
@@ -50,45 +57,136 @@ async def on_startup():
         logger.error("MinIO non disponible : %s", e)
 
 
-# ── POST /prepare ─────────────────────────────────────────────────────────────
+# ── POST /import ──────────────────────────────────────────────────────────────
+# Étape 1 : Import léger — ingestion + profiling uniquement.
+# L'utilisateur envoie son dataset brut (CSV). Pas de metadata.
+# Retourne profiling_summary pour le NLQ agent.
 
-@app.post("/prepare")
-async def prepare(
-    dataset:  UploadFile = File(...),
-    metadata: UploadFile = File(...),
+@app.post("/import")
+async def import_dataset(
+    dataset: UploadFile = File(...),
+    sector:  str        = Form("unknown"),
 ) -> JSONResponse:
     job_id  = str(uuid.uuid4())
     tmp_dir = settings.tmp_dir / job_id
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    dataset_path  = tmp_dir / dataset.filename
-    metadata_path = tmp_dir / metadata.filename
+    dataset_path = tmp_dir / dataset.filename
+    with open(dataset_path, "wb") as f:
+        shutil.copyfileobj(dataset.file, f)
 
-    with open(dataset_path,  "wb") as f: shutil.copyfileobj(dataset.file,  f)
-    with open(metadata_path, "wb") as f: shutil.copyfileobj(metadata.file, f)
-
-    initial_state = build_initial_state(
+    initial_state = build_import_state(
         job_id=job_id,
         dataset_path=str(dataset_path),
-        metadata_path=str(metadata_path),
+        sector=sector,
     )
 
-    config = {"configurable": {"thread_id": job_id}}
+    config = {"configurable": {"thread_id": f"import_{job_id}"}}
     try:
-        state = agent_graph.invoke(initial_state, config=config)
+        state = import_graph.invoke(initial_state, config=config)
     except Exception as e:
-        logger.error("Erreur pipeline %s : %s", job_id, e)
+        logger.error("Erreur import %s : %s", job_id, e)
         raise HTTPException(status_code=500, detail=str(e))
 
-    cleaning_plan  = state.get("cleaning_plan")
-    quality_before = state.get("quality_before")
+    sector = state.get("sector", "unknown")
+
+    return JSONResponse({
+        "job_id":            job_id,
+        "status":            "imported",
+        "sector":            sector,
+        "profiling_html":    f"/jobs/{job_id}/profiling?sector={sector}",
+        "profiling_json":    f"/jobs/{job_id}/profiling-json?sector={sector}",
+        "raw_data_path":     state.get("bronze_path"),
+        "message":           f"Import OK. Lancez le check qualité via POST /prepare/{job_id}",
+    })
+
+
+# ── POST /prepare/{job_id} ───────────────────────────────────────────────────
+# Étape 2 : Check Quality — l'utilisateur fournit les règles (metadata JSON).
+# Reprend le job existant (même DuckDB, même Bronze) et lance NODE 3 → 8.
+
+@app.post("/prepare/{job_id}")
+async def prepare(
+    job_id:   str,
+    metadata: UploadFile = File(...),
+) -> JSONResponse:
+    # ── 1. Lire le state existant depuis l'import_graph ───────────────────
+    config_import = {"configurable": {"thread_id": f"import_{job_id}"}}
+    try:
+        snapshot = import_graph.get_state(config_import)
+        if not snapshot or not snapshot.values:
+            raise ValueError("State vide")
+        existing_state = snapshot.values
+    except Exception as e:
+        logger.error("Job %s introuvable : %s", job_id, e)
+        raise HTTPException(
+            status_code=404,
+            detail=f"Job {job_id} introuvable. Avez-vous fait POST /import d'abord ?",
+        )
+
+    if existing_state.get("status") != "imported":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Job {job_id} n'est pas en état 'imported' (état actuel: {existing_state.get('status')})",
+        )
+
+    # ── 2. Parser le metadata JSON uploadé ────────────────────────────────
+    tmp_dir = settings.tmp_dir / job_id
+    metadata_path = tmp_dir / metadata.filename
+    with open(metadata_path, "wb") as f:
+        shutil.copyfileobj(metadata.file, f)
+
+    with open(metadata_path, encoding="utf-8") as f:
+        raw_meta = json.load(f)
+
+    # Extraire colonnes, secteur, business_rules
+    if isinstance(raw_meta, list):
+        meta_list = raw_meta
+    elif isinstance(raw_meta, dict) and "columns" in raw_meta:
+        meta_list = raw_meta["columns"]
+    else:
+        meta_list = raw_meta
+
+    parsed_metadata = parse_metadata(meta_list)
+    meta_dicts = [dataclasses.asdict(m) for m in parsed_metadata]
+
+    sector = "unknown"
+    business_rules = []
+    if isinstance(raw_meta, dict):
+        sector = raw_meta.get("sector", raw_meta.get("secteur", "unknown"))
+        business_rules = raw_meta.get("business_rules", [])
+
+    # ── 3. Construire le state pour le prep graph ─────────────────────────
+    prep_state = {
+        **existing_state,
+        "metadata":       meta_dicts,
+        "business_rules": business_rules,
+        "sector":         sector,
+        "metadata_path":  str(metadata_path),
+        "status":         "running",
+    }
+
+    # ── 4. Lancer le prep graph (NODE 3 → NODE 5, interrupt avant cleaning)
+    try:
+        config_agent = {"configurable": {"thread_id": f"agent_{job_id}"}}
+        state = agent_graph.invoke(prep_state, config=config_agent)
+    except Exception as e:
+        logger.error("Erreur pipeline prep %s : %s", job_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+    cleaning_plan = state.get("cleaning_plan")
+    qb_dict       = state.get("quality_before")
+
+    if qb_dict:
+        from models.quality_report import QualityReport
+        qb_dict = QualityReport.from_dict(qb_dict).to_dict(apply_offsets=True)
 
     return JSONResponse({
         "job_id":         job_id,
         "status":         "waiting_validation",
         "sector":         state.get("sector", "unknown"),
-        "quality_before": quality_before if quality_before else {},
-        "plan":           cleaning_plan.to_dict() if cleaning_plan else {},
+        "quality_before": qb_dict if qb_dict else {},
+        "plan":           cleaning_plan.to_dict(apply_offsets=True) if cleaning_plan else {},
         "profiling_html": f"/jobs/{job_id}/profiling?sector={state.get('sector','unknown')}",
         "profiling_json": f"/jobs/{job_id}/profiling-json?sector={state.get('sector','unknown')}",
         "message":        f"Plan prêt. Validez via POST /jobs/{job_id}/validate",
@@ -119,13 +217,35 @@ async def get_plan(job_id: str) -> JSONResponse:
 
 @app.post("/jobs/{job_id}/validate")
 async def validate_plan(job_id: str, payload: ValidationRequest) -> JSONResponse:
-    config   = {"configurable": {"thread_id": job_id}}
-    snapshot = _get_snapshot(job_id, config)
+    config_agent = {"configurable": {"thread_id": f"agent_{job_id}"}}
+    config_import = {"configurable": {"thread_id": f"import_{job_id}"}}
+    
+    snapshot = _get_snapshot(job_id, config_agent)
     state    = snapshot.values
 
     cleaning_plan = state.get("cleaning_plan")
     if not cleaning_plan:
         raise HTTPException(status_code=400, detail="Aucun plan à valider")
+
+    # ── Récupérer raw_df depuis import_graph ──────────────────────────────
+    # raw_df est dans import_graph (thread import_{job_id})
+    # pas dans agent_graph
+    raw_df = state.get("raw_df")
+    if not raw_df or not raw_df.get("columns"):
+        # Fallback : lire depuis import_graph
+        try:
+            import_snapshot = import_graph.get_state(config_import)
+            if import_snapshot and import_snapshot.values:
+                raw_df = import_snapshot.values.get("raw_df")
+                logger.info("raw_df récupéré depuis import_graph pour validate")
+        except Exception as e:
+            logger.error("Impossible de récupérer raw_df depuis import_graph : %s", e)
+
+    if not raw_df or not raw_df.get("columns"):
+        raise HTTPException(
+            status_code=400,
+            detail="raw_df introuvable — relancez POST /import"
+        )
 
     decisions_map = {d.anomaly_id: d for d in payload.decisions}
 
@@ -150,21 +270,33 @@ async def validate_plan(job_id: str, payload: ValidationRequest) -> JSONResponse
         if dec.params:
             anomaly.user_params = dec.params
 
-    cleaning_plan.status = "validated"
-    agent_graph.update_state(config, {"cleaning_plan": cleaning_plan}, as_node="strategy")
-
+    cleaning_plan.status = "validated" 
+    agent_graph.update_state(
+        config_agent, 
+        {
+            "cleaning_plan": cleaning_plan,
+            "raw_df": raw_df,
+        }, 
+        as_node="strategy"
+    )
     try:
-        final_state = agent_graph.invoke(None, config=config)
+        final_state = agent_graph.invoke(None, config=config_agent)
     except Exception as e:
         logger.error("Erreur reprise %s : %s", job_id, e)
         raise HTTPException(status_code=500, detail=str(e))
 
-    qb = final_state.get("quality_before") or {}
-    qa = final_state.get("quality_after")  or {}
-    qb_scores = qb.get("global_scores", {})
-    qa_scores = qa.get("global_scores", {})
+    # Appliquer les offsets aux rapports qualité pour l'affichage final
+    from models.quality_report import QualityReport
+    qb_dict = final_state.get("quality_before")
+    qa_dict = final_state.get("quality_after")
+    
+    if qb_dict: qb_dict = QualityReport.from_dict(qb_dict).to_dict(apply_offsets=True)
+    if qa_dict: qa_dict = QualityReport.from_dict(qa_dict).to_dict(apply_offsets=True)
+    
+    qb_scores = qb_dict.get("global_scores", {}) if qb_dict else {}
+    qa_scores = qa_dict.get("global_scores", {}) if qa_dict else {}
 
-    return JSONResponse({
+    response_data = {
         "job_id":  job_id,
         "status":  final_state.get("status"),
         "sector":  final_state.get("sector"),
@@ -190,23 +322,22 @@ async def validate_plan(job_id: str, payload: ValidationRequest) -> JSONResponse
             ),
         },
         "quality_by_column": {
-            "before": qb.get("columns", []),
-            "after":  qa.get("columns", []),
+            "before": qb_dict.get("columns", []) if qb_dict else [],
+            "after":  qa_dict.get("columns", []) if qa_dict else [],
         },
         "cleaning_log": final_state.get("cleaning_log", []),
         "paths": {
             "silver": final_state.get("silver_path"),
             "gold":   final_state.get("gold_path"),
         },
-        "completed_at": final_state.get("completed_at"),
-    })
-
+    }
+    return JSONResponse(content=json.loads(json.dumps(response_data, default=_serial)))
 
 # ── GET /jobs/{job_id}/status ─────────────────────────────────────────────────
 
 @app.get("/jobs/{job_id}/status")
 async def get_status(job_id: str) -> JSONResponse:
-    config   = {"configurable": {"thread_id": job_id}}
+    config   = {"configurable": {"thread_id": f"agent_{job_id}"}}
     snapshot = _get_snapshot(job_id, config)
     state    = snapshot.values
     return JSONResponse({
@@ -261,16 +392,21 @@ async def get_profiling_json(
     Tente de lire depuis le State d'abord, puis MinIO.
     """
     summary = None
-    config  = {"configurable": {"thread_id": job_id}}
-    
+    config_import  = {"configurable": {"thread_id": f"import_{job_id}"}}
+    config_agent   = {"configurable": {"thread_id": f"agent_{job_id}"}}
+
     try:
-        # 1. Tenter depuis le State
+        # 1. Tenter depuis le State (import_graph ou agent_graph)
         try:
-            snapshot = agent_graph.get_state(config)
-            if snapshot.values:
+            snapshot = import_graph.get_state(config_import)
+            if snapshot and snapshot.values:
                 summary = snapshot.values.get("profiling_summary")
-                if summary:
-                    logger.info("Résumé profiling récupéré depuis le State pour le job %s", job_id)
+            if not summary:
+                snapshot = agent_graph.get_state(config_agent)
+                if snapshot and snapshot.values:
+                    summary = snapshot.values.get("profiling_summary")
+            if summary:
+                logger.info("Résumé profiling récupéré depuis le State pour le job %s", job_id)
         except Exception as e:
             logger.warning("Échec lecture state pour profiling %s : %s", job_id, e)
 
@@ -318,7 +454,7 @@ async def health():
         minio_ok = False
     return JSONResponse({
         "status":  "ok",
-        "version": "3.0.0",
+        "version": "4.0.0",
         "minio":   "ok" if minio_ok else "unreachable",
     })
 

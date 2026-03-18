@@ -3,24 +3,23 @@ import { OnboardingHeader } from "@/components/onboarding/OnboardingHeader";
 import { StepUseCase } from "@/components/onboarding/StepUseCase";
 import { StepUpload } from "@/components/onboarding/StepUpload";
 import { StepMetadata } from "@/components/onboarding/StepMetadata";
-import { StepAnomalyReview } from "@/components/onboarding/StepAnomalyReview";
 import { StepConfirmation } from "@/components/onboarding/StepConfirmation";
 import { NLQInterface } from "@/components/nlq/NLQInterface";
 import { Dashboard } from "@/components/dashboard/Dashboard";
 import { useDarkMode } from "@/hooks/useDarkMode";
 
-const STEPS = [StepUseCase, StepUpload, StepMetadata, StepAnomalyReview, StepConfirmation];
+const STEPS = [StepUseCase, StepUpload, StepMetadata, StepConfirmation];
 
 const Index = () => {
   const phase = useAppStore((s) => s.currentPhase);
   const step = useAppStore((s) => s.onboardingStep);
   useDarkMode();
 
-  if (phase === 2) return <NLQInterface />;
-  if (phase === 3) return <Dashboard />;
+  // phase 2 now leads to the dashboard; chat comes later in phase 3
+  if (phase === 2) return <Dashboard />;
+  if (phase === 3) return <NLQInterface />;
 
   const StepComponent = STEPS[step - 1];
-
   return (
     <div className="min-h-screen bg-background">
       <OnboardingHeader />

@@ -23,9 +23,9 @@ router = APIRouter(tags=["Datasets"])
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
-async def _get_project_or_404(db: AsyncSession, project_id: uuid.UUID, company_id: str) -> Project:
+async def _get_project_or_404(db: AsyncSession, project_id: uuid.UUID, owner_id: uuid.UUID) -> Project:
     result = await db.execute(
-        select(Project).where(Project.id == project_id, Project.company_id == company_id)
+        select(Project).where(Project.id == project_id, Project.owner_id == owner_id)
     )
     project = result.scalar_one_or_none()
     if not project:
@@ -61,8 +61,7 @@ async def upload_dataset(
     db:           AsyncSession = Depends(get_db),
     current_user: User         = Depends(get_current_user),
 ):
-    """Upload dataset — stockage délégué au Resp. Data, on persiste uniquement les métadonnées."""
-    project = await _get_project_or_404(db, project_id, current_user.company_id)
+    project = await _get_project_or_404(db, project_id, current_user.id)
 
     file_bytes = await file.read()
 
@@ -74,15 +73,14 @@ async def upload_dataset(
 
     svc = DatasetService()
     try:
-        result = svc.parse(file_bytes, file.filename, project_id)
+        result = svc.upload(file_bytes, file.filename, str(project_id))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    # ── Persist dataset ──────────────────────────────────────────────────────
     dataset = Dataset(
         project_id=project_id,
         original_filename=file.filename,
-        minio_key=f"raw/{project_id}/{file.filename}",   # clé provisoire — sera mise à jour par Resp. Data
+        file_path=result["file_path"],
         file_format=result["file_format"],
         file_size_bytes=result["file_size_bytes"],
         row_count=result["row_count"],
@@ -92,7 +90,6 @@ async def upload_dataset(
     db.add(dataset)
     await db.flush()
 
-    # ── Persist columns ──────────────────────────────────────────────────────
     for col in result["columns"]:
         db.add(DatasetColumn(
             dataset_id=dataset.id,
@@ -118,6 +115,7 @@ async def upload_dataset(
         quality_score=result["quality_score"],
         preview=result["preview"],
         columns=[ColumnProfile(**c) for c in result["columns"]],
+        file_path=result["file_path"],
     )
 
 
@@ -128,7 +126,7 @@ async def get_profile(
     db:           AsyncSession = Depends(get_db),
     current_user: User         = Depends(get_current_user),
 ):
-    await _get_project_or_404(db, project_id, current_user.company_id)
+    await _get_project_or_404(db, project_id, current_user.id)
     await _get_dataset_or_404(db, dataset_id, project_id)
     columns = await _get_columns(db, dataset_id)
     return DatasetProfileResponse(
@@ -145,7 +143,7 @@ async def update_metadata(
     db:           AsyncSession = Depends(get_db),
     current_user: User         = Depends(get_current_user),
 ):
-    await _get_project_or_404(db, project_id, current_user.company_id)
+    await _get_project_or_404(db, project_id, current_user.id)
     dataset = await _get_dataset_or_404(db, dataset_id, project_id)
 
     result = await db.execute(
@@ -173,7 +171,7 @@ async def delete_dataset(
     db:           AsyncSession = Depends(get_db),
     current_user: User         = Depends(get_current_user),
 ):
-    await _get_project_or_404(db, project_id, current_user.company_id)
+    await _get_project_or_404(db, project_id, current_user.id)
     dataset = await _get_dataset_or_404(db, dataset_id, project_id)
     await db.delete(dataset)
 
@@ -187,8 +185,7 @@ async def analyze_quality(
     db:           AsyncSession = Depends(get_db),
     current_user: User         = Depends(get_current_user),
 ):
-    """Analyse la qualité du dataset et persiste le rapport en base."""
-    await _get_project_or_404(db, project_id, current_user.company_id)
+    await _get_project_or_404(db, project_id, current_user.id)
     dataset = await _get_dataset_or_404(db, dataset_id, project_id)
     columns = await _get_columns(db, dataset_id)
 
@@ -211,7 +208,6 @@ async def analyze_quality(
     svc = QualityService()
     report = svc.analyze(cols_data)
 
-    # ── Persiste le rapport en base ──────────────────────────────────────────
     dataset.quality_report = report
     dataset.quality_score  = report["global_score"]
     await db.flush()
@@ -244,8 +240,7 @@ async def get_quality_report(
     db:           AsyncSession = Depends(get_db),
     current_user: User         = Depends(get_current_user),
 ):
-    """Récupère le rapport qualité existant depuis la base."""
-    await _get_project_or_404(db, project_id, current_user.company_id)
+    await _get_project_or_404(db, project_id, current_user.id)
     dataset = await _get_dataset_or_404(db, dataset_id, project_id)
 
     if not dataset.quality_report:
@@ -283,11 +278,7 @@ async def apply_corrections(
     db:           AsyncSession = Depends(get_db),
     current_user: User         = Depends(get_current_user),
 ):
-    """
-    Applique les corrections demandées.
-    Le traitement réel du fichier est délégué au Resp. Data via /api/internal/data/*.
-    """
-    await _get_project_or_404(db, project_id, current_user.company_id)
+    await _get_project_or_404(db, project_id, current_user.id)
     dataset = await _get_dataset_or_404(db, dataset_id, project_id)
 
     if not dataset.quality_report:

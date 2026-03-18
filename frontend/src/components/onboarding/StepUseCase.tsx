@@ -1,25 +1,13 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/stores/appStore";
 import type { ChartStyle, AccentTheme, Density } from "@/types/app";
 import { ACCENT_THEMES } from "@/types/app";
-import { Check } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { ChartPreviews } from "./usecase/ChartPreviews";
 import type { Language } from "@/lib/i18n";
-
-function getAnalysisTypes(lang: Language) {
-  return [
-    t("prediction", lang),
-    t("anomalyDetection", lang),
-    t("segmentation", lang),
-    t("trendAnalysis", lang),
-    t("recommendation", lang),
-  ];
-}
-
-function getTimeHorizons(lang: Language) {
-  return [t("days7", lang), t("days30", lang), t("days90", lang), t("custom", lang)];
-}
+import { createProject, updateProject } from "@/lib/projectsApi";
+import { detectSector } from "@/lib/sectorDetectionApi";
 
 function getChartStyles(lang: Language): { key: ChartStyle; icon: string; label: string }[] {
   return [
@@ -33,27 +21,117 @@ function getChartStyles(lang: Language): { key: ChartStyle; icon: string; label:
 
 const ACCENT_SWATCHES: AccentTheme[] = ["royal-melon", "blue-gold", "midnight-peach", "melon-royal", "gold-blue", "sky-midnight"];
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function getPreferencesSignature(prefs: ReturnType<typeof useAppStore.getState>["userPreferences"]): string {
+  return JSON.stringify({
+    darkMode: prefs.darkMode,
+    chartStyle: prefs.chartStyle,
+    density: prefs.density,
+    accentTheme: prefs.accentTheme,
+    dashboardLayout: prefs.dashboardLayout,
+    visibleKPIs: [...prefs.visibleKPIs].sort(),
+    language: prefs.language,
+  });
+}
+
+const SUPPORTED_SECTORS = ["finance", "transport", "retail", "manufacturing", "public"] as const;
+type SupportedSector = typeof SUPPORTED_SECTORS[number];
+
 export function StepUseCase() {
-  const { onboarding, updateOnboarding, userPreferences, updatePreferences, setOnboardingStep } = useAppStore();
+  const { currentProjectId, onboarding, updateOnboarding, updateDataset, userPreferences, updatePreferences, setOnboardingStep } = useAppStore();
   const lang = userPreferences.language;
   const [desc, setDesc] = useState(onboarding.useCaseDescription);
-  const [types, setTypes] = useState<string[]>(onboarding.analysisTypes);
-  const [horizon, setHorizon] = useState(onboarding.timeHorizon);
   const [touched, setTouched] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const initialSnapshotRef = useRef<{ desc: string; preferencesSig: string } | null>(null);
 
-  const ANALYSIS_TYPES = getAnalysisTypes(lang);
-  const TIME_HORIZONS = getTimeHorizons(lang);
+  if (!initialSnapshotRef.current) {
+    initialSnapshotRef.current = {
+      desc: onboarding.useCaseDescription.trim(),
+      preferencesSig: getPreferencesSignature(userPreferences),
+    };
+  }
+
+  useEffect(() => {
+    setDesc(onboarding.useCaseDescription);
+  }, [onboarding.useCaseDescription]);
+
   const CHART_STYLES = getChartStyles(lang);
 
-  const toggleType = (tStr: string) => setTypes((prev) => (prev.includes(tStr) ? prev.filter((x) => x !== tStr) : [...prev, tStr]));
-
   const descTooShort = touched && desc.trim().length > 0 && desc.trim().length <= 10;
-  const noTypes = touched && types.length === 0;
-  const canProceed = desc.trim().length > 10 && types.length > 0;
+  const canProceed = desc.trim().length > 10;
 
-  const handleNext = () => {
-    updateOnboarding({ useCaseDescription: desc, analysisTypes: types, timeHorizon: horizon });
-    setOnboardingStep(2);
+  const handleNext = async () => {
+    if (!canProceed || saving) return;
+
+    const currentDesc = desc.trim();
+    const hasChanges = Boolean(
+      initialSnapshotRef.current &&
+      (
+        initialSnapshotRef.current.desc !== currentDesc ||
+        initialSnapshotRef.current.preferencesSig !== getPreferencesSignature(userPreferences)
+      )
+    );
+
+    const canUpdateExisting = Boolean(currentProjectId && isUuid(currentProjectId));
+
+    if (canUpdateExisting && !hasChanges) {
+      updateOnboarding({ useCaseDescription: desc });
+      setOnboardingStep(2);
+      return;
+    }
+
+    setTouched(true);
+    setApiError(null);
+    setSaving(true);
+
+    try {
+      const projectPayload = {
+        name: desc.trim().slice(0, 60) || "Sans titre",
+        use_case: desc.trim(),
+        description: desc.trim(),
+        visual_preferences: {
+          darkMode: userPreferences.darkMode,
+          chartStyle: userPreferences.chartStyle,
+          density: userPreferences.density,
+          accentTheme: userPreferences.accentTheme,
+          dashboardLayout: userPreferences.dashboardLayout,
+          visibleKPIs: userPreferences.visibleKPIs,
+          language: userPreferences.language,
+        },
+      };
+
+      const project = canUpdateExisting
+        ? await updateProject(currentProjectId as string, projectPayload)
+        : await createProject(projectPayload);
+
+      // ── Détection de secteur — optionnelle, fallback silencieux ──────────
+      let normalizedSector: SupportedSector = "finance";
+      try {
+        const sectorCtx = await detectSector(desc.trim());
+        updateOnboarding({ useCaseDescription: desc, sectorContext: sectorCtx });
+        normalizedSector = (SUPPORTED_SECTORS.includes(sectorCtx.sector as SupportedSector)
+          ? sectorCtx.sector
+          : "finance") as SupportedSector;
+      } catch {
+        // Service de détection indisponible → on continue avec le secteur par défaut
+        console.warn("Sector detection service unavailable, using default sector.");
+        updateOnboarding({ useCaseDescription: desc });
+      }
+
+      updateDataset({ detectedSector: normalizedSector });
+      useAppStore.setState({ currentProjectId: project.id });
+      setOnboardingStep(2);
+
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : "Erreur lors de la création du projet");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -73,50 +151,8 @@ export function StepUseCase() {
           <p className="text-xs text-destructive font-medium">{t("useCaseTooShort", lang)}</p>
         )}
         <p className="text-xs italic text-muted-foreground">{t("sectorAutoDetect", lang)}</p>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-foreground">{t("analysisType", lang)}</label>
-          <div className="flex flex-wrap gap-2">
-            {ANALYSIS_TYPES.map((tStr) => (
-              <button
-                key={tStr}
-                onClick={() => toggleType(tStr)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
-                  types.includes(tStr)
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-card text-primary border-border hover:border-primary"
-                }`}
-              >
-                {tStr}
-              </button>
-            ))}
-          </div>
-          {noTypes && (
-            <p className="text-xs text-destructive font-medium">{t("selectAnalysisType", lang)}</p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-foreground">{t("timeHorizon", lang)}</label>
-          <div className="flex gap-2 flex-wrap">
-            {TIME_HORIZONS.map((h) => (
-              <button
-                key={h}
-                onClick={() => setHorizon(h)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  horizon === h
-                    ? "bg-dxc-melon text-dxc-white"
-                    : "bg-card text-foreground border border-border hover:border-dxc-melon"
-                }`}
-              >
-                {h}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
 
-      {/* Divider */}
       <div className="border-t-2 border-accent/30" />
 
       {/* Section B — Preferences */}
@@ -129,17 +165,13 @@ export function StepUseCase() {
           <div className="flex rounded-full overflow-hidden border border-border w-fit">
             <button
               onClick={() => updatePreferences({ darkMode: false })}
-              className={`px-5 py-2 text-sm font-medium transition-all ${
-                !userPreferences.darkMode ? "bg-foreground text-background" : "bg-muted text-muted-foreground"
-              }`}
+              className={`px-5 py-2 text-sm font-medium transition-all ${!userPreferences.darkMode ? "bg-foreground text-background" : "bg-muted text-muted-foreground"}`}
             >
               ☀️ {t("lightMode", lang)}
             </button>
             <button
               onClick={() => updatePreferences({ darkMode: true })}
-              className={`px-5 py-2 text-sm font-medium transition-all ${
-                userPreferences.darkMode ? "bg-foreground text-background" : "bg-muted text-muted-foreground"
-              }`}
+              className={`px-5 py-2 text-sm font-medium transition-all ${userPreferences.darkMode ? "bg-foreground text-background" : "bg-muted text-muted-foreground"}`}
             >
               🌙 {t("darkModeLabel", lang)}
             </button>
@@ -157,9 +189,7 @@ export function StepUseCase() {
                 <button
                   key={key}
                   onClick={() => updatePreferences({ chartStyle: key })}
-                  className={`w-[140px] sm:w-[160px] h-[100px] rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all relative ${
-                    selected ? "border-dxc-melon bg-dxc-melon/10" : "border-border bg-card hover:border-primary/30"
-                  }`}
+                  className={`w-[140px] sm:w-[160px] h-[100px] rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all relative ${selected ? "border-dxc-melon bg-dxc-melon/10" : "border-border bg-card hover:border-primary/30"}`}
                 >
                   {selected && (
                     <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-dxc-melon flex items-center justify-center">
@@ -188,11 +218,7 @@ export function StepUseCase() {
                 <button
                   key={d}
                   onClick={() => updatePreferences({ density: d })}
-                  className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${
-                    userPreferences.density === d
-                      ? "border-dxc-melon bg-dxc-melon/10"
-                      : "border-border bg-card hover:border-primary/30"
-                  }`}
+                  className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${userPreferences.density === d ? "border-dxc-melon bg-dxc-melon/10" : "border-border bg-card hover:border-primary/30"}`}
                 >
                   <span className="font-semibold text-sm text-foreground">{t(labels[d].titleKey, lang)}</span>
                   <span className="text-xs text-muted-foreground ml-2">{t(labels[d].descKey, lang)}</span>
@@ -234,14 +260,22 @@ export function StepUseCase() {
         </div>
       </div>
 
+      {/* Error */}
+      {apiError && (
+        <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+          {apiError}
+        </div>
+      )}
+
       {/* Next */}
       <div className="flex justify-end pt-4">
         <button
           onClick={handleNext}
-          disabled={!canProceed}
-          className="px-8 py-3 rounded-lg font-semibold text-primary-foreground bg-primary hover:opacity-90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled={!canProceed || saving}
+          className="px-8 py-3 rounded-lg font-semibold text-primary-foreground bg-primary hover:opacity-90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
         >
-          {t("next", lang)} →
+          {saving && <Loader2 size={16} className="animate-spin" />}
+          {saving ? "Création..." : `${t("next", lang)} →`}
         </button>
       </div>
     </div>

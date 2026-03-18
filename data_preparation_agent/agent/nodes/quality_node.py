@@ -1,26 +1,3 @@
-"""
-Calcule les scores des 5 dimensions de qualité par colonne :
-
-    Completeness → colonnes avec nullable=false
-                   score = (total - nulls) / total * 100
-
-    Validity     → colonnes avec règles définies (type, enum, pattern, format)
-                   score = valeurs_valides / total * 100
-
-    Uniqueness   → colonnes avec identifier=true + duplication de lignes
-                   score = valeurs_uniques / total_non_null * 100
-
-    Accuracy     → colonnes avec range (in_range)
-                   score = valeurs_in_range / total * 100
-
-    Consistency  → colonnes avec business rules applicables
-                   score = valeurs_cohérentes / total * 100
-
-Produit un QualityReport "AVANT" qui sera comparé au rapport "APRÈS"
-(calculé par rescoring_node après nettoyage).
-"""
-from __future__ import annotations
-
 import logging
 
 import pandas as pd
@@ -61,7 +38,8 @@ def quality_node(state: AgentState) -> dict:
     if business_rules:
         logger.info("  %d business rules à traiter", len(business_rules))
 
-    quality_before = compute_quality_report(
+    # Appel LLM inclus dans compute_quality_report (via process_business_rules)
+    quality_before, br_tests = compute_quality_report(
         metadata=metadata,
         label="AVANT",
         sector=state.get("sector", "unknown"),
@@ -81,4 +59,11 @@ def quality_node(state: AgentState) -> dict:
         quality_before.accuracy_global,
         quality_before.consistency_global,
     )
-    return {"quality_before": quality_before.to_dict()}
+
+    # Sérialiser les business_rule_tests pour les réutiliser dans rescoring (sans re-appeler le LLM)
+    br_tests_serialized = [br.to_dict() for br in br_tests] if br_tests else []
+
+    return {
+        "quality_before": quality_before.to_dict(apply_offsets=False),
+        "business_rule_tests": br_tests_serialized,
+    }

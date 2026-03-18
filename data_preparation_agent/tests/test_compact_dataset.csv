@@ -1,0 +1,51 @@
+order_id,customer_id,product_name,category,quantity,unit_price,total_amount,discount_pct,order_date,delivery_date,payment_method,store_id,region,status
+ORD-00001,CUST-0001,Laptop,Electronics,2,450.0,900.0,10.0,2025-01-15,2025-01-20,Credit Card,STORE-001,North,delivered
+,CUST-0002,Mouse,Electronics,5,25.0,125.0,0.0,2025-01-15,2025-01-17,Credit Card,STORE-001,North,delivered
+ORD-00003,CUST-0003,Keyboard,Electronics,3,75.0,225.0,5.0,2025-01-16,2025-01-18,Debit Card,STORE-002,South,shipped
+ORD-00004,,Monitor,Electronics,1,300.0,300.0,15.0,2025-01-16,2025-01-22,PayPal,STORE-002,South,processing
+ORD-00005,CUST-0005,T-Shirt,Clothing,10,30.0,300.0,20.0,2025-01-17,2025-01-22,Cash,STORE-003,East,delivered
+ORD-00006,CUST-0006,Jeans,Clothing,2,60.0,120.0,-5.0,2025-01-17,2025-01-20,Credit Card,STORE-003,East,returned
+ORD-00007,CUST-0007,Dress,Clothing,4,80.0,320.0,50.0,2025-01-18,2025-01-25,Invalid_Method,STORE-001,West,shipped
+ORD-00008,CUST-0001,Shoes,Clothing,1,120.0,,25.0,2025-01-18,2025-01-24,PayPal,STORE-004,West,delivering
+ORD-00009,CUST-0009,Coffee,Food,15,10.0,150.0,0.0,2025-01-19,2025-01-20,Debit Card,STO-005,Central,delivered
+ORD-00010,CUST-0010,Tea,Food,5,8.0,40.0,0.0,2025-01-19,2025-01-18,Credit Card,STORE-005,Central,cancelled
+ORD-00001,CUST-0011,Shampoo,Beauty,2,15.0,30.0,3.0,2025-01-20,2025-01-24,PayPal,STORE-006,North,shipped
+ORD-00012,CUST-0012,Soap,Beauty,8,5.0,40.0,0.0,2025-01-20,2025-01-25,Cash,STORE-007,South,processing
+ORD-00013,CUST-0013,Lotion,Beauty,3,25.0,75.0,12.0,2025-01-21,2025-01-26,Credit Card,STORE-002,East,delivered
+ORD-00014,,Cream,Beauty,2,20.0,40.0,0.0,2025-01-21,2025-01-27,Debit Card,STORE-008,West,shipped
+ORD-00015,CUST-0015,Novel,Books,1,15.0,15.0,0.0,2025-01-22,2025-01-28,PayPal,STORE-001,North,delivered
+ORD-00016,CUST-0016,Textbook,Books,3,40.0,120.0,25.0,2025-01-22,2025-01-26,Cash,STORE-009,South,cancelled
+ORD-00017,CUST-0017,Magazine,Books,10,12.0,120.0,0.0,2025-01-23,2025-01-29,Credit Card,STORE-010,Central,shipped
+ORD-00018,CUST-0018,Sofa,Home,1,450.0,450.0,18.0,2025-01-23,2025-02-05,Debit Card,STORE-003,East,returned
+ORD-00019,CUST-0019,Table,Home,1,200.0,200.0,101.0,2025-01-24,2025-02-02,PayPal,STORE-011,West,delivered
+ORD-00020,CUST-0020,Chair,Home,4,80.0,320.0,22.0,2025-01-24,2025-01-30,Credit Card,STORE-004,North,shipped
+ORD-00021,CUST-0021,Phone,Electronics,1,500.0,500.0,0.0,2025-01-25,2025-02-02,Cash,STORE-005,South,processing
+ORD-00022,CUST-0022,Tablet,Electronics,2,300.0,600.0,15.0,2025-01-25,2025-02-01,PayPal,STORE-006,East,delivered
+ORD-00023,CUST-0023,Headphones,Electronics,0,100.0,0.0,5.0,2025-01-26,2025-02-02,Debit Card,STORE-007,Central,shipped
+ORD-00024,CUST-0024,Speaker,Electronics,3,150.0,450.0,20.0,2025-01-26,2025-02-03,Credit Card,STORE-008,West,cancelled
+ORD-00025,CUST-0025,Camera,Electronics,1,800.0,800.0,12.0,2025-01-27,2025-02-05,Cash,STORE-009,North,delivered
+ORD-00026,CUST-0026,Lamp,Home,2,50.0,100.0,8.0,2025-01-27,2025-02-02,PayPal,STORE-010,South,shipped
+ORD-00027,CUST-0027,Rug,Home,1,120.0,120.0,0.0,2025-01-28,2025-02-04,Debit Card,STORE-001,East,processing
+ORD-00028,CUST-0028,Curtains,Home,3,45.0,135.0,18.0,2025-01-28,2025-02-05,Credit Card,STORE-002,Central,delivered
+ORD-00029,CUST-0029,Mirror,Home,1,80.0,80.0,25.0,2025-01-29,2025-02-05,Cash,STORE-003,West,returned
+ORD-00030,CUST-0030,Plant,Home,5,20.0,100.0,0.0,2025-01-29,2025-02-03,PayPal,STORE-004,North,shipped
+ORD-00031,CUST-0031,Water,Food,12,2.0,24.0,0.0,2025-01-30,2025-02-01,Credit Card,STORE-005,South,cancelled
+ORD-00032,CUST-0032,Juice,Food,6,3.5,21.0,3.0,2025-01-30,2025-02-05,Debit Card,STORE-006,East,delivered
+ORD-00033,CUST-0033,Milk,Food,4,4.0,16.0,0.0,2025-01-31,2025-02-04,Cash,STORE-007,Central,shipped
+ORD-00034,CUST-0034,Bread,Food,8,2.5,20.0,5.0,2025-01-31,2025-02-05,PayPal,STORE-008,West,processing
+ORD-00035,CUST-0035,Cheese,Food,2,8.0,16.0,12.0,2025-02-01,2025-02-06,Credit Card,STORE-009,North,delivered
+ORD-00036,CUST-0001,Butter,Food,3,5.0,15.0,0.0,2025-02-01,2025-02-05,Debit Card,STORE-010,South,shipped
+ORD-00037,CUST-0037,Egg,Food,10,1.0,10.0,0.0,2025-02-02,2025-02-07,Cash,STORE-001,East,cancelled
+ORD-00038,CUST-0038,Pasta,Food,1,6.0,6.0,25.0,2025-02-02,2025-02-08,PayPal,STORE-002,Central,delivered
+ORD-00039,,Flour,Food,2,3.0,6.0,0.0,2025-02-03,2025-02-08,Credit Card,STORE-003,West,shipped
+ORD-00040,CUST-0040,Sugar,Food,1,4.0,4.0,0.0,2025-02-03,2025-02-07,Debit Card,STORE-004,North,returned
+ORD-00041,CUST-0041,Hat,Clothing,3,35.0,105.0,8.0,2025-02-04,2025-02-10,PayPal,STORE-005,South,delivered
+ORD-00042,CUST-0042,Gloves,Clothing,6,15.0,90.0,10.0,2025-02-04,2025-02-09,Cash,STORE-006,East,shipped
+ORD-00043,CUST-0043,Scarf,Clothing,2,25.0,50.0,0.0,2025-02-05,2025-02-11,Credit Card,STORE-007,Central,processing
+ORD-00044,CUST-0044,Socks,Clothing,12,3.0,36.0,5.0,2025-02-05,2025-02-10,Debit Card,STORE-008,West,delivered
+ORD-00045,CUST-0045,Belt,Clothing,1,40.0,40.0,15.0,2025-02-06,2025-02-12,PayPal,STORE-009,North,shipped
+ORD-00046,CUST-0046,Tie,Clothing,2,30.0,60.0,0.0,2025-02-06,2025-02-11,Cash,STORE-010,South,cancelled
+ORD-00047,CUST-0047,Jacket,Clothing,1,150.0,150.0,20.0,2025-02-07,2025-02-14,Credit Card,STORE-001,East,delivered
+ORD-00048,CUST-0048,Coat,Clothing,1,200.0,200.0,25.0,2025-02-07,2025-02-15,Debit Card,STORE-002,Central,shipped
+ORD-00049,CUST-0049,Boots,Clothing,2,100.0,200.0,18.0,2025-02-08,2025-02-14,PayPal,STORE-003,West,returned
+ORD-00050,CUST-0050,Sneakers,Clothing,3,80.0,240.0,12.0,2025-02-08,2025-02-15,Cash,STORE-004,North,shipped

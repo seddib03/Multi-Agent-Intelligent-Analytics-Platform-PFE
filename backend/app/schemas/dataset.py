@@ -27,14 +27,6 @@ class MetadataUpdateRequest(BaseModel):
 
 class ApplyCorrectionsRequest(BaseModel):
     corrections: list[str]
-    """
-    Liste des corrections à appliquer. Valeurs possibles :
-    - impute_mean     : remplacer valeurs manquantes par la moyenne (colonnes numériques)
-    - impute_mode     : remplacer valeurs manquantes par le mode (colonnes catégorielles)
-    - drop_column     : supprimer les colonnes problématiques
-    - drop_duplicates : supprimer les lignes dupliquées
-    - normalize       : normaliser les valeurs numériques (min-max)
-    """
 
 
 # ─── Responses ────────────────────────────────────────────────────────────────
@@ -48,6 +40,7 @@ class UploadResponse(BaseModel):
     quality_score:     float
     preview:           list[dict[str, Any]]
     columns:           list[ColumnProfile]
+    file_path:         Optional[str] = None
 
 
 class DatasetPreviewResponse(BaseModel):
@@ -92,7 +85,7 @@ class DatasetResponse(BaseModel):
 
 class QualityIssue(BaseModel):
     type:     str
-    severity: str   # critical | warning | info
+    severity: str
     message:  str
     fix:      str
 

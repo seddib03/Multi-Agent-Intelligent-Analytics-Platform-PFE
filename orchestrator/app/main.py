@@ -1,74 +1,116 @@
+from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
+from app.schemas.input_schema import UserQueryInput
 from app.graph.orchestrator import build_orchestrator_graph
 from app.graph.state import OrchestratorState
-from app.schemas.input_schema import UserQueryInput
-from app.schemas.output_schema import OrchestratorResponse
-import uuid
+import shutil, uuid, json, os, tempfile
+
+app = FastAPI(
+    title="Orchestrateur - Intelligent Analytics Platform",
+    version="1.0.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+graph = build_orchestrator_graph()
 
 
-# Compile the graph once at startup
-orchestrator = build_orchestrator_graph()
+def _normalize_metadata(metadata_parsed) -> dict:
+    if isinstance(metadata_parsed, list):
+        normalized_cols = []
+        for col in metadata_parsed:
+            if isinstance(col, dict):
+                if "column_name" not in col and "name" in col:
+                    col = {**col, "column_name": col["name"]}
+                normalized_cols.append(col)
+        return {"columns": normalized_cols}
+
+    if isinstance(metadata_parsed, dict):
+        cols = metadata_parsed.get("columns", [])
+        if cols and isinstance(cols[0], dict):
+            normalized_cols = []
+            for col in cols:
+                if "column_name" not in col and "name" in col:
+                    col = {**col, "column_name": col["name"]}
+                normalized_cols.append(col)
+            return {**metadata_parsed, "columns": normalized_cols}
+        return metadata_parsed
+
+    return {}
 
 
-def run_orchestrator(user_input: UserQueryInput) -> OrchestratorResponse:
-    """
-    Main entry point for the orchestrator.
-    """
-    # Initialize the state
+def run_orchestrator(input_data: UserQueryInput) -> dict:
     initial_state = OrchestratorState(
-        user_id=user_input.user_id,
-        session_id=user_input.session_id,
-        query_raw=user_input.query,
-    ).model_dump()
-
-    # Run the graph
-    final_state = orchestrator.invoke(initial_state)
-
-    # Build the response
-    return OrchestratorResponse(
-        user_id=final_state["user_id"],
-        session_id=final_state["session_id"],
-        query_raw=final_state["query_raw"],
-        response=final_state["final_response"],
-        response_format=final_state["response_format"],
-        route_taken=final_state.get("route"),
-        route_reason=final_state.get("route_reason", ""),
-        sector_detected=final_state.get("sector", ""),
-        intent_detected=final_state.get("intent", ""),
-        needs_clarification=final_state.get("needs_clarification", False),
-        clarification_question=final_state.get("clarification_question", ""),
-        data_payload=final_state.get("agent_response", {}).get("data_payload", {}),
+        user_id=input_data.user_id,
+        session_id=input_data.session_id,
+        query_raw=input_data.query,
+        csv_path=input_data.csv_path or "",
+        metadata=input_data.metadata or {},
     )
 
+    result = graph.invoke(initial_state)
 
-if __name__ == "__main__":
-    #  Quick tests to validate Sprint 1 
-    test_queries = [
-        ("Show me transport KPIs for the month",     "Transport + KPI"),
-        ("Revenue forecast Q2",        "Finance + Prediction"),
-        ("Compare performance across sectors",   "Cross-sector + Dashboard"),
-        ("blabla incomprehensible request xyz",       "Clarification"),
-        ("Global summary dashboard",           "Insight Agent"),
-    ]
+    if hasattr(result, "model_dump"):
+        return result.model_dump()
+    if isinstance(result, dict):
+        return result
+    return {}
 
-    print("\n" + " "*20)
-    print("   DEMO SPRINT 1 — MULTI-AGENT ORCHESTRATOR")
-    print(" "*20 + "\n")
 
-    for query, label in test_queries:
-        print(f"\n{'─'*60}")
-        print(f" TEST: {label}")
-        print(f"{'─'*60}")
+@app.post("/analyze")
+async def analyze(
+    query_raw:  str        = Form(...),
+    dataset:    UploadFile = File(None),
+    metadata:   str        = Form("{}"),
+    csv_path:   str        = Form(""),   # chemin serveur persisté
+):
+    resolved_csv_path = None
 
-        result = run_orchestrator(UserQueryInput(
-            user_id="u_demo",
-            session_id=str(uuid.uuid4()),
-            query=query
-        ))
+    # Priorité 1 : chemin serveur fourni par le frontend (persisté dans Zustand)
+    if csv_path and os.path.exists(csv_path):
+        resolved_csv_path = csv_path
+        print(f"[INFO] Using persisted csv_path: {resolved_csv_path}", flush=True)
 
-        print(f" Response     : {result.response}")
-        print(f" Route        : {result.route_taken}")
-        print(f" Reason       : {result.route_reason}")
-        print(f" Sector       : {result.sector_detected}")
-        print(f" Intent       : {result.intent_detected}")
-        if result.data_payload:
-            print(f" Data payload : {result.data_payload}")
+    # Priorité 2 : fichier uploadé directement
+    elif dataset and dataset.filename:
+        tmp_dir = os.path.join(tempfile.gettempdir(), "orchestrator")
+        os.makedirs(tmp_dir, exist_ok=True)
+        resolved_csv_path = os.path.join(tmp_dir, f"{uuid.uuid4()}_{dataset.filename}")
+        with open(resolved_csv_path, "wb") as f:
+            shutil.copyfileobj(dataset.file, f)
+        print(f"[INFO] CSV uploaded and saved to: {resolved_csv_path}", flush=True)
+
+    else:
+        print("[WARN] No CSV provided", flush=True)
+
+    try:
+        metadata_parsed = json.loads(metadata)
+        metadata_dict   = _normalize_metadata(metadata_parsed)
+    except json.JSONDecodeError:
+        metadata_dict = {}
+
+    result = run_orchestrator(UserQueryInput(
+        user_id="demo_user",
+        session_id=str(uuid.uuid4()),
+        query=query_raw,
+        csv_path=resolved_csv_path,
+        metadata=metadata_dict,
+    ))
+
+    # Nettoyage uniquement si fichier uploadé (pas le fichier persisté)
+    if resolved_csv_path and resolved_csv_path != csv_path:
+        if os.path.exists(resolved_csv_path):
+            os.remove(resolved_csv_path)
+
+    return result
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "graph": "ready"}

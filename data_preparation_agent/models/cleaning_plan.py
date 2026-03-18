@@ -1,20 +1,3 @@
-"""
-models/cleaning_plan.py
-────────────────────────
-Structure de données pour le plan de nettoyage proposé par le LLM.
-
-POURQUOI CE MODÈLE :
-    Le LLM retourne du texte JSON.
-    Sans structure explicite, n'importe quoi peut arriver.
-    Ce modèle garantit que le plan a exactement les champs
-    attendus par cleaning_node pour exécuter les actions.
-
-    Flux :
-        strategy_node  →  LLM génère JSON  →  CleaningPlan
-        user valide CleaningPlan
-        cleaning_node lit CleaningPlan et exécute les actions
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field

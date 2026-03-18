@@ -1,0 +1,87 @@
+{
+    "sector": "RETAIL",
+    "columns": [
+        {
+            "column_name": "order_id",
+            "type": "string",
+            "description": "Identifiant unique de la commande"
+        },
+        {
+            "column_name": "customer_id",
+            "type": "string",
+            "description": "Identifiant du client"
+        },
+        {
+            "column_name": "product_name",
+            "type": "string",
+            "description": "Nom du produit"
+        },
+        {
+            "column_name": "category",
+            "type": "string",
+            "description": "Catégorie du produit"
+        },
+        {
+            "column_name": "quantity",
+            "type": "int",
+            "description": "Quantité commandée"
+        },
+        {
+            "column_name": "unit_price",
+            "type": "float",
+            "description": "Prix unitaire en EUR"
+        },
+        {
+            "column_name": "total_amount",
+            "type": "float",
+            "description": "Montant total de la ligne"
+        },
+        {
+            "column_name": "discount_pct",
+            "type": "float",
+            "description": "Pourcentage de remise appliquée"
+        },
+        {
+            "column_name": "order_date",
+            "type": "date",
+            "description": "Date de la commande"
+        },
+        {
+            "column_name": "delivery_date",
+            "type": "date",
+            "description": "Date de livraison prévue"
+        },
+        {
+            "column_name": "payment_method",
+            "type": "string",
+            "description": "Mode de paiement utilisé"
+        },
+        {
+            "column_name": "store_id",
+            "type": "string",
+            "description": "Identifiant du magasin"
+        },
+        {
+            "column_name": "region",
+            "type": "string",
+            "enum": [
+                "North",
+                "South",
+                "East",
+                "West",
+                "Central"
+            ],
+            "description": "Région géographique"
+        },
+        {
+            "column_name": "status",
+            "type": "string",
+            "description": "Statut de la commande"
+        }
+    ],
+    "business_rules": [
+        "delivery_date must always be after order_date",
+        "if status is cancelled then discount_pct must be 0",
+        "quantity must be at least 1"
+    ]
+}
