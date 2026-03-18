@@ -1,6 +1,3 @@
-"""
-main.py — FastAPI V4 (Import + Check Quality)
-"""
 from __future__ import annotations
 import dataclasses, json, logging, shutil, uuid
 from pathlib import Path
