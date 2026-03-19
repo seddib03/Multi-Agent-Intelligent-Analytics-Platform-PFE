@@ -1,0 +1,60 @@
+{
+  "_comment": "Mock TaskConfig — Dev 2 peut tester ml_layer sans Dev 1",
+  "_usage": "from tests.fixtures.mock_loader import load_mock_task_config",
+
+  "classification": {
+    "job_id": "mock-clf-001",
+    "task_type": "classification",
+    "target_column": "claim",
+    "feature_names": ["age", "premium", "risk_score", "region_encoded"],
+    "user_query": "Prédit si un client va faire un sinistre",
+    "sector": "insurance",
+    "dataset_summary": {
+      "n_rows": 500,
+      "n_cols": 6,
+      "missing_pct": 0.02,
+      "class_balance": {"0": 0.72, "1": 0.28}
+    },
+    "llm_strategy": {
+      "recommended_models": ["XGBoost", "RandomForest"],
+      "reason": "Dataset tabulaire déséquilibré — XGBoost gère bien les classes minoritaires"
+    }
+  },
+
+  "regression": {
+    "job_id": "mock-reg-001",
+    "task_type": "regression",
+    "target_column": "delay_minutes",
+    "feature_names": ["passenger_count", "route_encoded", "gate_encoded", "hour"],
+    "user_query": "Prédit le délai des vols",
+    "sector": "transport",
+    "dataset_summary": {
+      "n_rows": 300,
+      "n_cols": 8,
+      "missing_pct": 0.05,
+      "target_stats": {"mean": 45.2, "std": 38.1, "min": 0, "max": 320}
+    },
+    "llm_strategy": {
+      "recommended_models": ["XGBoost", "RandomForest", "LinearRegression"],
+      "reason": "Régression avec outliers — RandomForest et XGBoost robustes"
+    }
+  },
+
+  "clustering": {
+    "job_id": "mock-clu-001",
+    "task_type": "clustering",
+    "target_column": null,
+    "feature_names": ["quantity", "unit_price", "total_amount", "category_encoded"],
+    "user_query": "Segmente les clients par comportement d'achat",
+    "sector": "retail",
+    "dataset_summary": {
+      "n_rows": 200,
+      "n_cols": 5,
+      "missing_pct": 0.0
+    },
+    "llm_strategy": {
+      "recommended_models": ["KMeans_3", "KMeans_4"],
+      "reason": "Segmentation client — KMeans adapté pour données normalisées"
+    }
+  }
+}

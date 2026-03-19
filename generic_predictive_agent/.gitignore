@@ -1,0 +1,59 @@
+# ── Environnement virtuel ──────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── Python ────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# ── Pytest ────────────────────────────────────────────────────────
+.pytest_cache/
+.cache/
+*.pytest_cache
+
+# ── Modèles ML sauvegardés ────────────────────────────────────────
+*.pkl
+*.joblib
+*.h5
+*.model
+models/saved/
+
+# ── Données ───────────────────────────────────────────────────────
+*.csv
+*.parquet
+*.xlsx
+*.json.bak
+data/raw/
+data/processed/
+
+# ── Variables d'environnement ─────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── IDE ───────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.iml
+
+# ── OS ────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Logs ─────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Coverage ─────────────────────────────────────────────────────
+.coverage
+htmlcov/
+coverage.xml
+
+# ── Distribution ─────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/
