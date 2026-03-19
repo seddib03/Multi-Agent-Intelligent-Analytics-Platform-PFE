@@ -67,6 +67,41 @@ def _format_data_profile_for_nlq(state: OrchestratorState) -> dict | None:
     }
 
 
+def _build_column_metadata(state: OrchestratorState) -> list:
+    """
+    Construit la liste column_metadata pour /detect-sector
+    depuis state.metadata (fourni par l'utilisateur via /analyze).
+ 
+    R2 — Remarque encadrant : column_metadata obligatoire pour
+    une détection fiable du secteur.
+    """
+    column_metadata = []
+ 
+    if not state.metadata:
+        return column_metadata
+ 
+    # state.metadata peut être un dict {"columns": [...]} ou une liste
+    if isinstance(state.metadata, dict):
+        columns = state.metadata.get("columns", [])
+    elif isinstance(state.metadata, list):
+        columns = state.metadata
+    else:
+        return column_metadata
+ 
+    for col in columns:
+        if not isinstance(col, dict):
+            continue
+        name = col.get("column_name", col.get("name", ""))
+        if not name:
+            continue
+        column_metadata.append({
+            "name":        name,
+            "description": col.get("description", col.get("business_name", "")),
+            "sample_values": []
+        })
+ 
+    return column_metadata
+
 async def call_detect_sector(state: OrchestratorState):
     """
     Appelle POST /detect-sector.
@@ -77,7 +112,9 @@ async def call_detect_sector(state: OrchestratorState):
         async with httpx.AsyncClient(timeout=130.0) as client:
             response = await client.post(
                 f"{NLQ_API_URL}/detect-sector",
-                json={"user_query": state.query_raw}
+                json={"user_query": state.query_raw,
+                      "column_metadata": column_metadata,
+                      }
             )
 
         # ✅ Validation avant .json() — évite JSONDecodeError sur body vide
@@ -100,7 +137,8 @@ async def call_detect_sector(state: OrchestratorState):
         state.processing_steps.append(
             f"detect_sector → sector={state.sector.value} "
             f"({state.sector_confidence:.0%}) | "
-            f"routing_target={routing_target}"
+            f"routing_target={routing_target} |"
+            f"columns_sent={len(column_metadata)}"
         )
         return state, suggested_route
 

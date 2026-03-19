@@ -15,8 +15,16 @@ SECTOR_ROUTE_MAP = {
 
 def sector_detection_node(state: OrchestratorState) -> OrchestratorState:
     # ── Utiliser le secteur déjà détecté dans les metadata ──────────────
-    sector_from_meta = state.metadata.get("sector", "").lower()
-    if sector_from_meta and sector_from_meta != "unknown":
+    #sector_from_meta = state.metadata.get("sector", "").lower() if isinstance(state.metadata, dict) else ""
+    if isinstance(state.metadata, dict):
+        sector_from_meta = state.metadata.get("sector", "").lower()
+    elif hasattr(state.metadata, "sector"):
+        sector_from_meta = (getattr(state.metadata, "sector", "") or "").lower()
+    else:
+        sector_from_meta = ""
+
+
+    if sector_from_meta and sector_from_meta in SECTOR_ROUTE_MAP:
         try:
             state.sector = SectorEnum(sector_from_meta.capitalize())
         except ValueError:

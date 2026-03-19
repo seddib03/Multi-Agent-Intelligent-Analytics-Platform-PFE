@@ -7,6 +7,8 @@ from __future__ import annotations
 import json, logging, shutil
 from pathlib import Path
 import pandas as pd
+import duckdb
+
 from agent.state import AgentState
 from config.settings import get_settings
 from core.minio_client import MinioClient
@@ -56,13 +58,19 @@ def ingestion_node(state: AgentState) -> dict:
         state["job_id"], sector,
         state["dataset_path"], filename
     )
+
+    # ── Créer le chemin DuckDB ────────────────────────────────────────────
+    duckdb_dir = settings.duckdb_dir / state["job_id"]
+    duckdb_dir.mkdir(parents=True, exist_ok=True)
+    duckdb_path = str(duckdb_dir / "db.duckdb")
+
+    # ── Ingérer dans DuckDB ───────────────────────────────────────────────
     with duckdb.connect(duckdb_path) as conn:
-        # Créer la table raw_data avec le contenu de df
-        conn.execute("CREATE TABLE raw_data AS SELECT * FROM df")
-    
+        conn.execute("CREATE TABLE IF NOT EXISTS raw_data AS SELECT * FROM df")
+
     logger.info("Données ingérées dans DuckDB: %s", duckdb_path)
 
-    # Sérialiser le DataFrame pour le state LangGraph (inclut __row_id)
+    # Sérialiser le DataFrame pour le state LangGraph
     raw_df_dict = {
         "columns": df.columns.tolist(),
         "data":    df.where(pd.notnull(df), None).values.tolist(),

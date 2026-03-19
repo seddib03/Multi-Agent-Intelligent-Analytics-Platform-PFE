@@ -13,65 +13,55 @@
 
 with row_groups as (
     select
-        order_id, customer_id, product_name, category, quantity, unit_price, total_amount, order_date, delivery_date, status,
+        flight_id, delay_minutes, gate, satisfaction_score, route, passenger_count, departure_date, status,
         count(*) as __dup_count,
         min(__row_id) as __kept_row_id
     from "db"."main"."raw_data"
-    group by order_id, customer_id, product_name, category, quantity, unit_price, total_amount, order_date, delivery_date, status
+    group by flight_id, delay_minutes, gate, satisfaction_score, route, passenger_count, departure_date, status
     having count(*) > 1
 )
 
 select 
     src.__row_id,
     
-    src.order_id,
+    src.flight_id,
     
-    src.customer_id,
+    src.delay_minutes,
     
-    src.product_name,
+    src.gate,
     
-    src.category,
+    src.satisfaction_score,
     
-    src.quantity,
+    src.route,
     
-    src.unit_price,
+    src.passenger_count,
     
-    src.total_amount,
-    
-    src.order_date,
-    
-    src.delivery_date,
+    src.departure_date,
     
     src.status
     
 from "db"."main"."raw_data" src
 inner join row_groups rg
     on 
-        (src.order_id = rg.order_id or (src.order_id is null and rg.order_id is null))
+        (src.flight_id = rg.flight_id or (src.flight_id is null and rg.flight_id is null))
          and 
     
-        (src.customer_id = rg.customer_id or (src.customer_id is null and rg.customer_id is null))
+        (src.delay_minutes = rg.delay_minutes or (src.delay_minutes is null and rg.delay_minutes is null))
          and 
     
-        (src.product_name = rg.product_name or (src.product_name is null and rg.product_name is null))
+        (src.gate = rg.gate or (src.gate is null and rg.gate is null))
          and 
     
-        (src.category = rg.category or (src.category is null and rg.category is null))
+        (src.satisfaction_score = rg.satisfaction_score or (src.satisfaction_score is null and rg.satisfaction_score is null))
          and 
     
-        (src.quantity = rg.quantity or (src.quantity is null and rg.quantity is null))
+        (src.route = rg.route or (src.route is null and rg.route is null))
          and 
     
-        (src.unit_price = rg.unit_price or (src.unit_price is null and rg.unit_price is null))
+        (src.passenger_count = rg.passenger_count or (src.passenger_count is null and rg.passenger_count is null))
          and 
     
-        (src.total_amount = rg.total_amount or (src.total_amount is null and rg.total_amount is null))
-         and 
-    
-        (src.order_date = rg.order_date or (src.order_date is null and rg.order_date is null))
-         and 
-    
-        (src.delivery_date = rg.delivery_date or (src.delivery_date is null and rg.delivery_date is null))
+        (src.departure_date = rg.departure_date or (src.departure_date is null and rg.departure_date is null))
          and 
     
         (src.status = rg.status or (src.status is null and rg.status is null))

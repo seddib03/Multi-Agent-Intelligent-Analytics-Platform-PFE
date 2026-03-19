@@ -1,0 +1,43 @@
+﻿# API 
+fastapi
+uvicorn
+python-multipart
+
+# Agent Orchestration
+langgraph
+langchain-core
+langgraph-checkpoint-postgres[psycopg2]
+psycopg-binary
+
+# LLM 
+langchain-openai
+openai
+
+# Data Processing
+pandas
+pyarrow
+openpyxl
+chardet
+
+# Validation
+pydantic
+pydantic-settings
+
+# Storage
+minio
+
+# Data Quality
+dbt-core
+dbt-duckdb
+
+# Utils
+python-dotenv
+loguru
+
+# Profiling interactif ← NOUVEAU
+ydata-profiling
+
+# dbt & DuckDB
+duckdb
+dbt-core
+dbt-duckdb
