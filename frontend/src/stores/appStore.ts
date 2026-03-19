@@ -20,6 +20,7 @@ const EMPTY_PROJECT = {
     qualityScore: 0,
     businessRules: "",
     detectedSector: "finance" as const,
+    dashboardGenerated: false,
     previewData: [],
     sourceCsvFile: null,
     sourceCsvPath: "",

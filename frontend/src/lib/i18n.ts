@@ -10,6 +10,8 @@ export const translations = {
 
     // Dashboard
     dashboardTitle: "Dashboard",
+    dashboardUnavailableTitle: "Aucun dashboard généré pour ce projet",
+    dashboardUnavailableBody: "L'orchestrateur n'a pas retourné de dashboard exploitable. Lancez une analyse ou posez une question dans le chat pour générer des résultats.",
     factorImportance: "Importance des facteurs",
     timeEvolution: "Évolution temporelle",
     modelDiagnostics: "Diagnostics modèle",
@@ -415,6 +417,8 @@ export const translations = {
 
     // Dashboard
     dashboardTitle: "Dashboard",
+    dashboardUnavailableTitle: "No dashboard generated for this project",
+    dashboardUnavailableBody: "The orchestrator did not return a usable dashboard. Launch an analysis or ask a question in chat to generate results.",
     factorImportance: "Factor Importance",
     timeEvolution: "Time Evolution",
     modelDiagnostics: "Model Diagnostics",

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel
+from typing import Optional, Any
+from pydantic import BaseModel, Field
 from app.models.project import ProjectStatus
 
 
@@ -40,3 +40,19 @@ class ProjectResponse(BaseModel):
     created_at:         datetime
     updated_at:         datetime
     model_config = {"from_attributes": True}
+
+
+class ConversationPayload(BaseModel):
+    updatedAt: Optional[str] = None
+    messages: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class DashboardInsightPayload(BaseModel):
+    generated: bool = False
+    hasCharts: bool = False
+    hasPredictions: bool = False
+    generatedAt: Optional[str] = None
+    title: Optional[str] = None
+    kpis: list[dict[str, Any]] = Field(default_factory=list)
+    charts: list[dict[str, Any]] = Field(default_factory=list)
+    predictions: list[dict[str, Any]] = Field(default_factory=list)

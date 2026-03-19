@@ -9,7 +9,7 @@ import { useAppStore } from "@/stores/appStore";
 import { useAuth } from "@/hooks/useAuth";
 import { t } from "@/lib/i18n";
 import BrandLogo from "@/components/BrandLogo";
-import { getProjectSectorContext, listProjects, type Project } from "@/lib/projectsApi";
+import { getProjectSectorContext, getProjectStoredMessages, isProjectDashboardGenerated, listProjects, type Project } from "@/lib/projectsApi";
 
 const SUPPORTED_SECTORS = ["finance", "transport", "retail", "manufacturing", "public"] as const;
 
@@ -50,6 +50,7 @@ const Login = () => {
           byUpdatedAtDesc.find((p) => p.id === state.currentProjectId) ?? byUpdatedAtDesc[0];
 
         if (targetProject) {
+          const restoredMessages = getProjectStoredMessages(targetProject);
           useAppStore.setState((s) => ({
             currentProjectId: targetProject.id,
             // show dashboard first after login
@@ -64,7 +65,10 @@ const Login = () => {
               ...s.dataset,
               detectedSector: normalizeSector(targetProject.detected_sector),
               businessRules: targetProject.business_rules ?? s.dataset.businessRules,
+              dashboardGenerated: isProjectDashboardGenerated(targetProject),
             },
+            messages: restoredMessages,
+            pinnedInsights: restoredMessages.filter((m) => m.pinned),
           }));
         } else {
           useAppStore.setState((s) => ({
@@ -85,6 +89,7 @@ const Login = () => {
               qualityScore: 0,
               businessRules: "",
               detectedSector: "finance",
+              dashboardGenerated: false,
               previewData: [],
             },
             messages: [],

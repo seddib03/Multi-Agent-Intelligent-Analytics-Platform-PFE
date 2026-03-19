@@ -17,9 +17,9 @@ COPY . .
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-EXPOSE 8004
+EXPOSE 8002
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8004/ || exit 1
+    CMD curl -f http://localhost:8002/ || exit 1
 
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8004"]
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8002"]

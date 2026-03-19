@@ -6,18 +6,13 @@ import { t } from "@/lib/i18n";
 
 interface Conversation {
   id: string;
+  projectId: string | null;
   title: string;
   sector: string;
   messageCount: number;
   lastMessage: Date;
   preview: string;
 }
-
-const MOCK_CONVERSATIONS: Conversation[] = [
-  { id: "conv-1", title: "Analyse des retards de paiement", sector: "finance", messageCount: 12, lastMessage: new Date(Date.now() - 1000 * 60 * 30), preview: "Quels clients ont le plus de retards..." },
-  { id: "conv-2", title: "Prédiction de churn Q4", sector: "retail", messageCount: 8, lastMessage: new Date(Date.now() - 1000 * 60 * 60 * 3), preview: "Montre-moi les facteurs de churn..." },
-  { id: "conv-3", title: "Optimisation logistique", sector: "transport", messageCount: 15, lastMessage: new Date(Date.now() - 1000 * 60 * 60 * 24), preview: "Analyse les routes les plus coûteuses..." },
-];
 
 function formatTimeAgo(date: Date, lang: "fr" | "en"): string {
   const now = new Date();
@@ -36,13 +31,29 @@ interface ChatHistoryDrawerProps {
 }
 
 export function ChatHistoryDrawer({ open, onClose }: ChatHistoryDrawerProps) {
-  const { messages, userPreferences } = useAppStore();
+  const { messages, userPreferences, savedProjects, currentProjectId, loadProject } = useAppStore();
   const lang = userPreferences.language;
   const [search, setSearch] = useState("");
-  const [conversations, setConversations] = useState<Conversation[]>(MOCK_CONVERSATIONS);
+
+  const conversations: Conversation[] = savedProjects
+    .filter((project) => project.messages.length > 0)
+    .map((project) => {
+      const firstUserMessage = project.messages.find((m) => m.role === "user")?.content ?? "";
+      const lastMessage = project.messages[project.messages.length - 1];
+      return {
+        id: `project-${project.id}`,
+        projectId: project.id,
+        title: firstUserMessage.slice(0, 40) || project.name,
+        sector: project.dataset.detectedSector,
+        messageCount: project.messages.length,
+        lastMessage: new Date(lastMessage.timestamp),
+        preview: lastMessage.content.slice(0, 50),
+      };
+    });
 
   const currentConv: Conversation | null = messages.length > 0 ? {
     id: "current",
+    projectId: currentProjectId,
     title: messages.find(m => m.role === "user")?.content.slice(0, 40) || t("currentConversation", lang),
     sector: useAppStore.getState().dataset.detectedSector,
     messageCount: messages.length,
@@ -54,8 +65,17 @@ export function ChatHistoryDrawer({ open, onClose }: ChatHistoryDrawerProps) {
   const filtered = allConversations.filter((c) => c.title.toLowerCase().includes(search.toLowerCase()) || c.preview.toLowerCase().includes(search.toLowerCase()));
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const handleDelete = (id: string) => { setConversations((prev) => prev.filter((c) => c.id !== id)); setDeleteConfirmId(null); };
-  const handleResume = (_conv: Conversation) => { onClose(); };
+  const handleDelete = (id: string) => {
+    const projectId = id.replace("project-", "");
+    useAppStore.getState().deleteProject(projectId);
+    setDeleteConfirmId(null);
+  };
+  const handleResume = (conv: Conversation) => {
+    if (conv.projectId && conv.projectId !== currentProjectId) {
+      loadProject(conv.projectId);
+    }
+    onClose();
+  };
 
   if (!open) return null;
 
